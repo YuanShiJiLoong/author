@@ -6,6 +6,8 @@
 
 **Author** 是一款面向小说作者的 AI 辅助创作工具。它将专业的富文本编辑器、智能 AI 写作助手和完整的世界观管理系统整合在一起，为创作者提供一站式写作体验。
 
+🌐 **在线体验**：[author-delta.vercel.app](https://author-delta.vercel.app)
+
 ---
 
 ## 💬 为什么做这个项目

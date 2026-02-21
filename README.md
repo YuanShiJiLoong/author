@@ -6,6 +6,8 @@
 
 **Author** is an AI-assisted creative writing tool designed for fiction writers. It brings together a professional rich text editor, an intelligent AI writing assistant, and a complete worldbuilding management system — all in one seamless experience.
 
+🌐 **Live Demo**: [author-delta.vercel.app](https://author-delta.vercel.app)
+
 ---
 
 ## 💬 Why I Built This
