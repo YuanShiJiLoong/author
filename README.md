@@ -120,6 +120,32 @@ Author supports multiple AI providers. Configure via **environment variables** o
 
 ---
 
+## 🔒 Privacy & Data Security
+
+### Local Storage (Safe)
+- All creative data (chapters, settings, snapshots) is **stored 100% locally in your browser (IndexedDB)** — never uploaded to any server
+- API Keys are stored in browser localStorage
+
+### ⚠️ Data Flow When Using AI Features
+
+When using AI features (continue, rewrite, chat, etc.), the following data passes through the **deployer's server** on its way to the AI provider:
+- Your **API Key**
+- The **text content** you send to AI
+
+```
+Your Browser → Deployer's Server → AI Provider (ZhipuAI/Gemini/DeepSeek/etc.)
+```
+
+**If you're using someone else's deployed public instance**, while the deployer promises not to inspect logs, the technical capability to intercept data exists. Therefore:
+
+1. ✅ You can use a public instance for a **quick trial**
+2. ⚠️ After trying it, **immediately destroy your API Key at your provider's website**
+3. 🔐 **For real use, fork and deploy your own private instance** — then all data only passes through your own server
+
+> 💡 Deploying your own instance is easy: Fork this repo → One-click deploy to Vercel → Done. Takes less than 5 minutes.
+
+---
+
 ## 📄 License
 
 This project is licensed under [AGPL-3.0](LICENSE).
