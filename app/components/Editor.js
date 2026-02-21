@@ -1162,6 +1162,7 @@ function StatusBar({ editor, pageCount }) {
             <div className="status-bar-right">
                 <span className="status-bar-shortcut">Ctrl+J AI助手</span>
                 <span>自动保存</span>
+                <span style={{ opacity: 0.5, fontSize: '11px' }}>© 2026 YuanShiJiLoong</span>
             </div>
         </div>
     );
