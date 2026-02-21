@@ -396,6 +396,13 @@ AI 聊天侧栏中的回复支持完整的 Markdown 渲染，包括代码块、�
 
 ### 技术栈
 Next.js + Tiptap 编辑器 + AI API（OpenAI 兼容 / Gemini）
+
+### 开源项目
+Author 是一个开源项目，采用 **AGPL-3.0** 协议。
+
+🔗 **GitHub**: [github.com/YuanShiJiLoong/author](https://github.com/YuanShiJiLoong/author)
+
+欢迎 Star ⭐、提 Issue、贡献代码！
     `,
     },
 ];

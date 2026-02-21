@@ -314,6 +314,8 @@
     "step4Content": "This is the brain of your workspace. Make sure to configure your AI model API Key here, otherwise the AI assistant won't work. You can also change language, theme, and build your world settings.",
     "step5Title": "💡 Always Here to Help",
     "step5Content": "If you skipped the tour or want to review it again, click the 📖 Help button. In the top-right corner of the help panel, you can restart the tour anytime.",
+    "step6Title": "🐙 Open Source Project",
+    "step6Content": "Author is an open-source project! Click this GitHub icon to visit our repository. Star ⭐, file issues, and contribute!",
     "introTitle": "Welcome to Author",
     "introSubtitle": "Your AI-assisted novel writing platform.",
     "introHint": "For a better writing experience, would you like a 1-minute tour of the core features?",

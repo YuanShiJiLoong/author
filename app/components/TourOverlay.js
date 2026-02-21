@@ -45,6 +45,12 @@ export default function TourOverlay({ onOpenHelp }) {
             title: t('tour.step5Title'),
             content: t('tour.step5Content'),
             placement: 'left'
+        },
+        {
+            targetId: 'tour-github',
+            title: t('tour.step6Title'),
+            content: t('tour.step6Content'),
+            placement: 'left'
         }
     ], [t]);
 
