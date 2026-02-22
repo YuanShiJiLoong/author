@@ -107,7 +107,7 @@ npm start
 
 ### 部署到 Zeabur（推荐国内用户）
 
-[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/author?referralCode=YuanShiJiLoong)
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/GITHUB/YuanShiJiLoong/author)
 
 ---
 

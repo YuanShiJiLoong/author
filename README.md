@@ -107,7 +107,7 @@ npm start
 
 ### Deploy to Zeabur
 
-[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/author?referralCode=YuanShiJiLoong)
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/GITHUB/YuanShiJiLoong/author)
 
 ---
 
