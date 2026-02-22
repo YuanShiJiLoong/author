@@ -129,7 +129,7 @@ export default function Sidebar() {
                                     <input
                                         className="modal-input"
                                         style={{ margin: 0, padding: '4px 8px', fontSize: '13px' }}
-                                        value={renameTitle}
+                                        value={renameTitle || ''}
                                         onChange={e => setRenameTitle(e.target.value)}
                                         onBlur={() => handleRename(ch.id)}
                                         onKeyDown={e => e.key === 'Enter' && handleRename(ch.id)}

@@ -197,7 +197,7 @@ export default function AiSidebar({ onInsertText }) {
             const { apiConfig } = getProjectSettings();
             const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini' : '/api/ai';
 
-            const context = await buildContext(activeChapterId, '', contextSelection.size > 0 ? contextSelection : null);
+            const context = await buildContext(activeChapterId, text, contextSelection.size > 0 ? contextSelection : null);
             const systemPrompt = compileSystemPrompt(context, 'chat');
             const historyForApi = selectedHistory.map(m => `${m.role === 'user' ? t('aiSidebar.roleYou') : t('aiSidebar.roleAi')}: ${m.content}`).join('\n');
             const userPrompt = historyForApi ? `${historyForApi}\n${t('aiSidebar.roleYou')}: ${text}` : text;
@@ -261,7 +261,7 @@ export default function AiSidebar({ onInsertText }) {
             const { apiConfig } = getProjectSettings();
             const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini' : '/api/ai';
 
-            const context = await buildContext(activeChapterId, '', contextSelection.size > 0 ? contextSelection : null);
+            const context = await buildContext(activeChapterId, userMsg.content, contextSelection.size > 0 ? contextSelection : null);
             const systemPrompt = compileSystemPrompt(context, 'chat');
             const historyForApi = priorHistory
                 .filter(m => m.role === 'user' || m.role === 'assistant')
