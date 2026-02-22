@@ -185,18 +185,10 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
     const unselectedItemNodes = [];
 
     for (const n of allValidItemNodes) {
-        // 规则类总是作为手动（强制生效）如果 enabled
-        if (n.category === 'rules') {
-            manualItemNodes.push(n);
-            continue;
-        }
-
         if (selectedIds && selectedIds.has(`setting-${n.id}`)) {
             manualItemNodes.push(n);
         } else if (!selectedIds) {
-            // 如果 selectedIds 为 null，默认所有启用的项都算作手动（兼容旧逻辑，或视情况全转RAG）
-            // 为了发挥 RAG 威力，如果 selectedIds 为 null，我们可以假设除了规则外，全部走向 RAG，
-            // 或者全部走 Manual。这里我们设定期望：全部走 RAG 自动检索。
+            // selectedIds 为 null — 兼容旧逻辑，全部走 RAG
             unselectedItemNodes.push(n);
         } else {
             unselectedItemNodes.push(n);
@@ -246,7 +238,7 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
 
     // 先构建各模块的原始文本
     const rawModules = {
-        bookInfo: (!selectedIds || selectedIds.has('bookinfo')) ? buildBookInfoContext(settings.bookInfo) : '',
+        bookInfo: (selectedIds && selectedIds.has('bookinfo')) ? buildBookInfoContext(settings.bookInfo) : '',
         characters: buildCharactersContext(finalItemNodes.filter(n => n.category === 'character')),
         locations: buildLocationsContext(finalItemNodes.filter(n => n.category === 'location'), nodes),
         worldbuilding: buildWorldContext(finalItemNodes.filter(n => n.category === 'world'), nodes),
