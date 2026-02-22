@@ -50,7 +50,15 @@ export default function Home() {
 
   const { t } = useI18n();
   const [showHelp, setShowHelp] = useState(false);
+  const [fabPositions, setFabPositions] = useState({ github: { right: 24, bottom: 76 }, help: { right: 24, bottom: 24 } });
   const editorRef = useRef(null);
+
+  // 加载浮动按钮位置
+  useEffect(() => {
+    const gh = JSON.parse(localStorage.getItem('author-fab-github') || 'null');
+    const hp = JSON.parse(localStorage.getItem('author-fab-help') || 'null');
+    if (gh || hp) setFabPositions(prev => ({ github: gh || prev.github, help: hp || prev.help }));
+  }, []);
 
   // 派生：当前活动会话和消息列表
   const activeSession = useMemo(() => getActiveSession(sessionStore), [sessionStore]);
@@ -298,9 +306,7 @@ export default function Home() {
         {/* 独立可拖动浮动按钮 */}
         {['github', 'help'].map(btnKey => {
           const storageKey = `author-fab-${btnKey}`;
-          const saved = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem(storageKey) || 'null') : null;
-          const defaults = { github: { right: 24, bottom: 76 }, help: { right: 24, bottom: 24 } };
-          const pos = saved || defaults[btnKey];
+          const pos = fabPositions[btnKey];
           const makeDraggable = (e) => {
             const el = e.currentTarget;
             const parentRect = el.parentElement.getBoundingClientRect();
