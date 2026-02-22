@@ -105,6 +105,10 @@ npm start
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YuanShiJiLoong/author)
 
+### 部署到 Zeabur（推荐国内用户）
+
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/author?referralCode=YuanShiJiLoong)
+
 ---
 
 ## ⚙️ AI 配置
