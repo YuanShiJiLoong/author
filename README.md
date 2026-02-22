@@ -105,10 +105,6 @@ npm start
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YuanShiJiLoong/author)
 
-### Deploy to Zeabur
-
-> Recommended for users in mainland China. Go to [Zeabur Dashboard](https://dash.zeabur.com) → Create Project → Deploy from GitHub → Select `YuanShiJiLoong/author`.
-
 ---
 
 ## ⚙️ AI Configuration

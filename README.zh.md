@@ -105,10 +105,6 @@ npm start
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YuanShiJiLoong/author)
 
-### 部署到 Zeabur（推荐国内用户）
-
-> 前往 [Zeabur 控制台](https://dash.zeabur.com) → 新建项目 → 从 GitHub 部署 → 选择 `YuanShiJiLoong/author` 仓库即可。
-
 ---
 
 ## ⚙️ AI 配置
