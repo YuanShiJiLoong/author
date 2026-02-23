@@ -395,11 +395,13 @@ export default function Home() {
                 {showGitMenu && (
                   <>
                     <div
-                      style={{ position: 'fixed', inset: 0, zIndex: 39 }}
+                      style={{ position: 'fixed', inset: 0, zIndex: 39, cursor: 'default' }}
                       onClick={() => setShowGitMenu(false)}
+                      onPointerDown={(e) => e.stopPropagation()}
                     />
                     <div
                       className="git-menu-popup"
+                      onPointerDown={(e) => e.stopPropagation()}
                       style={{
                         position: 'absolute',
                         bottom: '52px',
