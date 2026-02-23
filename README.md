@@ -66,6 +66,18 @@ I watched the versatility of these models being gutted. I don't want us to live 
 
 ---
 
+## 💻 Desktop Client
+
+**No Node.js required!** Download the pre-built installer:
+
+- 📥 [Download Author Setup (Windows)](https://github.com/YuanShiJiLoong/author/releases/latest)
+
+Just install and start writing. All features work out of the box.
+
+> 💡 To build the desktop app from source: `npm run build && npx electron-builder --win`
+
+---
+
 ## 🚀 Getting Started
 
 ### Requirements
