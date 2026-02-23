@@ -170,9 +170,10 @@ This project is licensed under [AGPL-3.0](LICENSE).
 
 **In short**:
 - ✅ Free to use, modify, and distribute
-- ✅ Commercial use allowed
-- ⚠️ Modified versions must also be open-sourced (including network services)
+- ✅ Personal and commercial use allowed (as long as you open-source your changes)
+- ⚠️ Modified versions must also be open-sourced under AGPL-3.0 (including network services / SaaS)
 - ⚠️ Original copyright notice must be preserved
+- ❌ Closed-source commercial use is NOT allowed
 
 ---
 
