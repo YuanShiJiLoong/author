@@ -71,7 +71,7 @@
 **无需安装 Node.js！** 直接下载安装包：
 
 - 📥 [下载 Author 安装包（Windows）](https://github.com/YuanShiJiLoong/author/releases/latest)
-- 💬 无法访问 GitHub？加入 **QQ 交流群：1087016949**，群文件中下载
+- 💬 无法访问 GitHub？[加入 QQ 交流群：1087016949](https://qm.qq.com/q/wjRDkotw0E)，群文件中下载
 
 安装即用，所有功能开箱即得。
 
@@ -179,7 +179,7 @@ Author 支持多种 AI 供应商，你可以通过 **环境变量** 或 **应用
 
 ## 💬 社区交流
 
-- QQ 交流群：**1087016949**（Author交流群）
+- [QQ 交流群：1087016949（Author交流群）](https://qm.qq.com/q/wjRDkotw0E)
 - [GitHub Issues](https://github.com/YuanShiJiLoong/author/issues) — 问题反馈与功能建议
 
 ---
