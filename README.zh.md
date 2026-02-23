@@ -71,9 +71,10 @@
 **无需安装 Node.js！** 直接下载安装包：
 
 - 📥 [下载 Author 安装包（Windows）](https://github.com/YuanShiJiLoong/author/releases/latest)
-- 📥 [国内下载（Gitee）](https://gitee.com/yuanshijilong/author/releases)
 
 安装即用，所有功能开箱即得。
+
+> 💡 Gitee 镜像仅提供源码，安装包请从 GitHub Release 下载。
 
 > 💡 从源码构建桌面应用：`npm run build && npx electron-builder --win`
 
