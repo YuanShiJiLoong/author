@@ -8,6 +8,8 @@
 
 🌐 **在线体验**：[author-delta.vercel.app](https://author-delta.vercel.app)
 
+📦 **Gitee 镜像（国内加速）**：[gitee.com/yuanshijilong/author](https://gitee.com/yuanshijilong/author)
+
 ---
 
 ## 💬 为什么做这个项目
@@ -75,6 +77,8 @@
 ```bash
 # 克隆仓库
 git clone https://github.com/YuanShiJiLoong/author.git
+# 国内用户推荐使用 Gitee 镜像（更快）
+# git clone https://gitee.com/yuanshijilong/author.git
 cd author
 
 # 安装依赖

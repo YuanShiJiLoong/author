@@ -8,6 +8,8 @@
 
 🌐 **Live Demo**: [author-delta.vercel.app](https://author-delta.vercel.app)
 
+📦 **Gitee Mirror (国内镜像)**: [gitee.com/yuanshijilong/author](https://gitee.com/yuanshijilong/author)
+
 ---
 
 ## 💬 Why I Built This
@@ -75,6 +77,8 @@ I watched the versatility of these models being gutted. I don't want us to live 
 ```bash
 # Clone the repository
 git clone https://github.com/YuanShiJiLoong/author.git
+# Or use Gitee mirror (faster in China)
+# git clone https://gitee.com/yuanshijilong/author.git
 cd author
 
 # Install dependencies
