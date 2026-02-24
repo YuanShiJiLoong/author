@@ -19,8 +19,6 @@ export default function Sidebar() {
         showToast
     } = useAppStore();
 
-    const [showNewChapterModal, setShowNewChapterModal] = useState(false);
-    const [newChapterTitle, setNewChapterTitle] = useState('');
     const [renameId, setRenameId] = useState(null);
     const [renameTitle, setRenameTitle] = useState('');
     const [contextMenu, setContextMenu] = useState(null);
@@ -46,16 +44,17 @@ export default function Sidebar() {
         return t('sidebar.defaultChapterTitle').replace('{num}', chapters.length + 1);
     }, [chapters, t]);
 
-    // 创建新章节
+    // 创建新章节 — 一键创建并进入重命名模式
     const handleCreateChapter = useCallback(() => {
-        const title = newChapterTitle.trim() || getNextChapterTitle();
+        const title = getNextChapterTitle();
         const ch = createChapter(title);
         addChapter(ch);
         setActiveChapterId(ch.id);
-        setShowNewChapterModal(false);
-        setNewChapterTitle('');
+        // 立即进入重命名模式，方便用户修改标题
+        setRenameId(ch.id);
+        setRenameTitle(title);
         showToast(t('sidebar.chapterCreated').replace('{title}', title), 'success');
-    }, [newChapterTitle, getNextChapterTitle, showToast, addChapter, setActiveChapterId, t]);
+    }, [getNextChapterTitle, showToast, addChapter, setActiveChapterId, t]);
 
     // 删除章节
     const handleDeleteChapter = useCallback((id) => {
@@ -116,7 +115,7 @@ export default function Sidebar() {
                         id="tour-new-chapter"
                         className="btn btn-primary"
                         style={{ width: '100%', justifyContent: 'center' }}
-                        onClick={() => { setNewChapterTitle(getNextChapterTitle()); setShowNewChapterModal(true); }}
+                        onClick={handleCreateChapter}
                     >
                         {t('sidebar.newChapter')}
                     </button>
@@ -258,31 +257,6 @@ export default function Sidebar() {
                 </div>
             </aside>
 
-            {/* ===== 新建章节弹窗 ===== */}
-            {showNewChapterModal && (
-                <div className="modal-overlay" onClick={() => setShowNewChapterModal(false)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <h2>{t('sidebar.newChapter')}</h2>
-                        <input
-                            className="modal-input"
-                            placeholder={t('sidebar.newChapter')}
-                            value={newChapterTitle}
-                            onChange={e => setNewChapterTitle(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && handleCreateChapter()}
-                            onFocus={e => e.target.select()}
-                            autoFocus
-                        />
-                        <div className="modal-actions">
-                            <button className="btn btn-secondary" onClick={() => setShowNewChapterModal(false)}>
-                                {t('common.cancel')}
-                            </button>
-                            <button className="btn btn-primary" onClick={handleCreateChapter}>
-                                {t('common.confirm')}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* ===== 右键菜单 ===== */}
             {contextMenu && (
