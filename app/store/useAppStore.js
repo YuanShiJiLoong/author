@@ -4,7 +4,7 @@ export const useAppStore = create((set, get) => ({
     // --- Chapter State ---
     chapters: [],
     activeChapterId: null,
-    setChapters: (chapters) => set({ chapters }),
+    setChapters: (chapters) => set({ chapters: Array.isArray(chapters) ? chapters.filter(ch => ch && typeof ch === 'object' && ch.id) : [] }),
     setActiveChapterId: (id) => set({ activeChapterId: id }),
     addChapter: (chapter) => set((state) => ({ chapters: [...state.chapters, chapter] })),
     deleteChapter: (id) => set((state) => ({ chapters: state.chapters.filter((ch) => ch.id !== id) })),

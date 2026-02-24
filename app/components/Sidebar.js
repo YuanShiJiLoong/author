@@ -96,7 +96,7 @@ export default function Sidebar() {
         }
     }, [activeChapterId, chapters, showToast, t]);
 
-    const totalWords = chapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0);
+    const totalWords = Array.isArray(chapters) ? chapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0) : 0;
 
     return (
         <>

@@ -68,7 +68,19 @@ export default function Home() {
   // 初始化数据
   useEffect(() => {
     const initData = async () => {
-      const saved = await getChapters();
+      let saved = await getChapters();
+      // 自动修复：过滤掉损坏的章节数据（如缺少 id 或非对象的条目）
+      if (Array.isArray(saved)) {
+        const cleaned = saved.filter(ch => ch && typeof ch === 'object' && ch.id);
+        if (cleaned.length !== saved.length) {
+          console.warn(`[数据修复] 发现 ${saved.length - cleaned.length} 条损坏的章节数据，已自动清理`);
+          saved = cleaned;
+          const { saveChapters } = await import('./lib/storage');
+          await saveChapters(saved);
+        }
+      } else {
+        saved = [];
+      }
       if (saved.length === 0) {
         const first = await createChapter(t('page.firstChapterTitle'));
         setChapters([first]);
@@ -147,7 +159,7 @@ export default function Home() {
   }, []);
 
   // 当前活跃章节
-  const activeChapter = chapters.find(ch => ch.id === activeChapterId);
+  const activeChapter = Array.isArray(chapters) ? chapters.find(ch => ch.id === activeChapterId) : null;
 
   const handleEditorUpdate = useCallback(async ({ html, wordCount }) => {
     if (!activeChapterId) return;
