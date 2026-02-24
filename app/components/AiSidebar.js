@@ -896,16 +896,16 @@ export default function AiSidebar({ onInsertText }) {
                                                 className="btn-mini"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    // 提取纯文本：去掉 [SETTINGS_ACTION]...[/SETTINGS_ACTION] 块和 markdown 标记
+                                                    // 提取正文：去掉系统块、markdown标记、编辑点评
                                                     let text = (msg.content || '')
                                                         .replace(/\[SETTINGS_ACTION\][\s\S]*?\[\\?\/SETTINGS_ACTION\]/g, '')
-                                                        .replace(/^#{1,6}\s+/gm, '')       // 去掉标题 #
-                                                        .replace(/\*\*(.+?)\*\*/g, '$1')    // **粗体** → 粗体
-                                                        .replace(/\*(.+?)\*/g, '$1')        // *斜体* → 斜体
-                                                        .replace(/`(.+?)`/g, '$1')          // `代码` → 代码
-                                                        .replace(/^[-*]\s+/gm, '')          // 去掉无序列表标记
-                                                        .replace(/^\d+\.\s+/gm, '')         // 去掉有序列表标记
-                                                        .replace(/\n{3,}/g, '\n\n')         // 合并连续空行
+                                                        .replace(/\n---[\s\S]*$/g, '')          // 去掉 --- 分隔线以后的编辑点评
+                                                        .replace(/^#{1,6}\s+/gm, '')            // 去掉标题 #
+                                                        .replace(/\*\*(.+?)\*\*/g, '$1')         // **粗体** → 粗体
+                                                        .replace(/\*(.+?)\*/g, '$1')             // *斜体* → 斜体
+                                                        .replace(/`(.+?)`/g, '$1')               // `代码` → 代码
+                                                        .replace(/^[-*]\s+/gm, '')               // 去掉无序列表标记
+                                                        .replace(/^\d+\.\s+/gm, '')              // 去掉有序列表标记
                                                         .trim();
                                                     if (text) onInsertText?.(text);
                                                 }}
