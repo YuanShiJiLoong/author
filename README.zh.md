@@ -124,6 +124,28 @@ npm start
 
 ---
 
+## 🔄 更新
+
+### 桌面客户端用户
+
+前往 [Releases](https://github.com/YuanShiJiLoong/author/releases/latest) 页面下载最新版本安装包，覆盖安装即可。你的数据存储在浏览器/Electron 用户配置中，不会丢失。
+
+> 💬 无法访问 GitHub？[加入 QQ 交流群：1087016949](https://qm.qq.com/q/wjRDkotw0E)，群文件中下载最新版本。
+
+### 源码部署用户
+
+```bash
+git pull origin main
+npm install
+npm run dev
+```
+
+### Vercel 部署用户
+
+如果你通过 Fork 部署到 Vercel，只需在 GitHub 上将你的 Fork 与上游同步（Sync fork），Vercel 会自动重新部署。
+
+---
+
 ## ⚙️ AI 配置
 
 Author 支持多种 AI 供应商，你可以通过 **环境变量** 或 **应用内设置** 来配置：

@@ -28,6 +28,7 @@ const TourOverlay = dynamic(() => import('./components/TourOverlay'), { ssr: fal
 const AiSidebar = dynamic(() => import('./components/AiSidebar'), { ssr: false });
 const SnapshotManager = dynamic(() => import('./components/SnapshotManager'), { ssr: false });
 const WelcomeModal = dynamic(() => import('./components/WelcomeModal'), { ssr: false });
+const UpdateBanner = dynamic(() => import('./components/UpdateBanner'), { ssr: false });
 
 export default function Home() {
   const [showGitMenu, setShowGitMenu] = useState(false);
@@ -258,6 +259,9 @@ export default function Home() {
 
   return (
     <div className="app-layout">
+      {/* ===== 更新提示 ===== */}
+      <UpdateBanner />
+
       {/* ===== 侧边栏 ===== */}
       <Sidebar />
 

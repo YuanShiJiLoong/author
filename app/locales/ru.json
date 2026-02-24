@@ -403,5 +403,11 @@
         "allCheck": "Выбрать все",
         "allUncheck": "Очистить все",
         "reset": "Сброс"
+    },
+    "update": {
+        "newVersion": "Доступна новая версия {version}!",
+        "viewSource": "Исходный код",
+        "downloadClient": "Скачать клиент",
+        "dismiss": "Скрыть"
     }
 }

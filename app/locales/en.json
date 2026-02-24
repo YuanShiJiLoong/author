@@ -403,5 +403,11 @@
     "allCheck": "Select All",
     "allUncheck": "Clear All",
     "reset": "Reset"
+  },
+  "update": {
+    "newVersion": "New version {version} available!",
+    "viewSource": "View Source",
+    "downloadClient": "Download Client",
+    "dismiss": "Dismiss"
   }
 }

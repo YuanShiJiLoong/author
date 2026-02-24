@@ -123,6 +123,26 @@ npm start
 
 ---
 
+## 🔄 Updating
+
+### Desktop Client Users
+
+Download the latest installer from the [Releases](https://github.com/YuanShiJiLoong/author/releases/latest) page and install it over your current version. Your data is stored in the browser/Electron profile and will not be lost.
+
+### Self-Deployed Users (Source)
+
+```bash
+git pull origin main
+npm install
+npm run dev
+```
+
+### Vercel Users
+
+If you deployed via Vercel fork, just sync your fork with upstream on GitHub — Vercel will automatically redeploy.
+
+---
+
 ## ⚙️ AI Configuration
 
 Author supports multiple AI providers. Configure via **environment variables** or **in-app settings**:
