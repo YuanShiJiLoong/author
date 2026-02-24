@@ -45,9 +45,9 @@ export default function Sidebar() {
     }, [chapters, t]);
 
     // 创建新章节 — 一键创建并进入重命名模式
-    const handleCreateChapter = useCallback(() => {
+    const handleCreateChapter = useCallback(async () => {
         const title = getNextChapterTitle();
-        const ch = createChapter(title);
+        const ch = await createChapter(title);
         addChapter(ch);
         setActiveChapterId(ch.id);
         // 立即进入重命名模式，方便用户修改标题
