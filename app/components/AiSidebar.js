@@ -888,6 +888,30 @@ export default function AiSidebar({ onInsertText }) {
                                             >▶</button>
                                         </div>
                                     )}
+
+                                    {/* AI 消息：一键插入正文 */}
+                                    {msg.role === 'assistant' && !isStreaming && msg.content && (
+                                        <div style={{ display: 'flex', gap: '6px', padding: '4px 0 2px' }}>
+                                            <button
+                                                className="btn-mini"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    // 提取纯文本：去掉 [SETTINGS_ACTION]...[\SETTINGS_ACTION] 块
+                                                    const text = (msg.content || '')
+                                                        .replace(/\[SETTINGS_ACTION\][\s\S]*?\[\\?\/SETTINGS_ACTION\]/g, '')
+                                                        .trim();
+                                                    if (text) onInsertText?.(text);
+                                                }}
+                                            >↩ {t('aiSidebar.insertToEditor') || '插入正文'}</button>
+                                            <button
+                                                className="btn-mini"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigator.clipboard.writeText(msg.content || '');
+                                                }}
+                                            >📋 {t('aiSidebar.copy') || '复制'}</button>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
