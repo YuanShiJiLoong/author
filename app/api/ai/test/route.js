@@ -18,6 +18,11 @@ export async function POST(request) {
             return await testGeminiNative(apiKey, baseUrl, model);
         }
 
+        // OpenAI Responses 格式的测试
+        if (provider === 'openai-responses') {
+            return await testResponsesAPI(apiKey, baseUrl, model);
+        }
+
         // OpenAI 兼容格式的测试
         return await testOpenAICompat(apiKey, baseUrl, model);
 
@@ -99,6 +104,47 @@ async function testOpenAICompat(apiKey, baseUrl, model) {
     return NextResponse.json({
         success: true,
         message: `✅ API 连接成功！`,
+        model: m,
+        reply: reply.trim(),
+    });
+}
+
+async function testResponsesAPI(apiKey, baseUrl, model) {
+    const base = (baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
+    const m = model || 'gpt-4o-mini';
+    const url = `${base}/responses`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+            model: m,
+            input: '说"连接成功"',
+            max_output_tokens: 20,
+        }),
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        let errMsg = `连接失败(${response.status})`;
+        try {
+            const errObj = JSON.parse(errText);
+            errMsg = errObj?.error?.message || errMsg;
+        } catch { /* ignore parse error */ }
+        return NextResponse.json({ success: false, error: errMsg });
+    }
+
+    const data = await response.json();
+    const reply = data.output?.[0]?.content?.[0]?.text
+        || data.output_text
+        || '';
+
+    return NextResponse.json({
+        success: true,
+        message: `✅ Responses API 连接成功！`,
         model: m,
         reply: reply.trim(),
     });

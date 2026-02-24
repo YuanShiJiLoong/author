@@ -182,7 +182,9 @@ export default function Home() {
       const userPrompt = compileUserPrompt(mode, text, instruction);
 
       const { apiConfig } = getProjectSettings();
-      const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini' : '/api/ai';
+      const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini'
+        : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
+          : '/api/ai';
 
       const res = await fetch(apiEndpoint, {
         method: 'POST',

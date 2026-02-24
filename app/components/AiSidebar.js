@@ -195,7 +195,9 @@ export default function AiSidebar({ onInsertText }) {
 
         try {
             const { apiConfig } = getProjectSettings();
-            const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini' : '/api/ai';
+            const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini'
+                : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
+                    : '/api/ai';
 
             const context = await buildContext(activeChapterId, text, contextSelection.size > 0 ? contextSelection : null);
             const systemPrompt = compileSystemPrompt(context, 'chat');
@@ -259,7 +261,9 @@ export default function AiSidebar({ onInsertText }) {
 
         try {
             const { apiConfig } = getProjectSettings();
-            const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini' : '/api/ai';
+            const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini'
+                : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
+                    : '/api/ai';
 
             const context = await buildContext(activeChapterId, userMsg.content, contextSelection.size > 0 ? contextSelection : null);
             const systemPrompt = compileSystemPrompt(context, 'chat');
