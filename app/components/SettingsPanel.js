@@ -608,6 +608,22 @@ function ApiConfigForm({ data, onChange }) {
                         {t('apiConfig.geminiNativeHint')}
                     </div>
                 )}
+                {data.provider === 'openai-responses' && (
+                    <div style={{ marginTop: 10 }}>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>思考等级 (Reasoning Effort)</label>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                            {[
+                                { key: 'low', label: 'low' },
+                                { key: 'medium', label: 'medium' },
+                                { key: 'high', label: 'high' },
+                                { key: 'xhigh', label: 'xhigh' },
+                            ].map(opt => (
+                                <button key={opt.key} style={{ padding: '5px 14px', border: (data.reasoningEffort || 'medium') === opt.key ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: (data.reasoningEffort || 'medium') === opt.key ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 12, fontWeight: (data.reasoningEffort || 'medium') === opt.key ? 600 : 400, color: (data.reasoningEffort || 'medium') === opt.key ? 'var(--accent)' : 'var(--text-primary)', transition: 'all 0.15s' }} onClick={() => update('reasoningEffort', opt.key)}>{opt.label}</button>
+                            ))}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>控制模型推理深度，默认 Medium，XHigh 质量最高但更慢</div>
+                    </div>
+                )}
             </div>
 
             <FieldInput label="API Key" value={data.apiKey} onChange={v => update('apiKey', v)} placeholder={t('apiConfig.apiKeyPlaceholder')} secret />

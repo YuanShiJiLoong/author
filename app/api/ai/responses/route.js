@@ -27,9 +27,14 @@ export async function POST(request) {
                 { role: 'developer', content: systemPrompt },
                 { role: 'user', content: userPrompt },
             ],
-            max_output_tokens: maxTokens || 4096,
             stream: true,
         };
+
+        // 添加思考等级（默认 medium）
+        const effort = apiConfig?.reasoningEffort || 'medium';
+        if (['low', 'medium', 'high', 'xhigh'].includes(effort)) {
+            requestBody.reasoning = { effort, summary: 'auto' };
+        }
 
         const response = await fetch(url, {
             method: 'POST',
