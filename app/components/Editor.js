@@ -160,11 +160,10 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
     useImperativeHandle(ref, () => ({
         insertText: (text) => {
             if (!editor) return;
-            // 合并连续空行（3+ → 1 空行），然后按行拆分，每行包装为 <p>
-            const cleaned = text.replace(/\n{3,}/g, '\n\n');
-            const lines = cleaned.split('\n');
-            const html = lines
-                .map(line => `<p>${line || '<br>'}</p>`)
+            // 按双换行分段（markdown 标准段落分隔），过滤空段
+            const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+            const html = paragraphs
+                .map(p => `<p>${p.replace(/\n/g, ' ').trim()}</p>`)
                 .join('');
             editor.chain().focus().insertContent(html).run();
         },
