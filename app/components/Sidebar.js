@@ -32,13 +32,19 @@ export default function Sidebar() {
         localStorage.setItem('author-theme', next);
     }, [theme, setTheme]);
 
-    // 从上一章节名推算下一章节名：提取末尾数字 +1
+    // 从上一章节名推算下一章节名：提取数字 +1
     const getNextChapterTitle = useCallback(() => {
         if (chapters.length === 0) return t('sidebar.defaultChapterTitle').replace('{num}', 1);
         const lastTitle = chapters[chapters.length - 1].title;
-        const match = lastTitle.match(/(\d+)\s*$/);
-        if (match) {
-            const nextNum = parseInt(match[1], 10) + 1;
+        // 匹配 "第N章" 格式 或 末尾数字
+        const cnMatch = lastTitle.match(/第(\d+)章/);
+        if (cnMatch) {
+            const nextNum = parseInt(cnMatch[1], 10) + 1;
+            return lastTitle.replace(/第\d+章/, `第${nextNum}章`);
+        }
+        const numMatch = lastTitle.match(/(\d+)\s*$/);
+        if (numMatch) {
+            const nextNum = parseInt(numMatch[1], 10) + 1;
             return lastTitle.replace(/(\d+)\s*$/, String(nextNum));
         }
         return t('sidebar.defaultChapterTitle').replace('{num}', chapters.length + 1);
