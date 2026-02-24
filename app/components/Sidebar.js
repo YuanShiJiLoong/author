@@ -57,13 +57,13 @@ export default function Sidebar() {
     }, [getNextChapterTitle, showToast, addChapter, setActiveChapterId, t]);
 
     // 删除章节
-    const handleDeleteChapter = useCallback((id) => {
-        if (chapters.length <= 1) {
+    const handleDeleteChapter = useCallback(async (id) => {
+        if (!Array.isArray(chapters) || chapters.length <= 1) {
             showToast(t('sidebar.alertRetainOne'), 'error');
             return;
         }
         const ch = chapters.find(c => c.id === id);
-        const remaining = deleteChapter(id);
+        const remaining = await deleteChapter(id);
         setChapters(remaining);
         if (activeChapterId === id) {
             setActiveChapterId(remaining[0]?.id || null);
