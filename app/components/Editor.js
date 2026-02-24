@@ -160,11 +160,18 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
     useImperativeHandle(ref, () => ({
         insertText: (text) => {
             if (!editor) return;
-            // 按双换行分段（markdown 标准段落分隔），过滤空段
-            const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
-            const html = paragraphs
-                .map(p => `<p>${p.replace(/\n/g, ' ').trim()}</p>`)
-                .join('');
+            // 规范化：\r\n → \n，去掉每行首尾空白，合并所有连续空行为单个段落分隔
+            const normalized = text
+                .replace(/\r\n/g, '\n')
+                .replace(/\r/g, '\n')
+                .split('\n')
+                .map(line => line.trim())
+                .join('\n')
+                .replace(/\n{2,}/g, '\n\n')   // 2个以上换行 → 恰好2个
+                .trim();
+            // 按双换行分段，过滤空段
+            const paragraphs = normalized.split('\n\n').filter(p => p);
+            const html = paragraphs.map(p => `<p>${p}</p>`).join('');
             editor.chain().focus().insertContent(html).run();
         },
     }), [editor]);
