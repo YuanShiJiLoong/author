@@ -896,20 +896,27 @@ export default function AiSidebar({ onInsertText }) {
                                                 className="btn-mini"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    // 提取纯文本：去掉 [SETTINGS_ACTION]...[\SETTINGS_ACTION] 块
-                                                    const text = (msg.content || '')
+                                                    // 提取纯文本：去掉 [SETTINGS_ACTION]...[/SETTINGS_ACTION] 块和 markdown 标记
+                                                    let text = (msg.content || '')
                                                         .replace(/\[SETTINGS_ACTION\][\s\S]*?\[\\?\/SETTINGS_ACTION\]/g, '')
+                                                        .replace(/^#{1,6}\s+/gm, '')       // 去掉标题 #
+                                                        .replace(/\*\*(.+?)\*\*/g, '$1')    // **粗体** → 粗体
+                                                        .replace(/\*(.+?)\*/g, '$1')        // *斜体* → 斜体
+                                                        .replace(/`(.+?)`/g, '$1')          // `代码` → 代码
+                                                        .replace(/^[-*]\s+/gm, '')          // 去掉无序列表标记
+                                                        .replace(/^\d+\.\s+/gm, '')         // 去掉有序列表标记
+                                                        .replace(/\n{3,}/g, '\n\n')         // 合并连续空行
                                                         .trim();
                                                     if (text) onInsertText?.(text);
                                                 }}
-                                            >↩ {t('aiSidebar.insertToEditor') || '插入正文'}</button>
+                                            >{t('aiSidebar.insertEditor')}</button>
                                             <button
                                                 className="btn-mini"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     navigator.clipboard.writeText(msg.content || '');
                                                 }}
-                                            >📋 {t('aiSidebar.copy') || '复制'}</button>
+                                            >{t('aiSidebar.copy')}</button>
                                         </div>
                                     )}
                                 </div>
