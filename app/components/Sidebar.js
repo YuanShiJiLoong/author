@@ -32,16 +32,64 @@ export default function Sidebar() {
         localStorage.setItem('author-theme', next);
     }, [theme, setTheme]);
 
+    // 中文数字 ↔ 阿拉伯数字 互转
+    const cnDigits = '零一二三四五六七八九十百千万';
+    const parseCnNum = (s) => {
+        if (!s) return NaN;
+        let result = 0, current = 0;
+        for (const ch of s) {
+            const d = '零一二三四五六七八九'.indexOf(ch);
+            if (d >= 0) { current = d || current; }
+            else if (ch === '十') { result += (current || 1) * 10; current = 0; }
+            else if (ch === '百') { result += (current || 1) * 100; current = 0; }
+            else if (ch === '千') { result += (current || 1) * 1000; current = 0; }
+            else if (ch === '万') { result += (current || 1) * 10000; current = 0; }
+        }
+        return result + current;
+    };
+    const toCnNum = (n) => {
+        if (n <= 0) return '零';
+        if (n <= 10) return '零一二三四五六七八九十'[n];
+        const units = ['', '十', '百', '千', '万'];
+        const digits = '零一二三四五六七八九';
+        let result = '';
+        let str = String(n);
+        let len = str.length;
+        let lastWasZero = false;
+        for (let i = 0; i < len; i++) {
+            const d = parseInt(str[i]);
+            const unit = units[len - 1 - i];
+            if (d === 0) { lastWasZero = true; }
+            else {
+                if (lastWasZero) result += '零';
+                if (d === 1 && unit === '十' && result === '') result += unit;
+                else result += digits[d] + unit;
+                lastWasZero = false;
+            }
+        }
+        return result;
+    };
+
     // 从上一章节名推算下一章节名：提取数字 +1
     const getNextChapterTitle = useCallback(() => {
         if (chapters.length === 0) return t('sidebar.defaultChapterTitle').replace('{num}', 1);
         const lastTitle = chapters[chapters.length - 1].title;
-        // 匹配 "第N章" 格式 或 末尾数字
-        const cnMatch = lastTitle.match(/第(\d+)章/);
-        if (cnMatch) {
-            const nextNum = parseInt(cnMatch[1], 10) + 1;
+        // 匹配 "第N章" 阿拉伯数字格式
+        const cnArabicMatch = lastTitle.match(/第(\d+)章/);
+        if (cnArabicMatch) {
+            const nextNum = parseInt(cnArabicMatch[1], 10) + 1;
             return lastTitle.replace(/第\d+章/, `第${nextNum}章`);
         }
+        // 匹配 "第X章" 中文数字格式（如 第三十三章）
+        const cnCharMatch = lastTitle.match(/第([零一二三四五六七八九十百千万]+)章/);
+        if (cnCharMatch) {
+            const num = parseCnNum(cnCharMatch[1]);
+            if (!isNaN(num)) {
+                const nextCn = toCnNum(num + 1);
+                return lastTitle.replace(/第[零一二三四五六七八九十百千万]+章/, `第${nextCn}章`);
+            }
+        }
+        // 匹配末尾数字（如 Chapter 33）
         const numMatch = lastTitle.match(/(\d+)\s*$/);
         if (numMatch) {
             const nextNum = parseInt(numMatch[1], 10) + 1;
