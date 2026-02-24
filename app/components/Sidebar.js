@@ -70,30 +70,31 @@ export default function Sidebar() {
         return result;
     };
 
-    // 从上一章节名推算下一章节名：提取数字 +1
+    // 尝试从标题提取数字并生成下一章标题，返回 null 表示无法匹配
+    const tryNextTitle = (title) => {
+        // 1. "第N章" 阿拉伯数字
+        const m1 = title.match(/第(\d+)章/);
+        if (m1) return title.replace(/第\d+章/, `第${parseInt(m1[1], 10) + 1}章`);
+        // 2. "第X章" 中文数字（如 第三十三章）
+        const m2 = title.match(/第([零一二三四五六七八九十百千万]+)章/);
+        if (m2) { const n = parseCnNum(m2[1]); if (!isNaN(n)) return title.replace(/第[零一二三四五六七八九十百千万]+章/, `第${toCnNum(n + 1)}章`); }
+        // 3. 纯阿拉伯数字（如 "33"）
+        if (/^\d+$/.test(title.trim())) return String(parseInt(title.trim(), 10) + 1);
+        // 4. 纯中文数字（如 "三十三"）
+        if (/^[零一二三四五六七八九十百千万]+$/.test(title.trim())) { const n = parseCnNum(title.trim()); if (!isNaN(n)) return toCnNum(n + 1); }
+        // 5. 包含末尾数字（如 "Chapter 33"）
+        const m5 = title.match(/(\d+)\s*$/);
+        if (m5) return title.replace(/(\d+)\s*$/, String(parseInt(m5[1], 10) + 1));
+        return null;
+    };
+
+    // 从章节列表中向前搜索最近的带数字章节，推算下一章名
     const getNextChapterTitle = useCallback(() => {
         if (chapters.length === 0) return t('sidebar.defaultChapterTitle').replace('{num}', 1);
-        const lastTitle = chapters[chapters.length - 1].title;
-        // 匹配 "第N章" 阿拉伯数字格式
-        const cnArabicMatch = lastTitle.match(/第(\d+)章/);
-        if (cnArabicMatch) {
-            const nextNum = parseInt(cnArabicMatch[1], 10) + 1;
-            return lastTitle.replace(/第\d+章/, `第${nextNum}章`);
-        }
-        // 匹配 "第X章" 中文数字格式（如 第三十三章）
-        const cnCharMatch = lastTitle.match(/第([零一二三四五六七八九十百千万]+)章/);
-        if (cnCharMatch) {
-            const num = parseCnNum(cnCharMatch[1]);
-            if (!isNaN(num)) {
-                const nextCn = toCnNum(num + 1);
-                return lastTitle.replace(/第[零一二三四五六七八九十百千万]+章/, `第${nextCn}章`);
-            }
-        }
-        // 匹配末尾数字（如 Chapter 33）
-        const numMatch = lastTitle.match(/(\d+)\s*$/);
-        if (numMatch) {
-            const nextNum = parseInt(numMatch[1], 10) + 1;
-            return lastTitle.replace(/(\d+)\s*$/, String(nextNum));
+        // 从最后一章向前找，跳过"更新说明"等非标准章节
+        for (let i = chapters.length - 1; i >= 0; i--) {
+            const next = tryNextTitle(chapters[i].title);
+            if (next) return next;
         }
         return t('sidebar.defaultChapterTitle').replace('{num}', chapters.length + 1);
     }, [chapters, t]);
