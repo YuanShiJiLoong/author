@@ -160,14 +160,17 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
     useImperativeHandle(ref, () => ({
         insertText: (text) => {
             if (!editor) return;
-            // 每个非空行视为一个段落（中文小说标准格式），跳过空行
-            const lines = text
-                .replace(/\r\n/g, '\n')
-                .replace(/\r/g, '\n')
-                .split('\n')
-                .map(line => line.trim())
-                .filter(line => line.length > 0);
-            const html = lines.map(line => `<p>${line}</p>`).join('');
+            // 规范化换行
+            const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+            // 按空行（双换行）分段，段内用 <br> 换行
+            const blocks = normalized.split(/\n\n+/);
+            const html = blocks
+                .map(block => {
+                    const lines = block.split('\n').map(l => l.trim()).filter(l => l);
+                    return `<p>${lines.join('<br>')}</p>`;
+                })
+                .filter(p => p !== '<p></p>')
+                .join('');
             editor.chain().focus().insertContent(html).run();
         },
     }), [editor]);
