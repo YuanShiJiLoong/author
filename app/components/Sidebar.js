@@ -34,16 +34,28 @@ export default function Sidebar() {
         localStorage.setItem('author-theme', next);
     }, [theme, setTheme]);
 
+    // 从上一章节名推算下一章节名：提取末尾数字 +1
+    const getNextChapterTitle = useCallback(() => {
+        if (chapters.length === 0) return t('sidebar.defaultChapterTitle').replace('{num}', 1);
+        const lastTitle = chapters[chapters.length - 1].title;
+        const match = lastTitle.match(/(\d+)\s*$/);
+        if (match) {
+            const nextNum = parseInt(match[1], 10) + 1;
+            return lastTitle.replace(/(\d+)\s*$/, String(nextNum));
+        }
+        return t('sidebar.defaultChapterTitle').replace('{num}', chapters.length + 1);
+    }, [chapters, t]);
+
     // 创建新章节
     const handleCreateChapter = useCallback(() => {
-        const title = newChapterTitle.trim() || t('sidebar.defaultChapterTitle').replace('{num}', chapters.length + 1);
+        const title = newChapterTitle.trim() || getNextChapterTitle();
         const ch = createChapter(title);
         addChapter(ch);
         setActiveChapterId(ch.id);
         setShowNewChapterModal(false);
         setNewChapterTitle('');
         showToast(t('sidebar.chapterCreated').replace('{title}', title), 'success');
-    }, [newChapterTitle, chapters.length, showToast, addChapter, setActiveChapterId, t]);
+    }, [newChapterTitle, getNextChapterTitle, showToast, addChapter, setActiveChapterId, t]);
 
     // 删除章节
     const handleDeleteChapter = useCallback((id) => {
@@ -104,7 +116,7 @@ export default function Sidebar() {
                         id="tour-new-chapter"
                         className="btn btn-primary"
                         style={{ width: '100%', justifyContent: 'center' }}
-                        onClick={() => setShowNewChapterModal(true)}
+                        onClick={() => { setNewChapterTitle(getNextChapterTitle()); setShowNewChapterModal(true); }}
                     >
                         {t('sidebar.newChapter')}
                     </button>
@@ -253,10 +265,11 @@ export default function Sidebar() {
                         <h2>{t('sidebar.newChapter')}</h2>
                         <input
                             className="modal-input"
-                            placeholder={t('sidebar.defaultChapterTitle').replace('{num}', chapters.length + 1)}
+                            placeholder={t('sidebar.newChapter')}
                             value={newChapterTitle}
                             onChange={e => setNewChapterTitle(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && handleCreateChapter()}
+                            onFocus={e => e.target.select()}
                             autoFocus
                         />
                         <div className="modal-actions">
