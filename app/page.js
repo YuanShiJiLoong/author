@@ -161,7 +161,7 @@ export default function Home() {
     };
 
     loadContext();
-  }, [activeChapterId, settingsVersion, chatHistory.length]);
+  }, [activeChapterId, settingsVersion, chatHistory.length, chapters.length]);
 
   // 定时自动存档 (每 15 分钟)
   useEffect(() => {

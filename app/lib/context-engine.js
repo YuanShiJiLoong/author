@@ -611,12 +611,9 @@ function buildPreviousContext(chapters, currentIndex) {
     }).join('\n\n');
 }
 
-// 按 selectedIds 过滤的前文上下文
+// 按 selectedIds 过滤的章节上下文（包含用户手动勾选的所有章节，不限前后）
 function buildPreviousContextFiltered(chapters, currentIndex, selectedIds) {
-    if (currentIndex <= 0) return '';
-
-    const prevChapters = chapters.slice(0, currentIndex);
-    const selected = prevChapters.filter(ch => selectedIds.has(`chapter-${ch.id}`));
+    const selected = chapters.filter((ch, i) => i !== currentIndex && selectedIds.has(`chapter-${ch.id}`));
     if (selected.length === 0) return '';
 
     return selected.map((ch) => {
