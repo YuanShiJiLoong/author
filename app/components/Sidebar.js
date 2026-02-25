@@ -403,6 +403,11 @@ export default function Sidebar() {
                             await saveChapters(importModal.chapters, targetWorkId);
                             // 切换到目标作品
                             setActiveWorkIdSetting(targetWorkId);
+                            // 直接更新 store 中的章节列表（立即生效，无需刷新）
+                            setChapters(importModal.chapters);
+                            if (importModal.chapters.length > 0) {
+                                setActiveChapterId(importModal.chapters[0].id);
+                            }
                             setActiveWorkIdStore(targetWorkId);
                             showToast(t('sidebar.importWorkSuccess').replace('{count}', importModal.chapters.length), 'success');
                             setImportModal(null);

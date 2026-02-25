@@ -138,6 +138,8 @@ export default function SettingsPanel() {
         setNodes(updatedNodes);
         setActiveWorkIdState(workNode.id);
         setActiveWorkId(workNode.id);
+        // 同步 Zustand store，触发 page.js 重载章节
+        useAppStore.getState().setActiveWorkId(workNode.id);
         setNewWorkName('');
         setShowNewWorkInput(false);
         setSelectedNodeId(null);
