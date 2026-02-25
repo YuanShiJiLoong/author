@@ -124,6 +124,8 @@ export default function SettingsPanel() {
     const handleSwitchWork = (workId) => {
         setActiveWorkIdState(workId);
         setActiveWorkId(workId);
+        // 同步 Zustand store，触发 page.js 重载章节
+        useAppStore.getState().setActiveWorkId(workId);
         setSelectedNodeId(null);
     };
 

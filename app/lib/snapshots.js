@@ -1,6 +1,6 @@
 import { get, set } from 'idb-keyval';
 import { getChapters, saveChapters } from './storage';
-import { getSettingsNodes, saveSettingsNodes } from './settings';
+import { getSettingsNodes, saveSettingsNodes, getActiveWorkId } from './settings';
 
 const SNAPSHOTS_KEY = 'author-snapshots';
 
@@ -26,7 +26,7 @@ export async function getSnapshots() {
  */
 export async function createSnapshot(label, type = 'auto') {
     try {
-        const chapters = await getChapters();
+        const chapters = await getChapters(getActiveWorkId());
         const settingsNodes = await getSettingsNodes();
 
         const snapshot = {
@@ -80,7 +80,7 @@ export async function restoreSnapshot(snapshotId) {
         await createSnapshot('恢复前的备份', 'auto');
 
         // 覆盖现有数据
-        await saveChapters(target.data.chapters || []);
+        await saveChapters(target.data.chapters || [], getActiveWorkId());
         await saveSettingsNodes(target.data.settingsNodes || []);
 
         return true;

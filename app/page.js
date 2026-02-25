@@ -11,6 +11,8 @@ import {
   deleteChapter,
   exportToMarkdown,
   exportAllToMarkdown,
+  migrateGlobalChapters,
+  saveChapters,
 } from './lib/storage';
 import { buildContext, compileSystemPrompt, compileUserPrompt, OUTPUT_TOKEN_BUDGET, getContextItems, estimateTokens } from './lib/context-engine';
 import { getProjectSettings, WRITING_MODES, getWritingMode, addSettingsNode, updateSettingsNode, deleteSettingsNode, getSettingsNodes, getActiveWorkId } from './lib/settings';
@@ -35,6 +37,7 @@ export default function Home() {
   const {
     chapters, setChapters, addChapter, updateChapter: updateChapterStore,
     activeChapterId, setActiveChapterId,
+    activeWorkId, setActiveWorkId: setActiveWorkIdStore,
     sidebarOpen, setSidebarOpen, toggleSidebar,
     aiSidebarOpen, setAiSidebarOpen, toggleAiSidebar,
     showSettings, setShowSettings,
@@ -66,30 +69,41 @@ export default function Home() {
   const activeSession = useMemo(() => getActiveSession(sessionStore), [sessionStore]);
   const chatHistory = useMemo(() => activeSession?.messages || [], [activeSession]);
 
+  // 加载指定作品的章节
+  const loadChaptersForWork = useCallback(async (workId) => {
+    let saved = await getChapters(workId);
+    // 自动修复：过滤掉损坏的章节数据
+    if (Array.isArray(saved)) {
+      const cleaned = saved.filter(ch => ch && typeof ch === 'object' && ch.id);
+      if (cleaned.length !== saved.length) {
+        console.warn(`[数据修复] 发现 ${saved.length - cleaned.length} 条损坏的章节数据，已自动清理`);
+        saved = cleaned;
+        await saveChapters(saved, workId);
+      }
+    } else {
+      saved = [];
+    }
+    if (saved.length === 0) {
+      const first = await createChapter(t('page.firstChapterTitle'), workId);
+      setChapters([first]);
+      setActiveChapterId(first.id);
+    } else {
+      setChapters(saved);
+      setActiveChapterId(saved[0].id);
+    }
+  }, [t, setChapters, setActiveChapterId]);
+
   // 初始化数据
   useEffect(() => {
     const initData = async () => {
-      let saved = await getChapters();
-      // 自动修复：过滤掉损坏的章节数据（如缺少 id 或非对象的条目）
-      if (Array.isArray(saved)) {
-        const cleaned = saved.filter(ch => ch && typeof ch === 'object' && ch.id);
-        if (cleaned.length !== saved.length) {
-          console.warn(`[数据修复] 发现 ${saved.length - cleaned.length} 条损坏的章节数据，已自动清理`);
-          saved = cleaned;
-          const { saveChapters } = await import('./lib/storage');
-          await saveChapters(saved);
-        }
-      } else {
-        saved = [];
+      const workId = getActiveWorkId();
+      if (workId) {
+        setActiveWorkIdStore(workId);
+        // 一次性迁移旧全局章节
+        await migrateGlobalChapters(workId);
       }
-      if (saved.length === 0) {
-        const first = await createChapter(t('page.firstChapterTitle'));
-        setChapters([first]);
-        setActiveChapterId(first.id);
-      } else {
-        setChapters(saved);
-        setActiveChapterId(saved[0].id);
-      }
+      await loadChaptersForWork(workId);
+
       const savedTheme = localStorage.getItem('author-theme') || 'light';
       setTheme(savedTheme);
       setWritingMode(getWritingMode());
@@ -97,13 +111,20 @@ export default function Home() {
       // 加载会话数据
       let store = await loadSessionStore();
       if (store.sessions.length === 0) {
-        // 首次使用：创建一个空会话
         store = createSession(store);
       }
       setSessionStore(store);
     };
     initData();
   }, []);
+
+  // 切换作品时重新加载章节
+  const prevWorkIdRef = useRef(activeWorkId);
+  useEffect(() => {
+    if (prevWorkIdRef.current === activeWorkId) return;
+    prevWorkIdRef.current = activeWorkId;
+    loadChaptersForWork(activeWorkId);
+  }, [activeWorkId, loadChaptersForWork]);
 
   // 初始化上下文条目和勾选状态（设定集 + 章节 + 对话历史）
   useEffect(() => {
@@ -167,11 +188,11 @@ export default function Home() {
     const updated = await updateChapter(activeChapterId, {
       content: html,
       wordCount,
-    });
+    }, activeWorkId);
     if (updated) {
       updateChapterStore(activeChapterId, { content: html, wordCount });
     }
-  }, [activeChapterId, updateChapterStore]);
+  }, [activeChapterId, activeWorkId, updateChapterStore]);
 
   // Inline AI 回调：编辑器调用此函数发起 AI 请求
   const handleInlineAiRequest = useCallback(async ({ mode, text, instruction, signal, onChunk }) => {

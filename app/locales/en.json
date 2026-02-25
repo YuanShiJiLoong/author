@@ -255,7 +255,20 @@
     "clickToSwitchMode": "Click to switch writing mode",
     "exportedChapter": "Current chapter exported",
     "exportedAll": "All chapters exported",
-    "importSuccess": "Page will reload automatically."
+    "importSuccess": "Page will reload automatically.",
+    "btnImportWork": "📥 Import",
+    "btnImportWorkTitle": "Import work from TXT file (auto-detect chapters)",
+    "importWorkConfirm": "Importing will replace all current chapters. Detected {count} chapters, {words} words total. Confirm import?",
+    "importWorkSuccess": "Successfully imported {count} chapters",
+    "importWorkFailed": "Import failed: {error}",
+    "importWorkNoChapter": "No chapters detected. Please check the file format.",
+    "importWorkSelectTitle": "Select Import Target",
+    "importWorkSelectDesc": "Detected {count} chapters, {words} words total. Choose which work to import into:",
+    "importWorkReplaceConfirm": "Import chapters into \"{name}\"? This will replace all existing chapters in that work.",
+    "importWorkNewBtn": "New Work",
+    "importWorkNewPlaceholder": "Enter new work name",
+    "btnExportTxt": "📤 Export",
+    "btnExportTxtTitle": "Export all chapters as TXT file"
   },
   "page": {
     "noChapterHint": "Select or create a chapter to start writing",

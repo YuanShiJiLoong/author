@@ -3,14 +3,15 @@
 import { useState, useCallback } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
-import { createChapter, deleteChapter, updateChapter, exportToMarkdown, exportAllToMarkdown } from '../lib/storage';
-import { exportProject, importProject } from '../lib/project-io';
-import { WRITING_MODES } from '../lib/settings';
+import { createChapter, deleteChapter, updateChapter, exportToMarkdown, exportAllToMarkdown, saveChapters } from '../lib/storage';
+import { exportProject, importProject, importWork, exportWorkAsTxt } from '../lib/project-io';
+import { WRITING_MODES, getAllWorks, getSettingsNodes, createWorkNode, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting } from '../lib/settings';
 
 export default function Sidebar() {
     const {
         chapters, addChapter, setChapters, updateChapter: updateChapterStore,
         activeChapterId, setActiveChapterId,
+        activeWorkId, setActiveWorkId: setActiveWorkIdStore,
         sidebarOpen, setSidebarOpen,
         theme, setTheme,
         writingMode,
@@ -22,6 +23,7 @@ export default function Sidebar() {
     const [renameId, setRenameId] = useState(null);
     const [renameTitle, setRenameTitle] = useState('');
     const [contextMenu, setContextMenu] = useState(null);
+    const [importModal, setImportModal] = useState(null); // { chapters, totalWords, file }
     const { t } = useI18n();
 
     // 切换主题
@@ -102,14 +104,14 @@ export default function Sidebar() {
     // 创建新章节 — 一键创建并进入重命名模式
     const handleCreateChapter = useCallback(async () => {
         const title = getNextChapterTitle();
-        const ch = await createChapter(title);
+        const ch = await createChapter(title, activeWorkId);
         addChapter(ch);
         setActiveChapterId(ch.id);
         // 立即进入重命名模式，方便用户修改标题
         setRenameId(ch.id);
         setRenameTitle(title);
         showToast(t('sidebar.chapterCreated').replace('{title}', title), 'success');
-    }, [getNextChapterTitle, showToast, addChapter, setActiveChapterId, t]);
+    }, [getNextChapterTitle, showToast, addChapter, setActiveChapterId, t, activeWorkId]);
 
     // 删除章节
     const handleDeleteChapter = useCallback(async (id) => {
@@ -118,24 +120,24 @@ export default function Sidebar() {
             return;
         }
         const ch = chapters.find(c => c.id === id);
-        const remaining = await deleteChapter(id);
+        const remaining = await deleteChapter(id, activeWorkId);
         setChapters(remaining);
         if (activeChapterId === id) {
             setActiveChapterId(remaining[0]?.id || null);
         }
         showToast(t('sidebar.chapterDeleted').replace('{title}', ch?.title), 'info');
         setContextMenu(null);
-    }, [chapters, activeChapterId, showToast, setChapters, setActiveChapterId, t]);
+    }, [chapters, activeChapterId, showToast, setChapters, setActiveChapterId, t, activeWorkId]);
 
     // 重命名章节
     const handleRename = useCallback((id) => {
         const title = renameTitle.trim();
         if (!title) return;
-        const updated = updateChapter(id, { title });
+        updateChapter(id, { title }, activeWorkId);
         updateChapterStore(id, { title });
         setRenameId(null);
         setRenameTitle('');
-    }, [renameTitle, updateChapterStore]);
+    }, [renameTitle, updateChapterStore, activeWorkId]);
 
     // 导出
     const handleExport = useCallback((type) => {
@@ -290,6 +292,12 @@ export default function Sidebar() {
                         <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => { document.getElementById('project-import-input')?.click(); }}>
                             {t('sidebar.btnLoad')}
                         </button>
+                        <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => { document.getElementById('work-import-input')?.click(); }} title={t('sidebar.btnImportWorkTitle')}>
+                            {t('sidebar.btnImportWork')}
+                        </button>
+                        <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => { exportWorkAsTxt(chapters); }} title={t('sidebar.btnExportTxtTitle')}>
+                            {t('sidebar.btnExportTxt')}
+                        </button>
                         <input
                             id="project-import-input"
                             type="file"
@@ -304,6 +312,32 @@ export default function Sidebar() {
                                     window.location.reload();
                                 } else {
                                     alert(result.message);
+                                }
+                                e.target.value = '';
+                            }}
+                        />
+                        <input
+                            id="work-import-input"
+                            type="file"
+                            accept=".txt"
+                            style={{ display: 'none' }}
+                            onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                try {
+                                    const result = await importWork(file);
+                                    if (!result.success) {
+                                        const msg = result.message === 'noChapter'
+                                            ? t('sidebar.importWorkNoChapter')
+                                            : t('sidebar.importWorkFailed').replace('{error}', result.message);
+                                        showToast(msg, 'error');
+                                        e.target.value = '';
+                                        return;
+                                    }
+                                    // 弹出作品选择
+                                    setImportModal({ chapters: result.chapters, totalWords: result.totalWords });
+                                } catch (err) {
+                                    showToast(t('sidebar.importWorkFailed').replace('{error}', err.message), 'error');
                                 }
                                 e.target.value = '';
                             }}
@@ -358,6 +392,116 @@ export default function Sidebar() {
                     </div>
                 </div>
             )}
+            {/* ===== 导入作品-选择目标作品弹窗 ===== */}
+            {importModal && (
+                <ImportWorkModal
+                    chapters={importModal.chapters}
+                    totalWords={importModal.totalWords}
+                    onClose={() => setImportModal(null)}
+                    onImport={async (targetWorkId) => {
+                        try {
+                            await saveChapters(importModal.chapters, targetWorkId);
+                            // 切换到目标作品
+                            setActiveWorkIdSetting(targetWorkId);
+                            setActiveWorkIdStore(targetWorkId);
+                            showToast(t('sidebar.importWorkSuccess').replace('{count}', importModal.chapters.length), 'success');
+                            setImportModal(null);
+                        } catch (err) {
+                            showToast(t('sidebar.importWorkFailed').replace('{error}', err.message), 'error');
+                        }
+                    }}
+                    t={t}
+                />
+            )}
         </>
+    );
+}
+
+/**
+ * 导入作品时的目标作品选择弹窗
+ */
+function ImportWorkModal({ chapters, totalWords, onClose, onImport, t }) {
+    const [works, setWorks] = useState([]);
+    const [newWorkName, setNewWorkName] = useState('');
+    const [showNewInput, setShowNewInput] = useState(false);
+
+    // 加载作品列表
+    useState(() => {
+        (async () => {
+            const nodes = await getSettingsNodes();
+            setWorks(getAllWorks(nodes));
+        })();
+    });
+
+    const handleCreateAndImport = async () => {
+        const name = newWorkName.trim();
+        if (!name) return;
+        const { workNode, subNodes } = createWorkNode(name);
+        const allNodes = await getSettingsNodes();
+        const updatedNodes = [...allNodes, workNode, ...subNodes];
+        await saveSettingsNodes(updatedNodes);
+        onImport(workNode.id);
+    };
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="glass-panel" onClick={e => e.stopPropagation()} style={{
+                padding: '24px', maxWidth: 420, width: '90%', borderRadius: 'var(--radius-lg)',
+                display: 'flex', flexDirection: 'column', gap: 16,
+            }}>
+                <h3 style={{ margin: 0, fontSize: 16 }}>{t('sidebar.importWorkSelectTitle')}</h3>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+                    {t('sidebar.importWorkSelectDesc')
+                        .replace('{count}', chapters.length)
+                        .replace('{words}', totalWords.toLocaleString())}
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {works.map(w => (
+                        <button
+                            key={w.id}
+                            className="btn btn-secondary"
+                            style={{ justifyContent: 'flex-start', padding: '10px 14px', fontSize: 13 }}
+                            onClick={() => {
+                                if (confirm(t('sidebar.importWorkReplaceConfirm').replace('{name}', w.name))) {
+                                    onImport(w.id);
+                                }
+                            }}
+                        >
+                            📕 {w.name}
+                        </button>
+                    ))}
+
+                    {showNewInput ? (
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <input
+                                className="modal-input"
+                                style={{ margin: 0, flex: 1, padding: '8px 10px', fontSize: 13 }}
+                                value={newWorkName}
+                                onChange={e => setNewWorkName(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleCreateAndImport()}
+                                placeholder={t('sidebar.importWorkNewPlaceholder')}
+                                autoFocus
+                            />
+                            <button className="btn btn-primary btn-sm" style={{ padding: '8px 14px', whiteSpace: 'nowrap' }} onClick={handleCreateAndImport}>
+                                {t('common.confirm')}
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            className="btn btn-primary"
+                            style={{ justifyContent: 'center', padding: '10px 14px', fontSize: 13 }}
+                            onClick={() => setShowNewInput(true)}
+                        >
+                            ＋ {t('sidebar.importWorkNewBtn')}
+                        </button>
+                    )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button className="btn btn-ghost btn-sm" onClick={onClose}>{t('common.cancel')}</button>
+                </div>
+            </div>
+        </div>
     );
 }

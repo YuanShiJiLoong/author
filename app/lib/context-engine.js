@@ -38,7 +38,7 @@ const PRIORITY = {
  */
 export async function getContextItems(activeChapterId) {
     const settings = getProjectSettings();
-    const chapters = await getChapters();
+    const chapters = await getChapters(getActiveWorkId());
     const currentIndex = chapters.findIndex(ch => ch.id === activeChapterId);
 
     const allNodes = await getSettingsNodes();
@@ -152,7 +152,7 @@ export async function getContextItems(activeChapterId) {
  */
 export async function buildContext(activeChapterId, selectedText, selectedIds = null) {
     const settings = getProjectSettings();
-    const chapters = await getChapters();
+    const chapters = await getChapters(getActiveWorkId());
     const currentChapter = chapters.find(ch => ch.id === activeChapterId);
     const currentIndex = chapters.findIndex(ch => ch.id === activeChapterId);
 
@@ -307,7 +307,7 @@ function applyTokenBudget(modules) {
  */
 export async function getContextPreview(activeChapterId, selectedText) {
     const settings = getProjectSettings();
-    const chapters = await getChapters();
+    const chapters = await getChapters(getActiveWorkId());
     const currentChapter = chapters.find(ch => ch.id === activeChapterId);
     const currentIndex = chapters.findIndex(ch => ch.id === activeChapterId);
 

@@ -255,7 +255,20 @@
         "clickToSwitchMode": "点击切换写作模式",
         "exportedChapter": "已导出当前章节",
         "exportedAll": "已导出全部章节",
-        "importSuccess": "页面将自动刷新。"
+        "importSuccess": "页面将自动刷新。",
+        "btnImportWork": "📥 导入",
+        "btnImportWorkTitle": "从 TXT 文件导入作品（自动识别章节）",
+        "importWorkConfirm": "导入作品将替换当前所有章节。已识别 {count} 个章节，共 {words} 字。确认导入？",
+        "importWorkSuccess": "成功导入 {count} 个章节",
+        "importWorkFailed": "导入失败：{error}",
+        "importWorkNoChapter": "未识别到任何章节，请检查文件格式",
+        "importWorkSelectTitle": "选择导入目标",
+        "importWorkSelectDesc": "已识别 {count} 个章节，共 {words} 字。请选择导入到哪个作品：",
+        "importWorkReplaceConfirm": "确定将章节导入到「{name}」？这将替换该作品的所有现有章节。",
+        "importWorkNewBtn": "新建作品",
+        "importWorkNewPlaceholder": "输入新作品名称",
+        "btnExportTxt": "📤 导出",
+        "btnExportTxtTitle": "将当前作品所有章节导出为 TXT 文件"
     },
     "page": {
         "noChapterHint": "请选择或创建一个章节开始写作",

@@ -4,8 +4,10 @@ export const useAppStore = create((set, get) => ({
     // --- Chapter State ---
     chapters: [],
     activeChapterId: null,
+    activeWorkId: typeof window !== 'undefined' ? localStorage.getItem('author-active-work') || null : null,
     setChapters: (chapters) => set({ chapters: Array.isArray(chapters) ? chapters.filter(ch => ch && typeof ch === 'object' && ch.id) : [] }),
     setActiveChapterId: (id) => set({ activeChapterId: id }),
+    setActiveWorkId: (id) => set({ activeWorkId: id }),
     addChapter: (chapter) => set((state) => ({ chapters: [...state.chapters, chapter] })),
     deleteChapter: (id) => set((state) => ({ chapters: state.chapters.filter((ch) => ch.id !== id) })),
     updateChapter: (id, updates) => set((state) => ({

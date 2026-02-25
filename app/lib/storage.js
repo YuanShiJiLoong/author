@@ -1,27 +1,57 @@
 // 本地存储工具 - 使用 IndexedDB 管理核心数据 (章节、摘要)
-import { get, set } from 'idb-keyval';
+// 章节按作品(workId)隔离存储
+import { get, set, del } from 'idb-keyval';
 
-const STORAGE_KEY = 'author-chapters';
+const LEGACY_STORAGE_KEY = 'author-chapters';
+
+function getStorageKey(workId) {
+    return workId ? `author-chapters-${workId}` : LEGACY_STORAGE_KEY;
+}
 
 // 生成唯一ID
 export function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 }
 
-// 获取所有章节 (Async)
-export async function getChapters() {
-    if (typeof window === 'undefined') return [];
+/**
+ * 一次性迁移：将旧的全局 author-chapters 剪切到当前活跃作品
+ * 调用方在 page.js initData 中负责调用
+ */
+export async function migrateGlobalChapters(workId) {
+    if (typeof window === 'undefined' || !workId) return;
     try {
-        let chapters = await get(STORAGE_KEY);
-        if (!chapters) {
-            // Fallback: 第一次迁移，从 localStorage 拿
-            const legacyData = localStorage.getItem(STORAGE_KEY);
-            if (legacyData) {
-                chapters = JSON.parse(legacyData);
-                await set(STORAGE_KEY, chapters);
-            } else {
-                chapters = [];
+        const perWorkData = await get(getStorageKey(workId));
+        if (perWorkData) return; // 该作品已有数据，不迁移
+
+        const globalData = await get(LEGACY_STORAGE_KEY);
+        if (!globalData || !Array.isArray(globalData) || globalData.length === 0) {
+            // 也检查 localStorage fallback
+            const legacyLocal = localStorage.getItem(LEGACY_STORAGE_KEY);
+            if (legacyLocal) {
+                const parsed = JSON.parse(legacyLocal);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    await set(getStorageKey(workId), parsed);
+                    localStorage.removeItem(LEGACY_STORAGE_KEY);
+                }
             }
+            return;
+        }
+        // 剪切到新 key
+        await set(getStorageKey(workId), globalData);
+        await del(LEGACY_STORAGE_KEY);
+    } catch (e) {
+        console.warn('[迁移] 章节迁移失败：', e);
+    }
+}
+
+// 获取所有章节 (Async)
+export async function getChapters(workId) {
+    if (typeof window === 'undefined') return [];
+    const key = getStorageKey(workId);
+    try {
+        let chapters = await get(key);
+        if (!chapters) {
+            chapters = [];
         }
         return chapters;
     } catch {
@@ -30,14 +60,14 @@ export async function getChapters() {
 }
 
 // 保存所有章节 (Async)
-export async function saveChapters(chapters) {
+export async function saveChapters(chapters, workId) {
     if (typeof window === 'undefined') return;
-    await set(STORAGE_KEY, chapters);
+    await set(getStorageKey(workId), chapters);
 }
 
 // 创建新章节 (Async)
-export async function createChapter(title = '未命名章节') {
-    const chapters = await getChapters();
+export async function createChapter(title = '未命名章节', workId) {
+    const chapters = await getChapters(workId);
     const newChapter = {
         id: generateId(),
         title,
@@ -47,13 +77,13 @@ export async function createChapter(title = '未命名章节') {
         updatedAt: new Date().toISOString(),
     };
     chapters.push(newChapter);
-    await saveChapters(chapters);
+    await saveChapters(chapters, workId);
     return newChapter;
 }
 
 // 更新章节 (Async)
-export async function updateChapter(id, updates) {
-    const chapters = await getChapters();
+export async function updateChapter(id, updates, workId) {
+    const chapters = await getChapters(workId);
     const index = chapters.findIndex(ch => ch.id === id);
     if (index === -1) return null;
 
@@ -62,21 +92,21 @@ export async function updateChapter(id, updates) {
         ...updates,
         updatedAt: new Date().toISOString(),
     };
-    await saveChapters(chapters);
+    await saveChapters(chapters, workId);
     return chapters[index];
 }
 
 // 删除章节 (Async)
-export async function deleteChapter(id) {
-    const chapters = await getChapters();
+export async function deleteChapter(id, workId) {
+    const chapters = await getChapters(workId);
     const newChapters = chapters.filter(ch => ch.id !== id);
-    await saveChapters(newChapters);
+    await saveChapters(newChapters, workId);
     return newChapters;
 }
 
 // 获取单个章节 (Async)
-export async function getChapter(id) {
-    const chapters = await getChapters();
+export async function getChapter(id, workId) {
+    const chapters = await getChapters(workId);
     return chapters.find(ch => ch.id === id) || null;
 }
 
