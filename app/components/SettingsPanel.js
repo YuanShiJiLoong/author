@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useAppStore } from '../store/useAppStore';
 import {
     getProjectSettings,
@@ -22,6 +23,15 @@ import {
 import SettingsTree from './SettingsTree';
 import { useI18n } from '../lib/useI18n';
 import SettingsItemEditor from './SettingsItemEditor';
+import { downloadFile, downloadBlob } from '../lib/project-io';
+import {
+    detectCategory, parseTextToFields, mapFieldsToContent,
+    parseMultipleEntries, isStructuredText, parseStructuredText,
+    preprocessPdfText,
+    exportNodesToTxt, exportNodesToMarkdown,
+    exportNodesToDocx, exportSettingsAsPdf, parseDocxToText, parsePdfToText,
+} from '../lib/settings-io';
+import SettingsConflictModal from './SettingsConflictModal';
 
 const CAT_STYLES = {
     work: { color: 'var(--cat-work)', bg: 'var(--cat-work-bg)', icon: '📕' },
@@ -61,6 +71,7 @@ export default function SettingsPanel() {
     const { t } = useI18n();
 
     const [expandedCategory, setExpandedCategory] = useState(null);
+    const [showExportFormat, setShowExportFormat] = useState(false);
 
     // 获取当前作品的节点
     useEffect(() => {
@@ -166,7 +177,250 @@ export default function SettingsPanel() {
         setSelectedNodeId(null);
     };
 
-    if (!open || !settings) return null;
+    // 收集当前作品的所有节点
+    const getWorkNodes = () => {
+        if (!activeWorkId) return [];
+        const workDescendants = new Set();
+        const collect = (parentId) => {
+            nodes.filter(n => n.parentId === parentId).forEach(n => {
+                workDescendants.add(n.id);
+                collect(n.id);
+            });
+        };
+        workDescendants.add(activeWorkId);
+        collect(activeWorkId);
+        return nodes.filter(n => workDescendants.has(n.id));
+    };
+
+    // 导出当前作品的设定集
+    const handleExportSettings = async (format = 'json') => {
+        if (!activeWorkId) return;
+        const workNode = nodes.find(n => n.id === activeWorkId);
+        if (!workNode) return;
+        const workNodes = getWorkNodes();
+        const baseName = workNode.name || '设定集';
+        setShowExportFormat(false);
+
+        if (format === 'txt') {
+            const txt = exportNodesToTxt(workNodes);
+            await downloadFile(txt, `${baseName}-设定集.txt`, 'text/plain');
+        } else if (format === 'md') {
+            const md = exportNodesToMarkdown(workNodes);
+            await downloadFile(md, `${baseName}-设定集.md`, 'text/markdown');
+        } else if (format === 'docx') {
+            const blob = await exportNodesToDocx(workNodes);
+            await downloadBlob(blob, `${baseName}-设定集.docx`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        } else if (format === 'pdf') {
+            exportSettingsAsPdf(workNodes);
+        } else {
+            // JSON 格式
+            const exportNodes = workNodes.map(({ embedding, ...rest }) => rest);
+            const projectSettings = getProjectSettings();
+            const data = {
+                type: 'author-settings-export',
+                version: 2,
+                workName: workNode.name,
+                exportedAt: new Date().toISOString(),
+                nodes: exportNodes,
+                bookInfo: projectSettings.bookInfo || {},
+                writingMode: projectSettings.writingMode || 'webnovel',
+            };
+            await downloadFile(JSON.stringify(data, null, 2), `${baseName}-设定集.json`, 'application/json');
+        }
+    };
+
+    // 导入设定集
+    const handleImportSettings = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        e.target.value = '';
+        const ext = file.name.split('.').pop().toLowerCase();
+
+        // 先把文件转换为纯文本
+        let text;
+        if (ext === 'json') {
+            text = await file.text();
+        } else if (ext === 'docx') {
+            text = await parseDocxToText(file);
+        } else if (ext === 'pdf') {
+            text = await parsePdfToText(file);
+            text = preprocessPdfText(text); // 恢复标题结构
+        } else {
+            text = await file.text();
+        }
+
+        // JSON 导入
+        if (ext === 'json') {
+            try {
+                const data = JSON.parse(text);
+                if (data.type !== 'author-settings-export' || !Array.isArray(data.nodes)) {
+                    alert(t('settings.importInvalidFile')); return;
+                }
+                const importedNodes = data.nodes;
+                const workNode = importedNodes.find(n => n.type === 'work');
+                if (!workNode) { alert(t('settings.importNoWork')); return; }
+
+                const restorePS = () => {
+                    if (data.bookInfo || data.writingMode) {
+                        const ps = getProjectSettings();
+                        if (data.bookInfo) ps.bookInfo = data.bookInfo;
+                        if (data.writingMode) ps.writingMode = data.writingMode;
+                        saveProjectSettings(ps); setSettings(ps);
+                        if (data.writingMode) { setWritingModeState(data.writingMode); setWritingMode(data.writingMode); }
+                    }
+                };
+                const existingWork = nodes.find(n => n.type === 'work' && n.name === workNode.name);
+                if (existingWork) {
+                    if (!confirm((t('settings.importOverwrite')).replace('{name}', workNode.name))) return;
+                    const toDelete = new Set();
+                    const collectDel = (pid) => { toDelete.add(pid); nodes.filter(n => n.parentId === pid).forEach(n => collectDel(n.id)); };
+                    collectDel(existingWork.id);
+                    const merged = [...nodes.filter(n => !toDelete.has(n.id)), ...importedNodes];
+                    await saveSettingsNodes(merged); setNodes(merged); restorePS(); handleSwitchWork(workNode.id);
+                } else {
+                    const merged = [...nodes, ...importedNodes];
+                    await saveSettingsNodes(merged); setNodes(merged); restorePS(); handleSwitchWork(workNode.id);
+                }
+            } catch (err) { alert((t('settings.importError')) + err.message); }
+            return;
+        }
+
+        // TXT / MD / DOCX / PDF 智能导入
+        try {
+            if (!activeWorkId) { alert(t('settings.importNoWork')); return; }
+
+            console.log('[Settings Import] activeWorkId:', activeWorkId);
+            console.log('[Settings Import] text length:', text?.length, 'first 500 chars:', text?.substring(0, 500));
+            console.log('[Settings Import] isStructured:', isStructuredText(text));
+
+            // 解析文本为条目列表 [{name, category, content}]
+            let importedItems = [];
+
+            if (isStructuredText(text)) {
+                const parsedEntries = parseStructuredText(text);
+                console.log('[Settings Import] structured entries:', parsedEntries.length, parsedEntries.map(e => e.name));
+                for (const entry of parsedEntries) {
+                    const mapped = mapFieldsToContent(entry.fields, entry.category);
+                    const nodeName = mapped.name || entry.name || '导入条目';
+                    if (Object.keys(mapped.content).length === 0) continue;
+                    importedItems.push({ name: nodeName, category: entry.category, content: mapped.content });
+                }
+            } else {
+                const blocks = parseMultipleEntries(text);
+                console.log('[Settings Import] unstructured blocks:', blocks.length);
+                for (const block of blocks) {
+                    const parsed = parseTextToFields(block);
+                    if (Object.keys(parsed).length === 0) continue;
+                    const category = detectCategory(block);
+                    const mapped = mapFieldsToContent(parsed, category);
+                    const nodeName = mapped.name || Object.values(parsed)[0]?.substring(0, 20) || '导入条目';
+                    importedItems.push({ name: nodeName, category, content: mapped.content });
+                }
+            }
+
+            console.log('[Settings Import] importedItems:', importedItems.length, importedItems.map(i => i.name));
+
+            if (importedItems.length === 0) {
+                alert(t('settings.importEmpty') || '未能从文件中解析出任何设定条目');
+                return;
+            }
+
+            // 检测冲突（同名 + 同分类）
+            const existingItems = nodes.filter(n => n.type === 'item' && n.parentId);
+            console.log('[Settings Import] existingItems in activeWork:', existingItems.filter(n =>
+                nodes.find(p => p.id === n.parentId && (p.parentId === activeWorkId || p.id === activeWorkId))
+            ).map(n => `${n.name}(${n.category})`));
+            const conflicts = [];
+            const noConflicts = [];
+
+            for (const item of importedItems) {
+                const existing = existingItems.find(n =>
+                    n.name === item.name && n.category === item.category &&
+                    nodes.find(p => p.id === n.parentId && (p.parentId === activeWorkId || p.id === activeWorkId))
+                );
+                console.log('[Settings Import] checking:', item.name, 'cat:', item.category, '→', existing ? 'CONFLICT' : 'new');
+                if (existing) {
+                    conflicts.push({ name: item.name, category: item.category, existing, imported: item });
+                } else {
+                    noConflicts.push(item);
+                }
+            }
+
+            console.log('[Settings Import] conflicts:', conflicts.length, 'noConflicts:', noConflicts.length);
+
+            if (conflicts.length > 0) {
+                // 有冲突 → 显示冲突弹窗
+                console.log('[Settings Import] SHOWING CONFLICT MODAL with', conflicts.length, 'conflicts');
+                setConflictData({ conflicts, noConflicts });
+                return; // 不继续执行后续逻辑
+            } else {
+                // 无冲突 → 直接导入
+                await doImportItems(noConflicts, []);
+            }
+        } catch (err) {
+            alert((t('settings.importError')) + err.message);
+        }
+    };
+
+    // 冲突解决状态
+    const [conflictData, setConflictData] = useState(null);
+
+    // 查找分类对应的父文件夹
+    const catSuffixMap = {
+        character: 'characters', location: 'locations', object: 'objects',
+        world: 'world', plot: 'plot', rules: 'rules',
+    };
+    const findParentFolder = (category) => {
+        const suffix = catSuffixMap[category] || category;
+        let parentId = nodes.find(n => n.parentId === activeWorkId && n.id.endsWith('-' + suffix))?.id;
+        if (!parentId) {
+            parentId = nodes.find(n => n.parentId === activeWorkId && n.category === category)?.id;
+        }
+        return parentId || activeWorkId;
+    };
+
+    // 执行导入
+    const doImportItems = async (items, updates) => {
+        let updatedNodes = [...nodes];
+
+        // 处理冲突解决的更新
+        for (const up of updates) {
+            updatedNodes = updatedNodes.map(n => {
+                if (n.id === up.nodeId) {
+                    return { ...n, content: up.content, name: up.name || n.name, updatedAt: new Date().toISOString() };
+                }
+                return n;
+            });
+        }
+
+        // 添加新条目
+        let importedCount = 0;
+        for (const item of items) {
+            const parentId = findParentFolder(item.category);
+            const nodeId = Date.now().toString(36) + Math.random().toString(36).substr(2, 6) + importedCount;
+            updatedNodes.push({
+                id: nodeId, name: item.name, type: 'item',
+                category: item.category, parentId, order: importedCount,
+                icon: '📄', content: item.content,
+                collapsed: false, enabled: true,
+                createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+            });
+            importedCount++;
+        }
+
+        await saveSettingsNodes(updatedNodes);
+        setNodes(updatedNodes);
+        const totalCount = items.length + updates.length;
+        alert((t('settings.importTextSuccess') || '成功导入 {count} 个设定条目').replace('{count}', totalCount));
+    };
+
+    // 冲突解决确认
+    const handleConflictConfirm = async (resolvedUpdates, noConflictItems) => {
+        setConflictData(null);
+        await doImportItems(noConflictItems, resolvedUpdates);
+    };
+
+    if ((!open && !conflictData) || !settings) return null;
 
     const handleSettingsSave = (section, data) => {
         const newSettings = { ...settings, [section]: data };
@@ -327,12 +581,37 @@ export default function SettingsPanel() {
                                         <button className="btn btn-primary btn-sm" style={{ padding: '4px 10px', fontSize: 11 }} onClick={handleCreateWork}>{t('settings.confirmBtn')}</button>
                                         <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => setShowNewWorkInput(false)}>{t('common.cancel')}</button>
                                     </div>
-                                ) : (
+                                ) : (<>
                                     <button
                                         style={{ padding: '5px 10px', border: '1px dashed var(--border-light)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', transition: 'all 0.15s' }}
                                         onClick={() => { setNewWorkName(''); setShowNewWorkInput(true); }}
                                     >{t('settings.newWork')}</button>
-                                )}
+                                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                                        <button
+                                            style={{ padding: '5px 10px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--accent)', transition: 'all 0.15s' }}
+                                            onClick={() => setShowExportFormat(!showExportFormat)}
+                                            title={t('settings.exportSettingsTitle')}
+                                        >📤 {t('settings.exportSettings')}</button>
+                                        {showExportFormat && (
+                                            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', zIndex: 10, overflow: 'hidden', minWidth: 130 }}>
+                                                {[{ key: 'json', label: 'JSON (完整)', icon: '📋' }, { key: 'txt', label: 'TXT (纯文本)', icon: '📝' }, { key: 'md', label: 'Markdown', icon: '📖' }, { key: 'docx', label: 'Word (.docx)', icon: '📘' }, { key: 'pdf', label: 'PDF (打印)', icon: '📕' }].map(f => (
+                                                    <button key={f.key} style={{ display: 'block', width: '100%', padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', textAlign: 'left', transition: 'background 0.1s' }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                                                        onClick={() => handleExportSettings(f.key)}
+                                                    >{f.icon} {f.label}</button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <label
+                                        style={{ padding: '5px 10px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--accent)', transition: 'all 0.15s', display: 'inline-block' }}
+                                        title={t('settings.importSettingsTitle')}
+                                    >
+                                        📥 {t('settings.importSettings')}
+                                        <input type="file" accept=".json,.txt,.md,.markdown,.docx,.pdf" style={{ display: 'none' }} onChange={handleImportSettings} />
+                                    </label>
+                                </>)}
                             </div>
                         </div>
 
@@ -407,11 +686,20 @@ export default function SettingsPanel() {
                     </div>
                 )}
             </div>
+            {
+                conflictData && createPortal(
+                    <SettingsConflictModal
+                        conflicts={conflictData.conflicts}
+                        noConflicts={conflictData.noConflicts}
+                        onConfirm={handleConflictConfirm}
+                        onClose={() => setConflictData(null)}
+                    />,
+                    document.body // Render into document.body or a specific portal root
+                )
+            }
         </div>
     );
 }
-
-// ==================== API 配置 ====================
 
 const PROVIDERS = [
     { key: 'zhipu', label: '智谱AI (GLM)', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-flash', 'glm-4-plus', 'glm-4-long', 'glm-4'] },

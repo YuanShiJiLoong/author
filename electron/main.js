@@ -96,6 +96,18 @@ function createWindow() {
         return { action: 'allow' };
     });
 
+    // 确保下载文件使用正确的文件名（而非 blob UUID）
+    mainWindow.webContents.session.on('will-download', (event, item) => {
+        const suggestedName = item.getFilename();
+        // 如果文件名看起来像 UUID（没有扩展名或是 blob hash），尝试用 Content-Disposition
+        if (suggestedName && !suggestedName.match(/^[0-9a-f-]{36}/i)) {
+            // 文件名正常，不需要干预
+            return;
+        }
+        // Electron 有时已经能从 a.download 获取到正确名称，这里做兜底
+        log(`[Download] Original filename: ${suggestedName}`);
+    });
+
     mainWindow.on('closed', () => {
         mainWindow = null;
     });

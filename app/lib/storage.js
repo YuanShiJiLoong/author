@@ -110,16 +110,42 @@ export async function getChapter(id, workId) {
     return chapters.find(ch => ch.id === id) || null;
 }
 
+// 通用下载辅助：优先使用 File System Access API（弹出系统另存为对话框），
+// 回退到 data URL（兼容旧浏览器）
+async function downloadTextFile(content, fileName) {
+    // 方式一：File System Access API（Chrome/Edge 86+）
+    if (typeof window !== 'undefined' && window.showSaveFilePicker) {
+        try {
+            const ext = fileName.split('.').pop() || 'txt';
+            const handle = await window.showSaveFilePicker({
+                suggestedName: fileName,
+                types: [{
+                    description: ext.toUpperCase() + ' File',
+                    accept: { 'text/plain': ['.' + ext] },
+                }],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(content);
+            await writable.close();
+            return;
+        } catch (e) {
+            if (e.name === 'AbortError') return; // 用户取消
+            // 降级到方式二
+        }
+    }
+    // 方式二：data URL
+    const a = document.createElement('a');
+    a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(content);
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
 // 导出为 Markdown
 export function exportToMarkdown(chapter) {
     const md = `# ${chapter.title}\n\n${chapter.content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ')}`;
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${chapter.title || '未命名'}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadTextFile(md, `${chapter.title || '未命名'}.md`);
 }
 
 // 导出所有章节
@@ -129,13 +155,7 @@ export function exportAllToMarkdown(chapters) {
         return `# ${ch.title}\n\n${text}`;
     }).join('\n\n---\n\n');
 
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '全部章节.md';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadTextFile(md, '全部章节.md');
 }
 
 // ==================== 章节摘要缓存 ====================
