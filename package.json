@@ -1,6 +1,6 @@
 {
   "name": "author-app",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -98,9 +98,11 @@
       ]
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
       "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
