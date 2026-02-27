@@ -29,6 +29,12 @@
     "deleteWorkPrompt": "Are you sure you want to delete the project '{name}' and all its settings? This cannot be undone.",
     "deleteWorkAlert": "At least one project must remain.",
     "deleteNodePrompt": "Are you sure you want to delete '{name}'? If it's a folder, all its contents will be deleted.",
+    "deleteConfirmTitle": "Confirm Delete",
+    "dontRemindToday": "Don't remind me today",
+    "dontRemindForever": "Don't remind me again",
+    "clearAll": "Clear All",
+    "clearAllTitle": "Clear all setting entries in the current work",
+    "clearAllPrompt": "Are you sure you want to clear all {count} setting entries in '{name}'? Folder structure will be preserved, but all content will be permanently deleted. This cannot be undone.",
     "statsTitle": "Statistics by Category",
     "exportSettings": "Export Settings",
     "importSettings": "Import Settings",
@@ -451,6 +457,12 @@
     "newVersion": "New version {version} available!",
     "viewSource": "View Source",
     "downloadClient": "Download Client",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "updateNow": "✨ Update Now",
+    "updating": "⛳ Updating...",
+    "updateSuccess": "✅ Update complete, please refresh or restart",
+    "updateFailed": "❌ Update failed",
+    "alreadyLatest": "✅ Already up to date",
+    "refreshNow": "Refresh Now"
   }
 }

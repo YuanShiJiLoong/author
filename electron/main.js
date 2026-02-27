@@ -1,9 +1,11 @@
-const { app, BrowserWindow, shell, dialog } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
 const path = require('path');
-const { fork, execSync } = require('child_process');
+const { fork, execSync, spawn } = require('child_process');
 const http = require('http');
+const https = require('https');
 const net = require('net');
 const fs = require('fs');
+const os = require('os');
 
 // 日志文件 - 写到用户桌面方便查看
 const logFile = path.join(app.getPath('desktop'), 'author-debug.log');
@@ -305,6 +307,105 @@ app.whenReady().then(async () => {
     }
 
     createWindow();
+});
+
+// ==================== 自动下载更新 ====================
+
+function httpsGet(url) {
+    return new Promise((resolve, reject) => {
+        https.get(url, { headers: { 'User-Agent': 'Author-App' } }, (res) => {
+            // 跟随重定向
+            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                httpsGet(res.headers.location).then(resolve).catch(reject);
+                return;
+            }
+            resolve(res);
+        }).on('error', reject);
+    });
+}
+
+ipcMain.handle('download-and-install-update', async (event) => {
+    try {
+        log('=== Auto-update started ===');
+
+        // 1. 获取最新 release 信息
+        const releaseRes = await new Promise((resolve, reject) => {
+            https.get('https://api.github.com/repos/YuanShiJiLoong/author/releases/latest', {
+                headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'Author-App' },
+            }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => resolve(JSON.parse(data)));
+            }).on('error', reject);
+        });
+
+        // 2. 找到 .exe 安装包
+        const exeAsset = releaseRes.assets?.find(a => a.name.endsWith('.exe'));
+        if (!exeAsset) {
+            log('No .exe asset found in release');
+            return { success: false, error: '未找到安装包' };
+        }
+
+        const downloadUrl = exeAsset.browser_download_url;
+        const fileName = exeAsset.name;
+        const totalSize = exeAsset.size;
+        const savePath = path.join(os.tmpdir(), fileName);
+
+        log(`Downloading: ${fileName} (${(totalSize / 1024 / 1024).toFixed(1)} MB)`);
+        log(`URL: ${downloadUrl}`);
+        log(`Save to: ${savePath}`);
+
+        // 3. 下载文件（跟随重定向）
+        const res = await httpsGet(downloadUrl);
+
+        if (res.statusCode !== 200) {
+            log(`Download failed, status: ${res.statusCode}`);
+            return { success: false, error: `下载失败 (HTTP ${res.statusCode})` };
+        }
+
+        const file = fs.createWriteStream(savePath);
+        let downloaded = 0;
+        let lastProgress = 0;
+
+        await new Promise((resolve, reject) => {
+            res.on('data', (chunk) => {
+                downloaded += chunk.length;
+                const progress = Math.floor(downloaded / totalSize * 100);
+                if (progress > lastProgress) {
+                    lastProgress = progress;
+                    // 发送进度到渲染进程
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('update-download-progress', { progress, downloaded, total: totalSize });
+                    }
+                }
+            });
+            res.pipe(file);
+            file.on('finish', () => { file.close(); resolve(); });
+            file.on('error', reject);
+            res.on('error', reject);
+        });
+
+        log(`Download complete: ${savePath}`);
+
+        // 4. 启动安装程序（静默模式）并退出当前应用
+        log('Launching installer...');
+        const installer = spawn(savePath, ['/S'], {
+            detached: true,
+            stdio: 'ignore',
+        });
+        installer.unref();
+
+        // 稍等一下确保安装程序启动
+        await new Promise(r => setTimeout(r, 1000));
+
+        log('Quitting app for update...');
+        app.quit();
+
+        return { success: true };
+    } catch (err) {
+        log(`Auto-update error: ${err.message}`);
+        return { success: false, error: err.message };
+    }
 });
 
 app.on('second-instance', () => {

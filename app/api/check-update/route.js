@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 /**
@@ -72,12 +72,15 @@ export async function GET() {
             );
         }
 
+        // 检测是否为源码部署（存在 .git 目录）
+        const isSourceDeploy = existsSync(join(process.cwd(), '.git'));
+
         // 获取最新版本
         const latestTag = await fetchLatestVersion();
 
         if (!latestTag) {
             return NextResponse.json(
-                { current: currentVersion, latest: null, hasUpdate: false },
+                { current: currentVersion, latest: null, hasUpdate: false, isSourceDeploy },
                 { headers: { 'Cache-Control': 'public, max-age=600' } } // 失败时缓存 10 分钟
             );
         }
@@ -86,7 +89,7 @@ export async function GET() {
         const hasUpdate = compareSemver(latestVersion, currentVersion) > 0;
 
         return NextResponse.json(
-            { current: currentVersion, latest: latestVersion, hasUpdate },
+            { current: currentVersion, latest: latestVersion, hasUpdate, isSourceDeploy },
             { headers: { 'Cache-Control': 'public, max-age=3600' } } // 成功缓存 1 小时
         );
     } catch (err) {

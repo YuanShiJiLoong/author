@@ -1,7 +1,12 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
-// 最小预加载脚本 — 安全隔离
-// 如果将来需要从渲染进程调用 Node.js API，可以通过 contextBridge 暴露
+// 预加载脚本 — 安全隔离，通过 contextBridge 暴露 API 给渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
     isElectron: true,
+    // 自动下载并安装更新
+    downloadAndInstallUpdate: () => ipcRenderer.invoke('download-and-install-update'),
+    // 监听下载进度
+    onUpdateProgress: (callback) => {
+        ipcRenderer.on('update-download-progress', (event, data) => callback(data));
+    },
 });

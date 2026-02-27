@@ -73,6 +73,19 @@ export default function SettingsPanel() {
     const [expandedCategory, setExpandedCategory] = useState(null);
     const [showExportFormat, setShowExportFormat] = useState(false);
 
+    // 删除确认弹窗状态
+    const [deleteConfirm, setDeleteConfirm] = useState(null); // { message, onConfirm }
+
+    // 检查是否应跳过删除确认
+    const shouldSkipDeleteConfirm = () => {
+        try {
+            if (localStorage.getItem('author-delete-never-remind') === 'true') return true;
+            const skipDate = localStorage.getItem('author-delete-skip-today');
+            if (skipDate && skipDate === new Date().toISOString().slice(0, 10)) return true;
+        } catch { /* ignore */ }
+        return false;
+    };
+
     // 获取当前作品的节点
     useEffect(() => {
         if (open) {
@@ -160,7 +173,20 @@ export default function SettingsPanel() {
         const work = nodes.find(n => n.id === workId);
         if (!work) return;
         if (works.length <= 1) { alert(t('settings.deleteWorkAlert')); return; }
-        if (!confirm(t('settings.deleteWorkPrompt').replace('{name}', work.name))) return;
+        if (shouldSkipDeleteConfirm()) {
+            await doDeleteWork(workId);
+        } else {
+            return new Promise((resolve) => {
+                setDeleteConfirm({
+                    message: t('settings.deleteWorkPrompt').replace('{name}', work.name),
+                    onConfirm: async () => { setDeleteConfirm(null); await doDeleteWork(workId); resolve(); },
+                    onCancel: () => { setDeleteConfirm(null); resolve(); },
+                });
+            });
+        }
+    };
+
+    const doDeleteWork = async (workId) => {
         // 递归删除作品及其所有后代
         const toDelete = new Set();
         const collect = (pid) => { toDelete.add(pid); nodes.filter(n => n.parentId === pid).forEach(n => collect(n.id)); };
@@ -175,6 +201,33 @@ export default function SettingsPanel() {
             setActiveWorkId(nextWork.id);
         }
         setSelectedNodeId(null);
+    };
+
+    // 一键清空当前作品的所有条目（保留文件夹结构）
+    const handleClearAllItems = async () => {
+        if (!activeWorkId) return;
+        const workNode = nodes.find(n => n.id === activeWorkId);
+        const workName = workNode?.name || '';
+        // 统计当前作品下的 item 数量
+        const workDescendants = new Set();
+        const collectWork = (pid) => { nodes.filter(n => n.parentId === pid).forEach(n => { workDescendants.add(n.id); collectWork(n.id); }); };
+        workDescendants.add(activeWorkId);
+        collectWork(activeWorkId);
+        const itemCount = nodes.filter(n => workDescendants.has(n.id) && n.type === 'item').length;
+        if (itemCount === 0) return;
+
+        const msg = t('settings.clearAllPrompt').replace('{name}', workName).replace('{count}', itemCount);
+        setDeleteConfirm({
+            message: msg,
+            onConfirm: async () => {
+                setDeleteConfirm(null);
+                const updatedNodes = nodes.filter(n => !(workDescendants.has(n.id) && n.type === 'item'));
+                await saveSettingsNodes(updatedNodes);
+                setNodes(updatedNodes);
+                setSelectedNodeId(null);
+            },
+            onCancel: () => setDeleteConfirm(null),
+        });
     };
 
     // 收集当前作品的所有节点
@@ -449,7 +502,20 @@ export default function SettingsPanel() {
     const handleDeleteNode = async (id) => {
         const node = nodes.find(n => n.id === id);
         if (!node) return;
-        if (!confirm(t('settings.deleteNodePrompt').replace('{name}', node.name))) return;
+        if (shouldSkipDeleteConfirm()) {
+            await doDeleteNode(id);
+        } else {
+            return new Promise((resolve) => {
+                setDeleteConfirm({
+                    message: t('settings.deleteNodePrompt').replace('{name}', node.name),
+                    onConfirm: async () => { setDeleteConfirm(null); await doDeleteNode(id); resolve(); },
+                    onCancel: () => { setDeleteConfirm(null); resolve(); },
+                });
+            });
+        }
+    };
+
+    const doDeleteNode = async (id) => {
         await deleteSettingsNode(id);
         setNodes(await getSettingsNodes());
         if (selectedNodeId === id) setSelectedNodeId(null);
@@ -611,6 +677,11 @@ export default function SettingsPanel() {
                                         📥 {t('settings.importSettings')}
                                         <input type="file" accept=".json,.txt,.md,.markdown,.docx,.pdf" style={{ display: 'none' }} onChange={handleImportSettings} />
                                     </label>
+                                    <button
+                                        style={{ padding: '5px 10px', border: '1px solid rgba(229,62,62,0.3)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer', fontSize: 12, color: '#e53e3e', transition: 'all 0.15s' }}
+                                        onClick={handleClearAllItems}
+                                        title={t('settings.clearAllTitle')}
+                                    >🗑️ {t('settings.clearAll')}</button>
                                 </>)}
                             </div>
                         </div>
@@ -695,6 +766,16 @@ export default function SettingsPanel() {
                         onClose={() => setConflictData(null)}
                     />,
                     document.body // Render into document.body or a specific portal root
+                )
+            }
+            {
+                deleteConfirm && createPortal(
+                    <DeleteConfirmModal
+                        message={deleteConfirm.message}
+                        onConfirm={deleteConfirm.onConfirm}
+                        onCancel={deleteConfirm.onCancel}
+                    />,
+                    document.body
                 )
             }
         </div>
@@ -1129,6 +1210,105 @@ function BookInfoForm({ data, onChange }) {
             <FieldInput label={t('bookInfo.tone')} value={data.tone} onChange={v => update('tone', v)} placeholder={t('bookInfo.tonePlaceholder')} />
             <FieldInput label={t('bookInfo.pov')} value={data.pov} onChange={v => update('pov', v)} placeholder={t('bookInfo.povPlaceholder')} />
             <FieldInput label={t('bookInfo.targetAudience')} value={data.targetAudience} onChange={v => update('targetAudience', v)} placeholder={t('bookInfo.targetAudiencePlaceholder')} />
+        </div>
+    );
+}
+
+function DeleteConfirmModal({ message, onConfirm, onCancel }) {
+    const [skipToday, setSkipToday] = useState(false);
+    const [neverRemind, setNeverRemind] = useState(false);
+    const { t } = useI18n();
+
+    const handleConfirm = () => {
+        try {
+            if (neverRemind) {
+                localStorage.setItem('author-delete-never-remind', 'true');
+            } else if (skipToday) {
+                localStorage.setItem('author-delete-skip-today', new Date().toISOString().slice(0, 10));
+            }
+        } catch { /* ignore */ }
+        onConfirm();
+    };
+
+    return (
+        <div
+            style={{
+                position: 'fixed', inset: 0, zIndex: 99999,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
+            }}
+            onClick={onCancel}
+        >
+            <div
+                style={{
+                    background: 'var(--bg-primary)', border: '1px solid var(--border-light)',
+                    borderRadius: 'var(--radius-lg, 12px)', padding: '24px 28px',
+                    minWidth: 340, maxWidth: 440,
+                    boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+                    animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
+                onClick={e => e.stopPropagation()}
+            >
+                {/* 标题 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <span style={{ fontSize: 20 }}>⚠️</span>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {t('settings.deleteConfirmTitle')}
+                    </span>
+                </div>
+
+                {/* 消息 */}
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 20px' }}>
+                    {message}
+                </p>
+
+                {/* 复选框 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>
+                        <input
+                            type="checkbox" checked={skipToday} disabled={neverRemind}
+                            onChange={e => setSkipToday(e.target.checked)}
+                            style={{ accentColor: 'var(--accent)', width: 15, height: 15, cursor: 'pointer' }}
+                        />
+                        {t('settings.dontRemindToday')}
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>
+                        <input
+                            type="checkbox" checked={neverRemind}
+                            onChange={e => { setNeverRemind(e.target.checked); if (e.target.checked) setSkipToday(false); }}
+                            style={{ accentColor: 'var(--accent)', width: 15, height: 15, cursor: 'pointer' }}
+                        />
+                        {t('settings.dontRemindForever')}
+                    </label>
+                </div>
+
+                {/* 按钮 */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                    <button
+                        onClick={onCancel}
+                        style={{
+                            padding: '8px 20px', border: '1px solid var(--border-light)',
+                            borderRadius: 'var(--radius-md, 8px)', background: 'var(--bg-secondary)',
+                            cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500,
+                            transition: 'all 0.15s',
+                        }}
+                    >
+                        {t('common.cancel')}
+                    </button>
+                    <button
+                        onClick={handleConfirm}
+                        style={{
+                            padding: '8px 20px', border: 'none',
+                            borderRadius: 'var(--radius-md, 8px)', background: '#e53e3e',
+                            cursor: 'pointer', fontSize: 13, color: '#fff', fontWeight: 600,
+                            transition: 'all 0.15s',
+                            boxShadow: '0 2px 8px rgba(229,62,62,0.3)',
+                        }}
+                    >
+                        {t('common.delete')}
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
