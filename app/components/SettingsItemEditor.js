@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useI18n } from '../lib/useI18n';
 
 // ==================== 分类配色 ====================
@@ -18,6 +18,80 @@ const CATEGORY_COLORS = {
 
 function TextField({ label, value, onChange, placeholder, multiline = false, rows = 3, aiBtn = false }) {
     const { t } = useI18n();
+    const [localValue, setLocalValue] = useState(value || '');
+    const isComposingRef = useRef(false);
+    const timerRef = useRef(null);
+    const onChangeRef = useRef(onChange);
+    const localValueRef = useRef(localValue);
+    onChangeRef.current = onChange;
+
+    // 同步外部 prop 变化（切换节点时）
+    useEffect(() => {
+        setLocalValue(value || '');
+        localValueRef.current = value || '';
+    }, [value]);
+
+    // 组件卸载时 flush 未保存的更改
+    useEffect(() => {
+        return () => {
+            if (timerRef.current) {
+                clearTimeout(timerRef.current);
+                timerRef.current = null;
+                onChangeRef.current(localValueRef.current);
+            }
+        };
+    }, []);
+
+    const scheduleFlush = useCallback((newVal) => {
+        clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => {
+            timerRef.current = null;
+            onChangeRef.current(newVal);
+        }, 500);
+    }, []);
+
+    const handleChange = useCallback((e) => {
+        const newVal = e.target.value;
+        setLocalValue(newVal);
+        localValueRef.current = newVal;
+        if (!isComposingRef.current) {
+            scheduleFlush(newVal);
+        }
+    }, [scheduleFlush]);
+
+    const handleCompositionStart = useCallback(() => {
+        isComposingRef.current = true;
+    }, []);
+
+    const handleCompositionEnd = useCallback((e) => {
+        isComposingRef.current = false;
+        // compositionend 之后用最新值触发防抖
+        const newVal = e.target.value;
+        setLocalValue(newVal);
+        localValueRef.current = newVal;
+        scheduleFlush(newVal);
+    }, [scheduleFlush]);
+
+    const handleBlur = useCallback((e) => {
+        e.target.style.borderColor = 'var(--border-light)';
+        // 失焦时立即 flush，防止切换节点丢数据
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
+            onChangeRef.current(localValueRef.current);
+        }
+    }, []);
+
+    const inputProps = {
+        value: localValue,
+        onChange: handleChange,
+        onCompositionStart: handleCompositionStart,
+        onCompositionEnd: handleCompositionEnd,
+        onFocus: e => e.target.style.borderColor = 'var(--accent)',
+        onBlur: handleBlur,
+        placeholder,
+    };
+
     return (
         <div style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -28,9 +102,7 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
             </div>
             {multiline ? (
                 <textarea
-                    value={value || ''}
-                    onChange={e => onChange(e.target.value)}
-                    placeholder={placeholder}
+                    {...inputProps}
                     rows={rows}
                     style={{
                         width: '100%', padding: '8px 12px', border: '1px solid var(--border-light)',
@@ -38,22 +110,16 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
                         fontSize: 13, fontFamily: 'var(--font-ui)', resize: 'vertical', outline: 'none',
                         lineHeight: 1.6, transition: 'border-color 0.15s',
                     }}
-                    onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                    onBlur={e => e.target.style.borderColor = 'var(--border-light)'}
                 />
             ) : (
                 <input
                     type="text"
-                    value={value || ''}
-                    onChange={e => onChange(e.target.value)}
-                    placeholder={placeholder}
+                    {...inputProps}
                     style={{
                         width: '100%', padding: '8px 12px', border: '1px solid var(--border-light)',
                         borderRadius: 'var(--radius-sm)', background: 'var(--bg-primary)', color: 'var(--text-primary)',
                         fontSize: 13, fontFamily: 'var(--font-ui)', outline: 'none', transition: 'border-color 0.15s',
                     }}
-                    onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                    onBlur={e => e.target.style.borderColor = 'var(--border-light)'}
                 />
             )}
         </div>

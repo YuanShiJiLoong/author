@@ -468,12 +468,12 @@ export function compileUserPrompt(mode, text, instruction) {
         case 'continue':
             if (!text || !text.trim()) {
                 return instruction
-                    ? `请根据以下要求开始创作新内容（约300-500字）：\n要求：${instruction}`
-                    : '请根据设定集信息，开始撰写新的章节内容（约300-500字）。';
+                    ? `请根据以下要求开始创作新内容：\n要求：${instruction}`
+                    : '请根据设定集信息，开始撰写新的章节内容。';
             }
             return instruction
-                ? `请续写以下内容（约300-500字），保持风格和情节的连贯性：\n要求：${instruction}\n\n「${text}」`
-                : `请续写以下内容（约300-500字），保持风格和情节的连贯性：\n\n「${text}」`;
+                ? `请续写以下内容，保持风格和情节的连贯性：\n要求：${instruction}\n\n「${text}」`
+                : `请续写以下内容，保持风格和情节的连贯性：\n\n「${text}」`;
         case 'rewrite':
             return instruction
                 ? `按照以下要求改写文本：\n要求：${instruction}\n\n原文：\n「${text}」`
@@ -655,8 +655,7 @@ function getModeInstruction(mode) {
 - 续写内容必须与前文情节逻辑严格连贯，不能出现矛盾
 - 如果涉及已有角色，必须符合其性格设定和说话风格
 - 场景描写要符合世界观设定
-- 情节推进要符合大纲规划的方向
-- 约300-500字`;
+- 情节推进要符合大纲规划的方向`;
 
         case 'rewrite':
             return `润色和改写指定文本，提升文学质量。

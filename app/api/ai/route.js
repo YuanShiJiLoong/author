@@ -34,7 +34,7 @@ export async function POST(request) {
                     { role: 'user', content: userPrompt }
                 ],
                 temperature: 0.8,
-                max_tokens: maxTokens || 4096,
+                ...(maxTokens ? { max_tokens: maxTokens } : {}),
                 stream: true,
             }),
         });

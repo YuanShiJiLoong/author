@@ -14,7 +14,8 @@ import {
   migrateGlobalChapters,
   saveChapters,
 } from './lib/storage';
-import { buildContext, compileSystemPrompt, compileUserPrompt, OUTPUT_TOKEN_BUDGET, getContextItems, estimateTokens } from './lib/context-engine';
+import { buildContext, compileSystemPrompt, compileUserPrompt, getContextItems, estimateTokens } from './lib/context-engine';
+import { addTokenRecord } from './lib/token-stats';
 import { getProjectSettings, WRITING_MODES, getWritingMode, addSettingsNode, updateSettingsNode, deleteSettingsNode, getSettingsNodes, getActiveWorkId } from './lib/settings';
 import {
   loadSessionStore, createSession, getActiveSession,
@@ -196,6 +197,9 @@ export default function Home() {
 
   // Inline AI 回调：编辑器调用此函数发起 AI 请求
   const handleInlineAiRequest = useCallback(async ({ mode, text, instruction, signal, onChunk }) => {
+    const startTime = Date.now();
+    let usageData = null;
+    let fullText = '';
     try {
       // 使用上下文引擎收集项目信息
       const context = await buildContext(activeChapterId, text, contextSelection.size > 0 ? contextSelection : null);
@@ -210,7 +214,7 @@ export default function Home() {
       const res = await fetch(apiEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ systemPrompt, userPrompt, apiConfig, maxTokens: OUTPUT_TOKEN_BUDGET }),
+        body: JSON.stringify({ systemPrompt, userPrompt, apiConfig }),
         signal,
       });
 
@@ -242,12 +246,40 @@ export default function Home() {
           if (trimmed.startsWith('data: ')) {
             try {
               const json = JSON.parse(trimmed.slice(6));
-              if (json.text) onChunk(json.text);
+              if (json.text) { fullText += json.text; onChunk(json.text); }
+              if (json.usage) { usageData = json.usage; }
             } catch {
               // 解析失败跳过
             }
           }
         }
+      }
+
+      // 记录 token 统计
+      const durationMs = Date.now() - startTime;
+      if (usageData) {
+        addTokenRecord({
+          promptTokens: usageData.promptTokens || 0,
+          completionTokens: usageData.completionTokens || 0,
+          totalTokens: usageData.totalTokens || 0,
+          durationMs,
+          source: 'inline',
+          provider: apiConfig?.provider || 'unknown',
+          model: apiConfig?.model || 'unknown',
+        });
+      } else {
+        // API 未返回 usage，客户端估算
+        const estPrompt = estimateTokens(systemPrompt + userPrompt);
+        const estCompletion = estimateTokens(fullText);
+        addTokenRecord({
+          promptTokens: estPrompt,
+          completionTokens: estCompletion,
+          totalTokens: estPrompt + estCompletion,
+          durationMs,
+          source: 'inline',
+          provider: apiConfig?.provider || 'unknown',
+          model: apiConfig?.model || 'unknown',
+        });
       }
     } catch (err) {
       if (err.name === 'AbortError') {

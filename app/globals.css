@@ -4844,3 +4844,376 @@ h5.chat-md-heading {
     opacity: 1;
   }
 }
+
+/* ==================== Token 统计面板 ==================== */
+
+.token-stats-panel {
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+/* Let the first card span full width for emphasis */
+.stats-card:first-child {
+  grid-column: 1 / -1;
+}
+
+.stats-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 16px 12px;
+  text-align: center;
+  transition: all var(--transition-fast);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle gradient top border for modern feel */
+.stats-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  opacity: 0.7;
+}
+
+.stats-card:hover {
+  border-color: var(--accent-glow);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+  transform: translateY(-2px);
+}
+
+.stats-card-value {
+  font-size: 22px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--text-primary), var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1.2;
+  font-family: var(--font-mono, monospace);
+  margin-bottom: 6px;
+}
+
+.stats-card-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stats-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+}
+
+.stats-detail-label {
+  color: var(--text-secondary);
+}
+
+.stats-detail-value {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+}
+
+.stats-section {
+  padding: 4px 0;
+  margin-top: 8px;
+}
+
+.stats-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  padding: 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stats-section-title::before {
+  content: '';
+  display: block;
+  width: 3px;
+  height: 14px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.stats-section-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 2px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.stats-rate-desc {
+  font-family: var(--font-ui) !important;
+  color: var(--text-muted) !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+}
+
+/* 速度柱状图 */
+.speed-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 90px;
+  padding: 16px 8px 4px 8px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+}
+
+.speed-bar-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+  cursor: pointer;
+}
+
+.speed-bar {
+  width: 100%;
+  min-height: 4px;
+  background: linear-gradient(180deg, var(--accent-light, var(--accent)), var(--accent-hover));
+  border-radius: 4px 4px 0 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 -2px 8px var(--accent-glow);
+}
+
+.speed-bar-wrapper:hover .speed-bar {
+  opacity: 1;
+  filter: brightness(1.2);
+}
+
+.speed-bar-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+}
+
+/* 预估/速率表格 */
+.projection-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.01);
+}
+
+.projection-table th {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-align: left;
+  padding: 10px 12px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-light);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.projection-table td {
+  padding: 10px 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-light);
+  font-family: var(--font-mono, monospace);
+  background: var(--bg-card);
+}
+
+.projection-table tr:last-child td {
+  border-bottom: none;
+}
+
+.projection-table tr:hover td {
+  background: var(--bg-hover);
+}
+
+.projection-table td:first-child {
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.stats-actions {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 8px 0;
+  margin-top: 8px;
+  border-top: 1px dashed var(--border-light);
+}
+
+.stats-actions button {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* 渠道/模型信息图表卡片 */
+.model-info-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg, 12px);
+  padding: 20px 18px;
+  margin-bottom: 16px;
+  transition: all var(--transition-fast);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03);
+  position: relative;
+  overflow: hidden;
+}
+
+.model-info-card:hover {
+  border-color: var(--accent-glow);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+}
+
+.model-info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.model-info-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.model-info-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+  padding: 5px 12px;
+  border-radius: 20px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.provider-logo-svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5px;
+  opacity: 0.9;
+}
+
+.model-info-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono, monospace);
+}
+
+.model-info-percent {
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  line-height: 1;
+}
+
+.model-info-percent span {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.model-info-bar-track {
+  width: 100%;
+  height: 14px;
+  background: var(--bg-secondary);
+  border-radius: 7px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.model-info-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  min-width: 4px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.model-info-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border-light);
+}
+
+.info-stat-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.info-stat-value {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+  line-height: 1.2;
+}
+
+.info-stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
