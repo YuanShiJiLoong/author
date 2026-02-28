@@ -502,6 +502,14 @@
         "updateSuccess": "✅ 更新完成，请刷新页面或重启服务",
         "updateFailed": "❌ 更新失败",
         "alreadyLatest": "✅ 已是最新版本",
-        "refreshNow": "立即刷新"
+        "refreshNow": "立即刷新",
+        "checkForUpdates": "🔍 检查更新",
+        "checking": "检查中…",
+        "currentVersion": "当前版本",
+        "noUpdateAvailable": "✅ 当前已是最新版本",
+        "updateAvailable": "🎉 发现新版本 {version}！",
+        "checkFailed": "❌ 检查更新失败，请稍后再试",
+        "goUpdate": "前往更新",
+        "close": "关闭"
     }
 }

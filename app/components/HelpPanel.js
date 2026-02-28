@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useI18n } from '../lib/useI18n';
 
 const HELP_SECTIONS = [
@@ -472,6 +472,94 @@ Author 是一个开源项目，采用 **AGPL-3.0** 协议。
 export default function HelpPanel({ open, onClose }) {
     const [activeSection, setActiveSection] = useState('quickstart');
     const { t } = useI18n();
+    const [updateChecking, setUpdateChecking] = useState(false);
+    const [updateResult, setUpdateResult] = useState(null); // { status: 'latest'|'available'|'error', current, latest, isSourceDeploy }
+    const [updating, setUpdating] = useState(false);
+    const [downloadProgress, setDownloadProgress] = useState(null); // { progress, downloaded, total }
+    const [updateDone, setUpdateDone] = useState(null); // { success, message, logs }
+
+    const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+
+    // 监听 Electron 下载进度
+    useEffect(() => {
+        if (isElectron && window.electronAPI?.onUpdateProgress) {
+            window.electronAPI.onUpdateProgress((data) => {
+                setDownloadProgress(data);
+            });
+        }
+    }, [isElectron]);
+
+    const checkForUpdates = async () => {
+        setUpdateChecking(true);
+        setUpdateResult(null);
+        setUpdateDone(null);
+        try {
+            const res = await fetch('/api/check-update', { cache: 'no-store' });
+            if (!res.ok) throw new Error('API error');
+            const data = await res.json();
+            if (data.hasUpdate && data.latest) {
+                setUpdateResult({ status: 'available', current: data.current, latest: data.latest, isSourceDeploy: data.isSourceDeploy });
+            } else {
+                setUpdateResult({ status: 'latest', current: data.current, latest: data.latest || data.current });
+            }
+        } catch {
+            setUpdateResult({ status: 'error' });
+        } finally {
+            setUpdateChecking(false);
+        }
+    };
+
+    // Electron 客户端：自动下载安装
+    const handleElectronUpdate = async () => {
+        setUpdating(true);
+        setUpdateDone(null);
+        setDownloadProgress({ progress: 0, downloaded: 0, total: 0 });
+        try {
+            const result = await window.electronAPI.downloadAndInstallUpdate();
+            if (!result.success) {
+                setUpdateDone({ success: false, message: t('update.updateFailed') + ': ' + (result.error || '') });
+                setDownloadProgress(null);
+            }
+        } catch (err) {
+            setUpdateDone({ success: false, message: t('update.updateFailed') + ': ' + err.message });
+            setDownloadProgress(null);
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    // 源码部署：git pull + build
+    const handleSourceUpdate = async () => {
+        setUpdating(true);
+        setUpdateDone(null);
+        try {
+            const res = await fetch('/api/update-source', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                if (data.alreadyUpToDate) {
+                    setUpdateDone({ success: true, message: t('update.alreadyLatest'), logs: data.logs });
+                } else {
+                    setUpdateDone({ success: true, message: t('update.updateSuccess'), logs: data.logs });
+                }
+            } else {
+                setUpdateDone({ success: false, message: t('update.updateFailed') + ': ' + (data.error || ''), logs: data.logs });
+            }
+        } catch (err) {
+            setUpdateDone({ success: false, message: t('update.updateFailed') + ': ' + err.message, logs: [] });
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleUpdate = () => {
+        if (isElectron) {
+            handleElectronUpdate();
+        } else if (updateResult?.isSourceDeploy) {
+            handleSourceUpdate();
+        }
+    };
+
+    const canAutoUpdate = isElectron || updateResult?.isSourceDeploy;
 
     if (!open) return null;
 
@@ -518,9 +606,221 @@ export default function HelpPanel({ open, onClose }) {
                             className="help-markdown"
                             dangerouslySetInnerHTML={{ __html: renderSimpleMarkdown(currentSection?.content || '') }}
                         />
+
+                        {/* 关于页面 - 检查更新按钮 */}
+                        {activeSection === 'about' && (
+                            <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border-light)' }}>
+                                <button
+                                    onClick={checkForUpdates}
+                                    disabled={updateChecking}
+                                    style={{
+                                        padding: '10px 24px',
+                                        fontSize: 14,
+                                        fontWeight: 600,
+                                        border: '1px solid var(--border-light)',
+                                        borderRadius: 8,
+                                        background: 'var(--bg-card)',
+                                        color: 'var(--text-primary)',
+                                        cursor: updateChecking ? 'wait' : 'pointer',
+                                        transition: 'all 0.2s ease',
+                                        opacity: updateChecking ? 0.7 : 1,
+                                    }}
+                                >
+                                    {updateChecking ? t('update.checking') : t('update.checkForUpdates')}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
+
+            {/* 检查更新结果弹窗 */}
+            {updateResult && (
+                <div
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 10001,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
+                    }}
+                    onClick={(e) => { e.stopPropagation(); if (!updating) { setUpdateResult(null); setUpdateDone(null); } }}
+                >
+                    <div
+                        style={{
+                            background: 'var(--bg-card)',
+                            borderRadius: 16,
+                            padding: '32px 36px',
+                            minWidth: 340,
+                            maxWidth: 480,
+                            boxShadow: '0 24px 80px rgba(0,0,0,0.3)',
+                            textAlign: 'center',
+                            color: 'var(--text-primary)',
+                            animation: 'fadeInScale 0.2s ease',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* 状态图标 */}
+                        <div style={{ fontSize: 48, marginBottom: 16 }}>
+                            {updateDone
+                                ? (updateDone.success ? '✅' : '❌')
+                                : updating ? '⏳'
+                                    : updateResult.status === 'available' ? '🎉' : updateResult.status === 'latest' ? '✅' : '⚠️'
+                            }
+                        </div>
+
+                        {/* 状态文字 */}
+                        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>
+                            {updateDone
+                                ? updateDone.message
+                                : updating
+                                    ? t('update.updating')
+                                    : updateResult.status === 'available'
+                                        ? t('update.updateAvailable').replace('{version}', `v${updateResult.latest}`)
+                                        : updateResult.status === 'latest'
+                                            ? t('update.noUpdateAvailable')
+                                            : t('update.checkFailed')
+                            }
+                        </div>
+
+                        {/* 版本信息 */}
+                        {updateResult.current && !updateDone && !updating && (
+                            <div style={{ fontSize: 13, opacity: 0.65, marginBottom: 20 }}>
+                                {t('update.currentVersion')}: v{updateResult.current}
+                                {updateResult.status === 'available' && (
+                                    <span> → v{updateResult.latest}</span>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Electron 下载进度条 */}
+                        {updating && downloadProgress && downloadProgress.total > 0 && (
+                            <div style={{ margin: '16px 0' }}>
+                                <div style={{
+                                    width: '100%', height: 8, background: 'var(--bg-secondary)',
+                                    borderRadius: 4, overflow: 'hidden',
+                                }}>
+                                    <div style={{
+                                        width: `${downloadProgress.progress}%`, height: '100%',
+                                        background: 'var(--accent)', borderRadius: 4,
+                                        transition: 'width 0.3s ease',
+                                    }} />
+                                </div>
+                                <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
+                                    ⬇️ {downloadProgress.progress}%
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 源码部署更新日志 */}
+                        {updateDone?.logs && updateDone.logs.length > 0 && (
+                            <div style={{
+                                background: 'var(--bg-secondary)', padding: '10px 14px',
+                                borderRadius: 8, fontSize: 11,
+                                fontFamily: 'var(--font-mono, monospace)',
+                                color: 'var(--text-secondary)',
+                                maxHeight: 120, overflowY: 'auto',
+                                lineHeight: 1.6, textAlign: 'left',
+                                marginBottom: 16,
+                            }}>
+                                {updateDone.logs.map((l, i) => (
+                                    <div key={i}>{l.msg}</div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* 操作按钮 */}
+                        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                            {/* 有更新且未完成、未正在更新 */}
+                            {updateResult.status === 'available' && !updateDone && !updating && (
+                                <>
+                                    {canAutoUpdate && (
+                                        <button
+                                            onClick={handleUpdate}
+                                            style={{
+                                                padding: '8px 22px', fontSize: 14, fontWeight: 600,
+                                                borderRadius: 8,
+                                                background: 'var(--accent)',
+                                                color: '#fff', border: 'none',
+                                                cursor: 'pointer',
+                                                transition: 'opacity 0.15s',
+                                            }}
+                                        >
+                                            {t('update.updateNow')}
+                                        </button>
+                                    )}
+                                    {!canAutoUpdate && (
+                                        <>
+                                            <a
+                                                href="https://github.com/YuanShiJiLoong/author/releases/latest"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style={{
+                                                    padding: '8px 22px', fontSize: 14, fontWeight: 600,
+                                                    borderRadius: 8, textDecoration: 'none',
+                                                    background: 'var(--accent)',
+                                                    color: '#fff', border: 'none', cursor: 'pointer',
+                                                    transition: 'opacity 0.15s',
+                                                }}
+                                            >
+                                                {t('update.downloadClient')}
+                                            </a>
+                                            <a
+                                                href="https://github.com/YuanShiJiLoong/author"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style={{
+                                                    padding: '8px 22px', fontSize: 14, fontWeight: 600,
+                                                    borderRadius: 8, textDecoration: 'none',
+                                                    border: '1px solid var(--border-light)',
+                                                    background: 'transparent',
+                                                    color: 'var(--text-primary)',
+                                                    cursor: 'pointer',
+                                                    transition: 'opacity 0.15s',
+                                                }}
+                                            >
+                                                {t('update.viewSource')}
+                                            </a>
+                                        </>
+                                    )}
+                                </>
+                            )}
+
+                            {/* 更新完成后：刷新按钮 */}
+                            {updateDone?.success && !updateDone.message.includes(t('update.alreadyLatest')) && (
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    style={{
+                                        padding: '8px 22px', fontSize: 14, fontWeight: 600,
+                                        borderRadius: 8,
+                                        background: 'var(--accent)',
+                                        color: '#fff', border: 'none', cursor: 'pointer',
+                                        transition: 'opacity 0.15s',
+                                    }}
+                                >
+                                    {t('update.refreshNow')}
+                                </button>
+                            )}
+
+                            {/* 关闭按钮（更新中时不显示） */}
+                            {!updating && (
+                                <button
+                                    onClick={() => { setUpdateResult(null); setUpdateDone(null); }}
+                                    style={{
+                                        padding: '8px 22px', fontSize: 14, fontWeight: 600,
+                                        borderRadius: 8,
+                                        border: '1px solid var(--border-light)',
+                                        background: 'transparent',
+                                        color: 'var(--text-primary)',
+                                        cursor: 'pointer',
+                                        transition: 'opacity 0.15s',
+                                    }}
+                                >
+                                    {t('update.close')}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

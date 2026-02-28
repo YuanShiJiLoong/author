@@ -25,10 +25,14 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
     const localValueRef = useRef(localValue);
     onChangeRef.current = onChange;
 
-    // 同步外部 prop 变化（切换节点时）
+    // 同步外部 prop 变化（切换节点时）—— 仅在外部值真正不同时才更新
+    // 避免 debounce flush 后父组件回传相同值导致光标跳转
+    // 并且在 IME 输入法组字期间不同步，防止打断组字
     useEffect(() => {
-        setLocalValue(value || '');
-        localValueRef.current = value || '';
+        if (!isComposingRef.current && (value || '') !== localValueRef.current) {
+            setLocalValue(value || '');
+            localValueRef.current = value || '';
+        }
     }, [value]);
 
     // 组件卸载时 flush 未保存的更改
@@ -42,11 +46,14 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
         };
     }, []);
 
-    const scheduleFlush = useCallback((newVal) => {
+    // 防抖刷新：始终使用 localValueRef.current（最新值），而非捕获时的旧值
+    // 如果正在 IME 组字中，跳过本次 flush，compositionEnd 会重新触发
+    const scheduleFlush = useCallback(() => {
         clearTimeout(timerRef.current);
         timerRef.current = setTimeout(() => {
+            if (isComposingRef.current) return; // IME 组字中不 flush
             timerRef.current = null;
-            onChangeRef.current(newVal);
+            onChangeRef.current(localValueRef.current);
         }, 500);
     }, []);
 
@@ -55,7 +62,7 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
         setLocalValue(newVal);
         localValueRef.current = newVal;
         if (!isComposingRef.current) {
-            scheduleFlush(newVal);
+            scheduleFlush();
         }
     }, [scheduleFlush]);
 
@@ -69,7 +76,7 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
         const newVal = e.target.value;
         setLocalValue(newVal);
         localValueRef.current = newVal;
-        scheduleFlush(newVal);
+        scheduleFlush();
     }, [scheduleFlush]);
 
     const handleBlur = useCallback((e) => {

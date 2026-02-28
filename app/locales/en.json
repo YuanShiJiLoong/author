@@ -502,6 +502,14 @@
     "updateSuccess": "✅ Update complete, please refresh or restart",
     "updateFailed": "❌ Update failed",
     "alreadyLatest": "✅ Already up to date",
-    "refreshNow": "Refresh Now"
+    "refreshNow": "Refresh Now",
+    "checkForUpdates": "🔍 Check for Updates",
+    "checking": "Checking…",
+    "currentVersion": "Current Version",
+    "noUpdateAvailable": "✅ You are on the latest version",
+    "updateAvailable": "🎉 New version {version} available!",
+    "checkFailed": "❌ Failed to check for updates, please try again later",
+    "goUpdate": "Go to Update",
+    "close": "Close"
   }
 }
