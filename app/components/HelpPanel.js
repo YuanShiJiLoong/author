@@ -859,6 +859,9 @@ function renderSimpleMarkdown(md) {
     // Blockquote
     html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
 
+    // Links [text](url)
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
     // List items  
     html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
 

@@ -21,7 +21,7 @@ export default function UpdateBanner() {
                 const data = await res.json();
 
                 if (data.hasUpdate && data.latest) {
-                    const dismissedVersion = localStorage.getItem('author-update-dismissed');
+                    const dismissedVersion = sessionStorage.getItem('author-update-dismissed');
                     if (dismissedVersion === data.latest) return;
                     setUpdateInfo(data);
                 }
@@ -46,7 +46,7 @@ export default function UpdateBanner() {
     const handleDismiss = () => {
         setDismissed(true);
         if (updateInfo?.latest) {
-            localStorage.setItem('author-update-dismissed', updateInfo.latest);
+            sessionStorage.setItem('author-update-dismissed', updateInfo.latest);
         }
     };
 
