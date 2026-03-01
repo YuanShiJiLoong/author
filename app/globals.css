@@ -220,31 +220,117 @@ body {
 
 .app-layout {
   display: flex;
+  flex-direction: column;
+  /* Google Docs 风格：纵向布局 */
   height: 100vh;
   overflow: hidden;
   position: relative;
 }
 
+/* ===== 顶栏（Google Docs 风格）===== */
+.top-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+  z-index: 40;
+}
+
+.top-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-toggle-btn {
+  font-size: 18px;
+  padding: 6px 8px;
+}
+
+.top-header-logo {
+  font-family: var(--font-writing);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 1px;
+}
+
+.top-header-logo span {
+  color: var(--accent);
+}
+
+/* ===== 内容区（编辑器 + AI 侧栏）===== */
+.content-row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 侧边栏：覆盖在 editor-container 上方，不覆盖工具栏 */
 .sidebar {
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  bottom: 0 !important;
-  width: 280px !important;
+  position: absolute;
+  top: var(--toolbar-h, 90px);
+  left: 0;
+  bottom: 0;
+  width: 280px;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
-  transition: transform var(--transition-normal);
-  z-index: 30 !important;
-  transform: translateX(0) !important;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+  z-index: 25;
+  overflow: hidden;
+  transform: translateX(0);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
 }
 
 .sidebar.collapsed {
-  transform: translateX(-100%) !important;
-  pointer-events: none !important;
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
 }
 
+/* 侧边栏顶部关闭行 */
+.sidebar-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+
+/* ☰ 展开按钮（工具栏下方左侧浮动） */
+.sidebar-open-btn {
+  position: absolute;
+  top: calc(var(--toolbar-h, 90px) + 4px);
+  left: 4px;
+  z-index: 20;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  transition: background 0.2s, color 0.2s;
+}
+
+.sidebar-open-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* 保留旧选择器以免其他地方使用 */
 .sidebar-header {
   padding: 20px 20px 16px;
   border-bottom: 1px solid var(--border-light);
@@ -338,6 +424,264 @@ body {
   display: none;
 }
 
+/* ==================== Google Docs 风格侧边栏 ==================== */
+
+/* 区域标题栏 */
+.gdocs-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 4px;
+  flex-shrink: 0;
+}
+
+.gdocs-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.gdocs-section-add {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 18px;
+  font-weight: 300;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.gdocs-section-add:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
+/* Tab 列表 */
+.gdocs-tab-list {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Tab 列表项 */
+.gdocs-tab-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.gdocs-tab-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.gdocs-tab-item.active {
+  background: #e8f0fe;
+  color: #1967d2;
+  font-weight: 500;
+}
+
+[data-theme="dark"] .gdocs-tab-item.active {
+  background: rgba(138, 180, 248, 0.12);
+  color: #8ab4f8;
+}
+
+.gdocs-tab-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.gdocs-tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gdocs-tab-badge {
+  font-size: 10px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--text-muted);
+  color: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.gdocs-tab-item.active .gdocs-tab-badge {
+  background: #1967d2;
+  color: #fff;
+}
+
+[data-theme="dark"] .gdocs-tab-item.active .gdocs-tab-badge {
+  background: #8ab4f8;
+  color: #202124;
+}
+
+/* 章节操作按钮组（直接显示在右侧） */
+.gdocs-tab-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.gdocs-tab-item:hover .gdocs-tab-actions {
+  opacity: 1;
+}
+
+.gdocs-tab-action-btn {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, transform 0.1s;
+  padding: 0;
+  line-height: 1;
+}
+
+.gdocs-tab-action-btn:hover {
+  background: var(--bg-hover);
+  transform: scale(1.1);
+}
+
+.gdocs-tab-action-btn.danger:hover {
+  background: rgba(248, 113, 113, 0.15);
+}
+
+/* 章节分组容器（展开/收起） */
+.gdocs-tab-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ▶ 展开箭头 */
+.gdocs-tab-arrow {
+  font-size: 8px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+/* 内联大纲列表 */
+.gdocs-outline-inline {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0 4px;
+}
+
+/* ⋮ 弹出菜单 */
+.gdocs-tab-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 2px;
+  min-width: 140px;
+  z-index: 100;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+}
+
+/* ===== 文档大纲区域 ===== */
+.gdocs-outline-section {
+  border-top: 1px solid var(--border-light);
+  padding: 8px 0;
+  flex-shrink: 0;
+  max-height: 40%;
+  overflow-y: auto;
+}
+
+.gdocs-outline-section::before {
+  content: '大纲';
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 0 12px 4px;
+}
+
+.gdocs-outline-empty {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.gdocs-outline-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.gdocs-outline-item {
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.gdocs-outline-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.gdocs-outline-item.active {
+  color: #1967d2;
+  border-left-color: #1967d2;
+  font-weight: 500;
+  background: rgba(25, 103, 210, 0.04);
+}
+
+[data-theme="dark"] .gdocs-outline-item.active {
+  color: #8ab4f8;
+  border-left-color: #8ab4f8;
+  background: rgba(138, 180, 248, 0.06);
+}
+
 /* ==================== 主内容区 ==================== */
 
 .main-content {
@@ -353,6 +697,8 @@ body {
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-secondary);
   display: flex;
+  position: relative;
+  z-index: 40;
   align-items: center;
   justify-content: center;
   gap: 4px;
@@ -546,10 +892,14 @@ body {
   align-items: flex-start;
   padding: 40px 16px 80px;
   background: var(--bg-canvas) !important;
-  transition: background var(--transition-normal);
+  transition: background var(--transition-normal), margin-right 0.3s ease;
   /* 禁用滚动锚定，防止虚拟分页元素重排时导致原生滚动条跳动 */
   overflow-anchor: none;
 }
+
+/* AI 侧栏打开时，仅编辑区域收缩（工具栏保持全宽，Google Docs 风格） */
+/* 现已改用 flex 布局，不再需要手动 margin */
+
 
 /* 统率背景卡片和文本的包裹层 */
 .document-workspace {
@@ -1293,9 +1643,9 @@ body {
 /* 排版设置浮层 */
 .typeset-popover {
   position: absolute;
-  bottom: 100%;
-  right: 16px;
-  margin-bottom: 6px;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
@@ -1774,6 +2124,19 @@ body {
   flex-direction: column;
   animation: settingsSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
+}
+
+.settings-panel-container.fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+  z-index: 1001;
+  animation: none;
 }
 
 @keyframes settingsSlideUp {
@@ -3072,26 +3435,30 @@ body {
 
 .ai-sidebar {
   position: absolute;
-  top: 0;
   right: 0;
+  top: var(--toolbar-h, 42px);
   bottom: 0;
   width: 380px;
   background: var(--bg-primary);
   border-left: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
-  z-index: 30;
-  transform: translateX(0);
-  transition: transform var(--transition-normal), visibility 0s linear 0s;
+  z-index: 35;
   box-shadow: -4px 0 20px rgba(0, 0, 0, 0.06);
-  visibility: visible;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  transform: translateX(0);
+}
+
+/* AI 侧栏打开时，编辑区右移让出滚动条 */
+.app-layout.ai-open .editor-container {
+  margin-right: 380px;
+  transition: margin-right 0.3s ease;
 }
 
 .ai-sidebar.collapsed {
   transform: translateX(100%);
+  opacity: 0;
   pointer-events: none;
-  visibility: hidden;
-  transition: transform var(--transition-normal), visibility 0s linear 0.3s;
 }
 
 @keyframes slideInRight {
@@ -4356,13 +4723,13 @@ h5.chat-md-heading {
 /* ===== 响应式 ===== */
 @media (max-width: 900px) {
   .ai-sidebar {
-    position: fixed;
-    right: 0;
-    top: 0;
-    bottom: 0;
     z-index: 50;
     box-shadow: var(--shadow-lg);
     width: 320px;
+  }
+
+  .app-layout.ai-open .editor-container {
+    margin-right: 320px;
   }
 }
 

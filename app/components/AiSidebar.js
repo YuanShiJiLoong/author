@@ -287,7 +287,8 @@ export default function AiSidebar({ onInsertText }) {
             const { apiConfig } = getProjectSettings();
             const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini'
                 : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-                    : '/api/ai';
+                    : apiConfig?.provider === 'claude' ? '/api/ai/claude'
+                        : '/api/ai';
 
             const context = await buildContext(activeChapterId, text, contextSelection.size > 0 ? contextSelection : null);
             const systemPrompt = compileSystemPrompt(context, 'chat');
@@ -353,7 +354,8 @@ export default function AiSidebar({ onInsertText }) {
             const { apiConfig } = getProjectSettings();
             const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini'
                 : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-                    : '/api/ai';
+                    : apiConfig?.provider === 'claude' ? '/api/ai/claude'
+                        : '/api/ai';
 
             const context = await buildContext(activeChapterId, userMsg.content, contextSelection.size > 0 ? contextSelection : null);
             const systemPrompt = compileSystemPrompt(context, 'chat');
@@ -669,7 +671,7 @@ export default function AiSidebar({ onInsertText }) {
     if (!open) return null;
 
     return (
-        <div className="ai-sidebar" style={{ position: 'absolute', top: 0, right: 0, bottom: 0 }}>
+        <div className="ai-sidebar">
             {/* 标题栏 */}
             <div className="ai-sidebar-header">
                 <span className="ai-sidebar-title">{t('aiSidebar.title')}</span>
@@ -997,7 +999,6 @@ export default function AiSidebar({ onInsertText }) {
                                                     // 提取正文：去掉系统块、markdown标记、编辑点评
                                                     let text = (msg.content || '')
                                                         .replace(/\[SETTINGS_ACTION\][\s\S]*?\[\\?\/SETTINGS_ACTION\]/g, '')
-                                                        .replace(/\n---[\s\S]*$/g, '')          // 去掉 --- 分隔线以后的编辑点评
                                                         .replace(/^#{1,6}\s+/gm, '')            // 去掉标题 #
                                                         .replace(/\*\*(.+?)\*\*/g, '$1')         // **粗体** → 粗体
                                                         .replace(/\*(.+?)\*/g, '$1')             // *斜体* → 斜体

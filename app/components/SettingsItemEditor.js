@@ -19,6 +19,7 @@ const CATEGORY_COLORS = {
 function TextField({ label, value, onChange, placeholder, multiline = false, rows = 3, aiBtn = false }) {
     const { t } = useI18n();
     const [localValue, setLocalValue] = useState(value || '');
+    const [isExpanded, setIsExpanded] = useState(false);
     const isComposingRef = useRef(false);
     const timerRef = useRef(null);
     const onChangeRef = useRef(onChange);
@@ -89,6 +90,16 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
         }
     }, []);
 
+    // 关闭展开模态框时立即 flush
+    const handleCloseExpand = useCallback(() => {
+        setIsExpanded(false);
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
+        }
+        onChangeRef.current(localValueRef.current);
+    }, []);
+
     const inputProps = {
         value: localValue,
         onChange: handleChange,
@@ -103,9 +114,26 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
         <div style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>{label}</label>
-                {aiBtn && (
-                    <button className="field-ai-btn" title={t('settingsEditor.aiFill')}>✦</button>
-                )}
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    {multiline && (
+                        <button
+                            className="field-expand-btn"
+                            title="展开编辑"
+                            onClick={() => setIsExpanded(true)}
+                            style={{
+                                border: 'none', background: 'transparent', cursor: 'pointer',
+                                color: 'var(--text-muted)', fontSize: 13, padding: '2px 4px',
+                                borderRadius: 4, transition: 'all 0.15s', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center',
+                            }}
+                            onMouseEnter={e => { e.target.style.color = 'var(--accent)'; e.target.style.background = 'var(--bg-hover)'; }}
+                            onMouseLeave={e => { e.target.style.color = 'var(--text-muted)'; e.target.style.background = 'transparent'; }}
+                        >⛶</button>
+                    )}
+                    {aiBtn && (
+                        <button className="field-ai-btn" title={t('settingsEditor.aiFill')}>✦</button>
+                    )}
+                </div>
             </div>
             {multiline ? (
                 <textarea
@@ -128,6 +156,65 @@ function TextField({ label, value, onChange, placeholder, multiline = false, row
                         fontSize: 13, fontFamily: 'var(--font-ui)', outline: 'none', transition: 'border-color 0.15s',
                     }}
                 />
+            )}
+
+            {/* 展开编辑浮窗 */}
+            {isExpanded && (
+                <div
+                    className="field-expand-overlay"
+                    onClick={handleCloseExpand}
+                    style={{
+                        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+                        backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                        zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        animation: 'fadeIn 0.2s ease',
+                    }}
+                >
+                    <div
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                            background: 'var(--bg-card)', borderRadius: 16,
+                            boxShadow: '0 24px 80px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.06)',
+                            width: '80%', maxWidth: 900, maxHeight: '85vh',
+                            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                            animation: 'settingsSlideUp 0.3s cubic-bezier(0.16,1,0.3,1)',
+                        }}
+                    >
+                        <div style={{
+                            padding: '16px 20px', borderBottom: '1px solid var(--border-light)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            background: 'var(--bg-secondary)',
+                        }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                ✏️ {label}
+                            </span>
+                            <button
+                                onClick={handleCloseExpand}
+                                className="btn btn-ghost btn-icon"
+                            >✕</button>
+                        </div>
+                        <div style={{ flex: 1, padding: 16, overflow: 'hidden', display: 'flex' }}>
+                            <textarea
+                                value={localValue}
+                                onChange={handleChange}
+                                onCompositionStart={handleCompositionStart}
+                                onCompositionEnd={handleCompositionEnd}
+                                placeholder={placeholder}
+                                autoFocus
+                                style={{
+                                    width: '100%', height: '100%', minHeight: '60vh',
+                                    padding: '12px 16px', border: '1px solid var(--border-light)',
+                                    borderRadius: 'var(--radius-md)', background: 'var(--bg-primary)',
+                                    color: 'var(--text-primary)', fontSize: 14, fontFamily: 'var(--font-ui)',
+                                    resize: 'none', outline: 'none', lineHeight: 1.8,
+                                    transition: 'border-color 0.15s',
+                                }}
+                                onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                                onBlur={e => e.target.style.borderColor = 'var(--border-light)'}
+                            />
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

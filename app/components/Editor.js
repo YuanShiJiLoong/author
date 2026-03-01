@@ -156,8 +156,9 @@ const Editor = forwardRef(function Editor({ content, onUpdate, editable = true, 
         }
     }, [editor]);
 
-    // 通过 ref 暴露插入方法给父组件（侧栏存档插入用）
+    // 通过 ref 暴露方法给父组件（侧栏存档插入 + 大纲读取用）
     useImperativeHandle(ref, () => ({
+        getEditor: () => editor,
         insertText: (text) => {
             if (!editor) return;
             // 规范化换行
@@ -1093,7 +1094,7 @@ function EditorToolbar({ editor, margins, setMargins }) {
                     Aa <span className="dropdown-arrow">▾</span>
                 </button>
                 {showTypeset && (
-                    <div className="typeset-popover" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 120 }}>
+                    <div className="typeset-popover" style={{ position: 'absolute', top: '100%', bottom: 'auto', right: 0, marginTop: 4, zIndex: 120 }}>
                         <div className="typeset-row">
                             <label>字号</label>
                             <input
@@ -1130,7 +1131,7 @@ function EditorToolbar({ editor, margins, setMargins }) {
                     📄 <span className="dropdown-arrow">▾</span>
                 </button>
                 {showMargins && (
-                    <div className="typeset-popover" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 120 }}>
+                    <div className="typeset-popover" style={{ position: 'absolute', top: '100%', bottom: 'auto', right: 0, marginTop: 4, zIndex: 120 }}>
                         <div className="typeset-row">
                             <label>上下</label>
                             <input

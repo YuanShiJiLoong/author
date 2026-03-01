@@ -102,7 +102,8 @@ export default function SettingsConflictModal({ conflicts, noConflicts, onConfir
             const { apiConfig } = getProjectSettings();
             const apiEndpoint = apiConfig?.provider === 'gemini-native' ? '/api/ai/gemini'
                 : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-                    : '/api/ai';
+                    : apiConfig?.provider === 'claude' ? '/api/ai/claude'
+                        : '/api/ai';
 
             const existingFields = JSON.stringify(conflict.existing.content || {}, null, 2);
             const importedFields = JSON.stringify(conflict.imported.content || {}, null, 2);

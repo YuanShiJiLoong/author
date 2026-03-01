@@ -23,6 +23,11 @@ export async function POST(request) {
             return await testResponsesAPI(apiKey, baseUrl, model);
         }
 
+        // Claude/Anthropic 格式的测试
+        if (provider === 'claude') {
+            return await testClaude(apiKey, baseUrl, model);
+        }
+
         // OpenAI 兼容格式的测试
         return await testOpenAICompat(apiKey, baseUrl, model);
 
@@ -145,6 +150,46 @@ async function testResponsesAPI(apiKey, baseUrl, model) {
     return NextResponse.json({
         success: true,
         message: `✅ Responses API 连接成功！`,
+        model: m,
+        reply: reply.trim(),
+    });
+}
+
+async function testClaude(apiKey, baseUrl, model) {
+    const base = (baseUrl || 'https://api.anthropic.com').replace(/\/$/, '');
+    const m = model || 'claude-sonnet-4-20250514';
+    const url = `${base}/v1/messages`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+            model: m,
+            max_tokens: 20,
+            messages: [{ role: 'user', content: '说"连接成功"' }],
+        }),
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        let errMsg = `连接失败(${response.status})`;
+        try {
+            const errObj = JSON.parse(errText);
+            errMsg = errObj?.error?.message || errMsg;
+        } catch { /* ignore parse error */ }
+        return NextResponse.json({ success: false, error: errMsg });
+    }
+
+    const data = await response.json();
+    const reply = data.content?.[0]?.text || '';
+
+    return NextResponse.json({
+        success: true,
+        message: `✅ Claude API 连接成功！`,
         model: m,
         reply: reply.trim(),
     });

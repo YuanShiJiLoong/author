@@ -17,6 +17,11 @@ export async function POST(request) {
             return await fetchGeminiModels(apiKey, baseUrl, embedOnly);
         }
 
+        // Claude/Anthropic（无 /models 端点，返回预定义列表）
+        if (provider === 'claude') {
+            return fetchClaudeModels();
+        }
+
         // OpenAI 兼容格式（适用于所有其他供应商）
         return await fetchOpenAIModels(apiKey, baseUrl, embedOnly);
 
@@ -118,4 +123,18 @@ async function handleFetchError(response) {
         { error: errMsg },
         { status: response.status }
     );
+}
+
+// Claude/Anthropic 模型列表（预定义，无 API 端点）
+function fetchClaudeModels() {
+    const models = [
+        { id: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4' },
+        { id: 'claude-3-7-sonnet-20250219', displayName: 'Claude 3.7 Sonnet' },
+        { id: 'claude-3-5-haiku-20241022', displayName: 'Claude 3.5 Haiku' },
+        { id: 'claude-3-5-sonnet-20241022', displayName: 'Claude 3.5 Sonnet v2' },
+        { id: 'claude-3-5-sonnet-20240620', displayName: 'Claude 3.5 Sonnet' },
+        { id: 'claude-3-opus-20240229', displayName: 'Claude 3 Opus' },
+        { id: 'claude-3-haiku-20240307', displayName: 'Claude 3 Haiku' },
+    ];
+    return NextResponse.json({ models });
 }

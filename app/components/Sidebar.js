@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 import { createChapter, deleteChapter, updateChapter, saveChapters, getChapters } from '../lib/storage';
@@ -8,7 +8,7 @@ import { exportProject, importProject, importWork, exportWorkAsTxt, exportWorkAs
 import { WRITING_MODES, getAllWorks, getSettingsNodes, createWorkNode, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting } from '../lib/settings';
 import { detectConflicts, mergeChapters } from '../lib/chapter-number';
 
-export default function Sidebar() {
+export default function Sidebar({ onOpenHelp, onToggle, editorRef }) {
     const {
         chapters, addChapter, setChapters, updateChapter: updateChapterStore,
         activeChapterId, setActiveChapterId,
@@ -24,10 +24,15 @@ export default function Sidebar() {
     const [renameId, setRenameId] = useState(null);
     const [renameTitle, setRenameTitle] = useState('');
     const [contextMenu, setContextMenu] = useState(null);
-    const [importModal, setImportModal] = useState(null); // { chapters, totalWords, file }
-    const [showCurrentExportMenu, setShowCurrentExportMenu] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
-    const [conflictModal, setConflictModal] = useState(null); // { conflicts, noConflictExisting, noConflictImported, targetWorkId, importedChapters }
+    const [showCurrentExportMenu, setShowCurrentExportMenu] = useState(false);
+    const [importModal, setImportModal] = useState(null);
+    const [conflictModal, setConflictModal] = useState(null);
+    const [showGitPopup, setShowGitPopup] = useState(false);
+    const [outlineCollapsed, setOutlineCollapsed] = useState(false); // 手动折叠大纲
+    const [headings, setHeadings] = useState([]); // 文档大纲标题列表
+    const [activeHeadingIndex, setActiveHeadingIndex] = useState(-1); // 当前高亮的大纲项
+    const isClickScrollingRef = useRef(false); // 防 scrollspy 死循环互斥锁
     const { t } = useI18n();
 
     // 切换主题
@@ -78,19 +83,19 @@ export default function Sidebar() {
 
     // 尝试从标题提取数字并生成下一章标题，返回 null 表示无法匹配
     const tryNextTitle = (title) => {
-        // 1. "第N章" 阿拉伯数字
+        // 1. "第N章" 阿拉伯数字 — 只保留章节编号，去掉后续标题名
         const m1 = title.match(/第(\d+)章/);
-        if (m1) return title.replace(/第\d+章/, `第${parseInt(m1[1], 10) + 1}章`);
-        // 2. "第X章" 中文数字（如 第三十三章）
+        if (m1) return `第${parseInt(m1[1], 10) + 1}章`;
+        // 2. "第X章" 中文数字（如 第三十三章）— 只保留章节编号
         const m2 = title.match(/第([零一二三四五六七八九十百千万]+)章/);
-        if (m2) { const n = parseCnNum(m2[1]); if (!isNaN(n)) return title.replace(/第[零一二三四五六七八九十百千万]+章/, `第${toCnNum(n + 1)}章`); }
+        if (m2) { const n = parseCnNum(m2[1]); if (!isNaN(n)) return `第${toCnNum(n + 1)}章`; }
         // 3. 纯阿拉伯数字（如 "33"）
         if (/^\d+$/.test(title.trim())) return String(parseInt(title.trim(), 10) + 1);
         // 4. 纯中文数字（如 "三十三"）
         if (/^[零一二三四五六七八九十百千万]+$/.test(title.trim())) { const n = parseCnNum(title.trim()); if (!isNaN(n)) return toCnNum(n + 1); }
-        // 5. 包含末尾数字（如 "Chapter 33"）
-        const m5 = title.match(/(\d+)\s*$/);
-        if (m5) return title.replace(/(\d+)\s*$/, String(parseInt(m5[1], 10) + 1));
+        // 5. 包含末尾数字（如 "Chapter 33"）— 只递增数字，保留前缀
+        const m5 = title.match(/^(.+?)(\d+)\s*$/);
+        if (m5) return m5[1] + String(parseInt(m5[2], 10) + 1);
         return null;
     };
 
@@ -143,6 +148,135 @@ export default function Sidebar() {
         setRenameTitle('');
     }, [renameTitle, updateChapterStore, activeWorkId]);
 
+    // ===== 文档大纲：从编辑器提取标题 + Scrollspy =====
+    useEffect(() => {
+        let debounceTimer = null;
+        let observer = null;
+        let pollTimer = null;
+        let cleanedUp = false;
+
+        // 提取标题的函数
+        const extractHeadings = (editor) => {
+            const json = editor.getJSON();
+            const h = [];
+            (json.content || []).forEach((node, idx) => {
+                if (node.type === 'heading' && node.attrs?.level) {
+                    const text = (node.content || []).map(c => c.text || '').join('');
+                    if (text.trim()) h.push({ level: node.attrs.level, text: text.trim(), index: idx });
+                }
+            });
+            setHeadings(h);
+        };
+
+        // 设置 IntersectionObserver
+        const setupObserver = (editor) => {
+            const container = document.querySelector('.editor-container');
+            const headingEls = editor.view?.dom?.querySelectorAll('h1, h2, h3');
+            if (!container || !headingEls?.length) return;
+
+            observer = new IntersectionObserver(
+                (entries) => {
+                    if (isClickScrollingRef.current) return;
+                    let topEntry = null;
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            if (!topEntry || entry.boundingClientRect.top < topEntry.boundingClientRect.top) {
+                                topEntry = entry;
+                            }
+                        }
+                    });
+                    if (topEntry) {
+                        const allH = Array.from(editor.view.dom.querySelectorAll('h1, h2, h3'));
+                        const idx = allH.indexOf(topEntry.target);
+                        if (idx >= 0) setActiveHeadingIndex(idx);
+                    }
+                },
+                { root: container, rootMargin: '-10% 0px -80% 0px', threshold: 0 }
+            );
+
+            headingEls.forEach(el => observer.observe(el));
+        };
+
+        // 当编辑器就绪时，设置监听
+        const initWithEditor = (editor) => {
+            // 初始提取
+            extractHeadings(editor);
+
+            // 监听内容变化（防抖 300ms）
+            const onUpdate = () => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => extractHeadings(editor), 300);
+            };
+            editor.on('update', onUpdate);
+
+            // 延迟设置 Observer
+            setTimeout(() => {
+                if (!cleanedUp) setupObserver(editor);
+            }, 500);
+
+            // 返回清理函数
+            return () => {
+                editor.off('update', onUpdate);
+                clearTimeout(debounceTimer);
+                observer?.disconnect();
+            };
+        };
+
+        // 轮询等待编辑器就绪
+        let editorCleanup = null;
+        const tryInit = () => {
+            const editor = editorRef?.current?.getEditor?.();
+            if (editor && !cleanedUp) {
+                clearInterval(pollTimer);
+                editorCleanup = initWithEditor(editor);
+            }
+        };
+
+        // 立即尝试一次
+        tryInit();
+        // 如果还没就绪，每 200ms 重试
+        if (!editorRef?.current?.getEditor?.()) {
+            pollTimer = setInterval(tryInit, 200);
+        }
+
+        return () => {
+            cleanedUp = true;
+            clearInterval(pollTimer);
+            editorCleanup?.();
+            setHeadings([]);
+        };
+    }, [editorRef, activeChapterId]);
+
+    // 点击大纲项：滚动到对应位置
+    const handleOutlineClick = useCallback((headingIdx) => {
+        const editor = editorRef?.current?.getEditor?.();
+        if (!editor) return;
+        const headingEls = editor.view?.dom?.querySelectorAll('h1, h2, h3');
+        const target = headingEls?.[headingIdx];
+        if (!target) return;
+
+        isClickScrollingRef.current = true;
+        setActiveHeadingIndex(headingIdx);
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // 滚动结束后解锁
+        const unlock = () => { isClickScrollingRef.current = false; };
+        const container = document.querySelector('.editor-container');
+        if (container) {
+            container.addEventListener('scrollend', unlock, { once: true });
+            // 兜底：500ms 后强制解锁
+            setTimeout(() => {
+                container.removeEventListener('scrollend', unlock);
+                isClickScrollingRef.current = false;
+            }, 600);
+        } else {
+            setTimeout(unlock, 600);
+        }
+    }, [editorRef]);
+
+    // 统计标题数（作为 tab 角标）
+    const headingCount = headings.length;
+
     // 导出
 
     const totalWords = Array.isArray(chapters) ? chapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0) : 0;
@@ -150,107 +284,106 @@ export default function Sidebar() {
     return (
         <>
             <aside className={`sidebar ${sidebarOpen ? '' : 'collapsed'}`}>
-                <div className="sidebar-header">
-                    <div className="sidebar-logo">
-                        <span>A</span>uthor
-                    </div>
-                    <button className="btn btn-ghost btn-icon" onClick={() => setSidebarOpen(false)} title={t('sidebar.collapseSidebar')}>
-                        ✕
+                {/* ===== 顶部关闭按钮 ===== */}
+                <div className="sidebar-top-row">
+                    <button className="btn btn-ghost btn-icon btn-sm" onClick={() => onToggle?.()} title={t('sidebar.collapseSidebar')} style={{ fontSize: '16px' }}>
+                        ←
                     </button>
                 </div>
 
-                <div style={{ padding: '12px 12px 0' }}>
-                    <button
-                        id="tour-new-chapter"
-                        className="btn btn-primary"
-                        style={{ width: '100%', justifyContent: 'center' }}
-                        onClick={handleCreateChapter}
-                    >
-                        {t('sidebar.newChapter')}
-                    </button>
+                {/* ===== 文档分页 ===== */}
+                <div className="gdocs-section-header">
+                    <span className="gdocs-section-title">文档分页</span>
+                    <button className="gdocs-section-add" onClick={handleCreateChapter} title={t('sidebar.newChapter')}>+</button>
                 </div>
-
-                <div className="sidebar-content">
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', padding: '8px 14px 6px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                        {t('sidebar.chapterList')} ({chapters.length})
-                    </div>
-                    <div className="chapter-list">
-                        {chapters.map(ch => (
-                            <div
-                                key={ch.id}
-                                className={`chapter-item ${ch.id === activeChapterId ? 'active' : ''}`}
-                                onClick={() => setActiveChapterId(ch.id)}
-                                onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    setContextMenu({ id: ch.id, x: e.clientX, y: e.clientY });
-                                }}
-                            >
-                                {renameId === ch.id ? (
-                                    <input
-                                        className="modal-input"
-                                        style={{ margin: 0, padding: '4px 8px', fontSize: '13px' }}
-                                        value={renameTitle || ''}
-                                        onChange={e => setRenameTitle(e.target.value)}
-                                        onBlur={() => handleRename(ch.id)}
-                                        onKeyDown={e => e.key === 'Enter' && handleRename(ch.id)}
-                                        onClick={e => e.stopPropagation()}
-                                        autoFocus
-                                    />
-                                ) : (
-                                    <>
-                                        <span className="chapter-title">{ch.title}</span>
-                                        <span className="chapter-count">{ch.wordCount || 0}{t('sidebar.wordUnit')}</span>
-                                        <div className="chapter-actions">
-                                            <button
-                                                className="btn btn-ghost btn-icon btn-sm"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setRenameId(ch.id);
-                                                    setRenameTitle(ch.title);
-                                                }}
-                                                title={t('common.rename')}
+                <div className="gdocs-tab-list">
+                    {chapters.map(ch => {
+                        const isActive = ch.id === activeChapterId;
+                        const isExpanded = isActive && headings.length > 0 && !outlineCollapsed;
+                        return (
+                            <div key={ch.id} className="gdocs-tab-group">
+                                <div
+                                    className={`gdocs-tab-item ${isActive ? 'active' : ''}`}
+                                    onClick={() => {
+                                        if (isActive) {
+                                            setOutlineCollapsed(prev => !prev);
+                                        } else {
+                                            setActiveChapterId(ch.id);
+                                            setOutlineCollapsed(false);
+                                        }
+                                    }}
+                                >
+                                    {renameId === ch.id ? (
+                                        <input
+                                            className="modal-input"
+                                            style={{ margin: 0, padding: '4px 8px', fontSize: '13px', flex: 1 }}
+                                            value={renameTitle || ''}
+                                            onChange={e => setRenameTitle(e.target.value)}
+                                            onBlur={() => handleRename(ch.id)}
+                                            onKeyDown={e => e.key === 'Enter' && handleRename(ch.id)}
+                                            onClick={e => e.stopPropagation()}
+                                            autoFocus
+                                        />
+                                    ) : (
+                                        <>
+                                            <span className="gdocs-tab-arrow" style={{ transform: isExpanded ? 'rotate(90deg)' : 'none' }}>▶</span>
+                                            <span style={{ flex: 1, minWidth: 0 }}>
+                                                <span className="gdocs-tab-title">{ch.title}</span>
+                                                {(ch.wordCount || 0) > 0 && (
+                                                    <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>
+                                                        {ch.wordCount.toLocaleString()}字 · ~{Math.ceil((ch.wordCount || 0) * 1.5).toLocaleString()} tokens
+                                                    </span>
+                                                )}
+                                            </span>
+                                            <div className="gdocs-tab-actions">
+                                                <button
+                                                    className="gdocs-tab-action-btn"
+                                                    title={t('sidebar.contextRename')}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setRenameId(ch.id);
+                                                        setRenameTitle(ch.title);
+                                                    }}
+                                                ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg></button>
+                                                <button
+                                                    className="gdocs-tab-action-btn danger"
+                                                    title={t('sidebar.contextDelete')}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteChapter(ch.id);
+                                                    }}
+                                                ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg></button>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                                {/* 展开的章节大纲 */}
+                                {isExpanded && (
+                                    <div className="gdocs-outline-inline">
+                                        {headings.map((h, idx) => (
+                                            <div
+                                                key={idx}
+                                                className={`gdocs-outline-item ${idx === activeHeadingIndex ? 'active' : ''}`}
+                                                style={{ paddingLeft: `${28 + (h.level - 1) * 14}px` }}
+                                                onClick={() => handleOutlineClick(idx)}
+                                                title={h.text}
                                             >
-                                                ✎
-                                            </button>
-                                            <button
-                                                className="btn btn-ghost btn-icon btn-sm"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleDeleteChapter(ch.id);
-                                                }}
-                                                title={t('common.delete')}
-                                                style={{ color: 'var(--error)' }}
-                                            >
-                                                ✕
-                                            </button>
-                                        </div>
-                                    </>
+                                                {h.text}
+                                            </div>
+                                        ))}
+                                    </div>
                                 )}
                             </div>
-                        ))}
-                    </div>
+                        );
+                    })}
                 </div>
 
+                {/* ===== 底部功能区（保留原有功能） ===== */}
                 <div className="sidebar-footer" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                    {/* 写作模式指示器 */}
                     {(() => {
                         const modeConfig = WRITING_MODES[writingMode];
                         return modeConfig ? (
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    padding: '6px 10px',
-                                    borderRadius: 'var(--radius-sm)',
-                                    background: `${modeConfig.color}10`,
-                                    border: `1px solid ${modeConfig.color}30`,
-                                    cursor: 'pointer',
-                                    transition: 'all 0.15s ease',
-                                }}
-                                onClick={() => setShowSettings(true)}
-                                title={t('sidebar.clickToSwitchMode')}
-                            >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: 'var(--radius-sm)', background: `${modeConfig.color}10`, border: `1px solid ${modeConfig.color}30`, cursor: 'pointer', transition: 'all 0.15s ease' }} onClick={() => setShowSettings(true)} title={t('sidebar.clickToSwitchMode')}>
                                 <span style={{ fontSize: '14px' }}>{modeConfig.icon}</span>
                                 <span style={{ fontSize: '12px', fontWeight: '600', color: modeConfig.color }}>{t('sidebar.modeLabel').replace('{mode}', modeConfig.label)}</span>
                             </div>
@@ -262,18 +395,10 @@ export default function Sidebar() {
                     </div>
                     <div style={{ display: 'flex', gap: '4px' }}>
                         <div style={{ position: 'relative', display: 'flex', flex: 1 }}>
-                            <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => setShowCurrentExportMenu(!showCurrentExportMenu)}>
-                                {t('sidebar.exportCurrent')}
-                            </button>
+                            <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => setShowCurrentExportMenu(!showCurrentExportMenu)}>{t('sidebar.exportCurrent')}</button>
                             {showCurrentExportMenu && (<>
                                 <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setShowCurrentExportMenu(false)} />
-                                <div style={{
-                                    position: 'absolute', left: 0, bottom: '100%', marginBottom: 6,
-                                    minWidth: 150, zIndex: 100,
-                                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                                    borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
-                                    padding: 4,
-                                }}>
+                                <div style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 6, minWidth: 150, zIndex: 100, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', padding: 4 }}>
                                     {activeChapterId && chapters.find(c => c.id === activeChapterId) ? [
                                         { label: '📄 TXT', fn: () => exportWorkAsTxt([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
                                         { label: '📝 Markdown', fn: () => exportWorkAsMarkdown([chapters.find(c => c.id === activeChapterId)], chapters.find(c => c.id === activeChapterId).title) },
@@ -286,123 +411,70 @@ export default function Sidebar() {
                                 </div>
                             </>)}
                         </div>
-                        <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => setShowExportModal(true)}>
-                            {t('sidebar.exportMore') || '导出更多'}
-                        </button>
-                        <button id="tour-settings" className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowSettings(true)} title={t('sidebar.tooltipSettings')}>
-                            ⚙️
-                        </button>
-                        <button className="btn btn-secondary btn-sm btn-icon" onClick={toggleTheme} title={theme === 'light' ? t('sidebar.tooltipThemeDark') : t('sidebar.tooltipThemeLight')}>
-                            {theme === 'light' ? '🌙' : '☀️'}
-                        </button>
+                        <button className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: '11px' }} onClick={() => setShowExportModal(true)}>{t('sidebar.exportMore') || '导出更多'}</button>
+                        <button id="tour-settings" className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowSettings(true)} title={t('sidebar.tooltipSettings')}>⚙️</button>
+                        <button className="btn btn-secondary btn-sm btn-icon" onClick={toggleTheme} title={theme === 'light' ? t('sidebar.tooltipThemeDark') : t('sidebar.tooltipThemeLight')}>{theme === 'light' ? '🌙' : '☀️'}</button>
                     </div>
                     <div style={{ display: 'flex', gap: '4px', alignItems: 'stretch' }}>
-                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowSnapshots(true)} title={t('sidebar.tooltipTimeMachine')}>
-                            🕒
+                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowSnapshots(true)} title={t('sidebar.tooltipTimeMachine')}>🕒</button>
+                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => { exportProject(); }} title={t('sidebar.btnSaveTitle') || '存档（导出项目 JSON）'}>💾</button>
+                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => { document.getElementById('project-import-input')?.click(); }} title={t('sidebar.btnLoadTitle') || '读档（导入项目 JSON）'}>📂</button>
+                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => { document.getElementById('work-import-input')?.click(); }} title={t('sidebar.btnImportWorkTitle')}>📥</button>
+                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => onOpenHelp?.()} title={t('page.helpAndGuide') || '帮助与教程'}>📖</button>
+                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowGitPopup(prev => !prev)} title="GitHub / Gitee / QQ群">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" /></svg>
                         </button>
-                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => { exportProject(); }} title={t('sidebar.btnSaveTitle') || '存档（导出项目 JSON）'}>
-                            💾
-                        </button>
-                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => { document.getElementById('project-import-input')?.click(); }} title={t('sidebar.btnLoadTitle') || '读档（导入项目 JSON）'}>
-                            📂
-                        </button>
-                        <button className="btn btn-secondary btn-sm btn-icon" onClick={() => { document.getElementById('work-import-input')?.click(); }} title={t('sidebar.btnImportWorkTitle')}>
-                            📥
-                        </button>
-                        <input
-                            id="project-import-input"
-                            type="file"
-                            accept=".json"
-                            style={{ display: 'none' }}
-                            onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                const result = await importProject(file);
-                                if (result.success) {
-                                    alert(result.message + '\n' + t('sidebar.importSuccess'));
-                                    window.location.reload();
-                                } else {
-                                    alert(result.message);
-                                }
-                                e.target.value = '';
-                            }}
-                        />
-                        <input
-                            id="work-import-input"
-                            type="file"
-                            accept=".txt,.md,.markdown,.epub,.docx,.doc,.pdf"
-                            style={{ display: 'none' }}
-                            onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                try {
-                                    const result = await importWork(file);
-                                    if (!result.success) {
-                                        const msg = result.message === 'noChapter'
-                                            ? t('sidebar.importWorkNoChapter')
-                                            : t('sidebar.importWorkFailed').replace('{error}', result.message);
-                                        showToast(msg, 'error');
-                                        e.target.value = '';
-                                        return;
-                                    }
-                                    // 弹出作品选择
-                                    setImportModal({ chapters: result.chapters, totalWords: result.totalWords });
-                                } catch (err) {
-                                    showToast(t('sidebar.importWorkFailed').replace('{error}', err.message), 'error');
-                                }
-                                e.target.value = '';
-                            }}
-                        />
+                        <input id="project-import-input" type="file" accept=".json" style={{ display: 'none' }} onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; const result = await importProject(file); if (result.success) { alert(result.message + '\n' + t('sidebar.importSuccess')); window.location.reload(); } else { alert(result.message); } e.target.value = ''; }} />
+                        <input id="work-import-input" type="file" accept=".txt,.md,.markdown,.epub,.docx,.doc,.pdf" style={{ display: 'none' }} onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; try { const result = await importWork(file); if (!result.success) { const msg = result.message === 'noChapter' ? t('sidebar.importWorkNoChapter') : t('sidebar.importWorkFailed').replace('{error}', result.message); showToast(msg, 'error'); e.target.value = ''; return; } setImportModal({ chapters: result.chapters, totalWords: result.totalWords }); } catch (err) { showToast(t('sidebar.importWorkFailed').replace('{error}', err.message), 'error'); } e.target.value = ''; }} />
                     </div>
                 </div>
             </aside>
 
-            {/* ===== 右键菜单 ===== */}
-            {contextMenu && (
-                <div
-                    className="modal-overlay"
-                    style={{ background: 'transparent' }}
-                    onClick={() => setContextMenu(null)}
-                >
-                    <div
-                        className="dropdown-menu"
-                        style={{
-                            position: 'fixed',
-                            left: contextMenu.x,
-                            top: contextMenu.y,
-                        }}
-                    >
-                        <button
-                            className="dropdown-item"
-                            onClick={() => {
-                                setRenameId(contextMenu.id);
-                                const ch = chapters.find(c => c.id === contextMenu.id);
-                                setRenameTitle(ch?.title || '');
-                                setContextMenu(null);
-                            }}
-                        >
-                            {t('sidebar.contextRename')}
-                        </button>
-                        <button
-                            className="dropdown-item"
-                            onClick={() => {
-                                const ch = chapters.find(c => c.id === contextMenu.id);
-                                if (ch) exportWorkAsMarkdown([ch], ch.title);
-                                setContextMenu(null);
-                            }}
-                        >
-                            {t('sidebar.contextExport')}
-                        </button>
-                        <button
-                            className="dropdown-item danger"
-                            onClick={() => handleDeleteChapter(contextMenu.id)}
-                        >
-                            {t('sidebar.contextDelete')}
-                        </button>
+            {/* ===== Git / 社区弹窗 ===== */}
+            {showGitPopup && (
+                <div className="modal-overlay" onClick={() => setShowGitPopup(false)}>
+                    <div className="glass-panel" onClick={e => e.stopPropagation()} style={{
+                        padding: '28px', maxWidth: 360, width: '90%', borderRadius: 'var(--radius-lg)',
+                        display: 'flex', flexDirection: 'column', gap: 16,
+                    }}>
+                        <h3 style={{ margin: 0, fontSize: 16, textAlign: 'center' }}>社区与源码</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <a href="https://github.com/YuanShiJiLoong/author" target="_blank" rel="noopener noreferrer" onClick={() => setShowGitPopup(false)} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'var(--text-primary)', fontSize: 14, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-secondary)'}>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" /></svg>
+                                <span style={{ flex: 1 }}>GitHub</span>
+                                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>→</span>
+                            </a>
+                            <a href="https://gitee.com/yuanshijilong/author" target="_blank" rel="noopener noreferrer" onClick={() => setShowGitPopup(false)} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'var(--text-primary)', fontSize: 14, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-secondary)'}>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11.984 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.016 0zm6.09 5.333c.328 0 .593.266.592.593v1.482a.594.594 0 0 1-.593.592H9.777c-.982 0-1.778.796-1.778 1.778v5.48c0 .327.266.592.593.592h5.574c.327 0 .593-.265.593-.593v-1.482a.594.594 0 0 0-.593-.592h-3.408a.43.43 0 0 1-.43-.43v-1.455a.43.43 0 0 1 .43-.43h5.91c.329 0 .594.266.594.593v5.78a2.133 2.133 0 0 1-2.133 2.134H5.926a.593.593 0 0 1-.593-.593V9.778a4.444 4.444 0 0 1 4.444-4.444h8.297z" /></svg>
+                                <span style={{ flex: 1 }}>Gitee（国内镜像）</span>
+                                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>→</span>
+                            </a>
+                            <div style={{ height: 1, background: 'var(--border-light)', margin: '4px 0' }} />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)' }}>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.003 2C6.477 2 2 6.477 2 12.003c0 2.39.84 4.584 2.236 6.31l-.924 3.468 3.592-.96A9.95 9.95 0 0 0 12.003 22C17.52 22 22 17.523 22 12.003S17.52 2 12.003 2zm4.97 13.205c-.234.657-1.378 1.257-1.902 1.313-.525.06-1.003.234-3.38-.703-2.86-1.13-4.68-4.07-4.82-4.26-.14-.19-1.15-1.53-1.15-2.92s.728-2.072.986-2.354c.258-.282.563-.352.75-.352s.375.004.54.01c.173.006.405-.066.633.483.234.563.797 1.947.867 2.088.07.14.117.305.023.492-.094.188-.14.305-.28.468-.14.164-.296.366-.422.492-.14.14-.286.292-.123.571.164.28.727 1.2 1.562 1.944 1.073.955 1.977 1.252 2.258 1.393.28.14.445.117.608-.07.164-.188.703-.82.89-1.102.188-.28.375-.234.633-.14.258.093 1.632.77 1.912.91.28.14.468.21.538.328.07.117.07.68-.164 1.336z" /></svg>
+                                <span style={{ flex: 1, fontSize: 14 }}>QQ群：1087016949</span>
+                                <button className="btn btn-ghost btn-sm" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => { navigator.clipboard?.writeText('1087016949'); showToast('群号已复制', 'success'); }}>复制群号</button>
+                                <a href="https://qm.qq.com/q/wjRDkotw0E" target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: 11, textDecoration: 'none' }} onClick={() => setShowGitPopup(false)}>直达</a>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            <button className="btn btn-ghost btn-sm" onClick={() => setShowGitPopup(false)}>关闭</button>
+                        </div>
                     </div>
                 </div>
             )}
-            {/* ===== 导入作品-选择目标作品弹窗 ===== */}
+
+            {/* ===== 右键菜单 ===== */}
+            {contextMenu && (
+                <div className="modal-overlay" style={{ background: 'transparent' }} onClick={() => setContextMenu(null)}>
+                    <div className="dropdown-menu" style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y }}>
+                        <button className="dropdown-item" onClick={() => { setRenameId(contextMenu.id); const ch = chapters.find(c => c.id === contextMenu.id); setRenameTitle(ch?.title || ''); setContextMenu(null); }}>{t('sidebar.contextRename')}</button>
+                        <button className="dropdown-item" onClick={() => { const ch = chapters.find(c => c.id === contextMenu.id); if (ch) exportWorkAsMarkdown([ch], ch.title); setContextMenu(null); }}>{t('sidebar.contextExport')}</button>
+                        <button className="dropdown-item danger" onClick={() => handleDeleteChapter(contextMenu.id)}>{t('sidebar.contextDelete')}</button>
+                    </div>
+                </div>
+            )}
+            {/* ===== 导入作品弹窗 ===== */}
             {importModal && (
                 <ImportWorkModal
                     chapters={importModal.chapters}
@@ -412,7 +484,6 @@ export default function Sidebar() {
                         try {
                             const existingChapters = await getChapters(targetWorkId);
                             if (existingChapters.length === 0) {
-                                // 目标作品为空，直接导入
                                 await saveChapters(importModal.chapters, targetWorkId);
                                 setActiveWorkIdSetting(targetWorkId);
                                 setChapters(importModal.chapters);
@@ -422,10 +493,8 @@ export default function Sidebar() {
                                 setImportModal(null);
                                 return;
                             }
-                            // 检测冲突
                             const { conflicts, noConflictExisting, noConflictImported } = detectConflicts(existingChapters, importModal.chapters);
                             if (conflicts.length === 0) {
-                                // 无冲突，直接合并
                                 const merged = mergeChapters(noConflictExisting, noConflictImported, []);
                                 await saveChapters(merged, targetWorkId);
                                 setActiveWorkIdSetting(targetWorkId);
@@ -435,14 +504,7 @@ export default function Sidebar() {
                                 showToast(t('sidebar.importWorkSuccess').replace('{count}', importModal.chapters.length), 'success');
                                 setImportModal(null);
                             } else {
-                                // 有冲突，弹出冲突解决弹窗
-                                setConflictModal({
-                                    conflicts,
-                                    noConflictExisting,
-                                    noConflictImported,
-                                    targetWorkId,
-                                    importedCount: importModal.chapters.length,
-                                });
+                                setConflictModal({ conflicts, noConflictExisting, noConflictImported, targetWorkId, importedCount: importModal.chapters.length });
                                 setImportModal(null);
                             }
                         } catch (err) {
@@ -452,18 +514,14 @@ export default function Sidebar() {
                     t={t}
                 />
             )}
-            {/* ===== 章节冲突解决弹窗 ===== */}
+            {/* ===== 章节冲突弹窗 ===== */}
             {conflictModal && (
                 <ChapterConflictModal
                     conflicts={conflictModal.conflicts}
                     onClose={() => setConflictModal(null)}
                     onConfirm={async (resolvedConflicts) => {
                         try {
-                            const merged = mergeChapters(
-                                conflictModal.noConflictExisting,
-                                conflictModal.noConflictImported,
-                                resolvedConflicts
-                            );
+                            const merged = mergeChapters(conflictModal.noConflictExisting, conflictModal.noConflictImported, resolvedConflicts);
                             await saveChapters(merged, conflictModal.targetWorkId);
                             setActiveWorkIdSetting(conflictModal.targetWorkId);
                             setChapters(merged);
@@ -484,13 +542,7 @@ export default function Sidebar() {
                     chapters={chapters}
                     onClose={() => setShowExportModal(false)}
                     onExport={(selectedChapters, format) => {
-                        const fns = {
-                            txt: exportWorkAsTxt,
-                            md: exportWorkAsMarkdown,
-                            docx: exportWorkAsDocx,
-                            epub: exportWorkAsEpub,
-                            pdf: exportWorkAsPdf,
-                        };
+                        const fns = { txt: exportWorkAsTxt, md: exportWorkAsMarkdown, docx: exportWorkAsDocx, epub: exportWorkAsEpub, pdf: exportWorkAsPdf };
                         const fn = fns[format];
                         if (fn) fn(selectedChapters);
                         setShowExportModal(false);

@@ -72,6 +72,7 @@ export default function SettingsPanel() {
 
     const [expandedCategory, setExpandedCategory] = useState(null);
     const [showExportFormat, setShowExportFormat] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     // 删除确认弹窗状态
     const [deleteConfirm, setDeleteConfirm] = useState(null); // { message, onConfirm }
@@ -552,14 +553,19 @@ export default function SettingsPanel() {
 
     return (
         <div className="settings-panel-overlay" onClick={onClose}>
-            <div className="settings-panel-container glass-panel" onClick={e => e.stopPropagation()}>
+            <div className={`settings-panel-container glass-panel${isFullscreen ? ' fullscreen' : ''}`} onClick={e => e.stopPropagation()}>
                 {/* 头部 */}
                 <div className="settings-header" style={{ background: 'transparent' }}>
                     <h2>
                         ⚙️ {t('settings.title')}
                         <span className="subtitle">— {t('settings.subtitle')}</span>
                     </h2>
-                    <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <button className="btn btn-ghost btn-icon" onClick={() => setIsFullscreen(!isFullscreen)} title={isFullscreen ? '退出全屏' : '全屏'}>
+                            {isFullscreen ? '⛶' : '⛶'}
+                        </button>
+                        <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+                    </div>
                 </div>
 
                 {/* Tab 导航 */}
@@ -788,6 +794,7 @@ const PROVIDERS = [
     { key: 'zhipu', label: '智谱AI (GLM)', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-flash', 'glm-4-plus', 'glm-4-long', 'glm-4'] },
     { key: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
     { key: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'] },
+    { key: 'claude', label: 'Claude (Anthropic)', baseUrl: 'https://api.anthropic.com', models: ['claude-sonnet-4-20250514', 'claude-3-7-sonnet-20250219', 'claude-3-5-haiku-20241022'] },
     { key: 'gemini', label: 'Gemini (OpenAI兼容)', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'] },
     { key: 'gemini-native', label: 'Gemini（原生格式）', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'] },
     { key: 'openai-responses', label: 'OpenAI Responses', baseUrl: 'https://api.openai.com/v1', models: [] },
