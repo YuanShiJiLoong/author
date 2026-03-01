@@ -534,9 +534,11 @@ export default function SettingsPanel() {
         setNodes(prev => prev.map(n => n.id === id ? { ...n, enabled: newEnabled } : n));
     };
 
-    const handleUpdateNode = async (id, updates) => {
-        await updateSettingsNode(id, updates);
+    const handleUpdateNode = (id, updates) => {
+        // 乐观更新：立即同步 React 状态，防止异步操作（如 embedding API）导致文字回退
         setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n));
+        // 后台持久化（不 await，避免阻塞 UI）
+        updateSettingsNode(id, updates);
     };
 
     const selectedNode = visibleNodes.find(n => n.id === selectedNodeId);

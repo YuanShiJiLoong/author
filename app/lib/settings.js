@@ -503,6 +503,9 @@ export async function addSettingsNode({ name, type, category, parentId, icon, co
 }
 
 // 更新节点 (Async)
+// Embedding 防抖定时器 — 避免每次编辑都触发 embedding API 调用
+const _embeddingTimers = {};
+
 export async function updateSettingsNode(id, updates) {
     const nodes = await getSettingsNodes();
     const idx = nodes.findIndex(n => n.id === id);
@@ -516,17 +519,35 @@ export async function updateSettingsNode(id, updates) {
         delete updates.parentId;
     }
 
-    // 如果名称或内容发生改变，且是条目，且开启了嵌入功能，重新计算 embedding
+    // 先立即保存内容（不等 embedding），确保数据不丢失
+    nodes[idx] = { ...nodes[idx], ...updates, updatedAt: new Date().toISOString() };
+    await saveSettingsNodes(nodes);
+
+    // 如果名称或内容发生改变，且是条目，且开启了嵌入功能，延迟计算 embedding
+    // 使用 3 秒防抖，避免输入过程中频繁调用 embedding API
     const nodeType = updates.type || nodes[idx].type;
     const { apiConfig } = getProjectSettings();
     if (nodeType === 'item' && apiConfig.useCustomEmbed && (updates.name !== undefined || updates.content !== undefined)) {
-        const tempNode = { ...nodes[idx], ...updates };
-        const textToEmbed = extractTextForEmbedding(tempNode);
-        updates.embedding = await getEmbedding(textToEmbed, apiConfig);
+        clearTimeout(_embeddingTimers[id]);
+        _embeddingTimers[id] = setTimeout(async () => {
+            try {
+                delete _embeddingTimers[id];
+                // 重新读取最新节点数据来计算 embedding
+                const freshNodes = await getSettingsNodes();
+                const freshIdx = freshNodes.findIndex(n => n.id === id);
+                if (freshIdx === -1) return;
+                const textToEmbed = extractTextForEmbedding(freshNodes[freshIdx]);
+                const embedding = await getEmbedding(textToEmbed, apiConfig);
+                if (embedding) {
+                    freshNodes[freshIdx] = { ...freshNodes[freshIdx], embedding };
+                    await saveSettingsNodes(freshNodes);
+                }
+            } catch (e) {
+                console.warn('[Settings] Deferred embedding failed for node', id, e);
+            }
+        }, 3000);
     }
 
-    nodes[idx] = { ...nodes[idx], ...updates, updatedAt: new Date().toISOString() };
-    await saveSettingsNodes(nodes);
     return nodes[idx];
 }
 
