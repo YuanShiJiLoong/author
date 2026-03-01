@@ -10,6 +10,7 @@ export default function UpdateBanner() {
     const [updating, setUpdating] = useState(false);
     const [updateResult, setUpdateResult] = useState(null); // { success, message, logs }
     const [downloadProgress, setDownloadProgress] = useState(null); // { progress, downloaded, total }
+    const [sourceProgress, setSourceProgress] = useState(null); // { step, total, label, status }
 
     const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -70,25 +71,49 @@ export default function UpdateBanner() {
         }
     };
 
-    // 源码部署：git pull + build
+    // 源码部署：SSE 流式更新
     const handleSourceUpdate = async () => {
         setUpdating(true);
         setUpdateResult(null);
+        setSourceProgress(null);
         try {
-            const res = await fetch('/api/update-source', { method: 'POST' });
-            const data = await res.json();
+            const res = await fetch('/api/update-source-stream', { method: 'POST' });
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
 
-            if (data.success) {
-                if (data.alreadyUpToDate) {
-                    setUpdateResult({ success: true, message: t('update.alreadyLatest'), logs: data.logs });
-                } else {
-                    setUpdateResult({ success: true, message: t('update.updateSuccess'), logs: data.logs });
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                const lines = buffer.split('\n\n');
+                buffer = lines.pop() || '';
+
+                for (const block of lines) {
+                    const dataLine = block.split('\n').find(l => l.startsWith('data: '));
+                    if (!dataLine) continue;
+                    const data = JSON.parse(dataLine.slice(6));
+
+                    if (data.done) {
+                        if (data.success) {
+                            if (data.alreadyUpToDate) {
+                                setUpdateResult({ success: true, message: t('update.alreadyLatest') });
+                            } else {
+                                setUpdateResult({ success: true, message: t('update.updateSuccess') });
+                            }
+                        } else {
+                            setUpdateResult({ success: false, message: t('update.updateFailed') + ': ' + (data.error || '') });
+                        }
+                        setSourceProgress(null);
+                    } else {
+                        setSourceProgress(data);
+                    }
                 }
-            } else {
-                setUpdateResult({ success: false, message: t('update.updateFailed') + ': ' + (data.error || ''), logs: data.logs });
             }
         } catch (err) {
-            setUpdateResult({ success: false, message: t('update.updateFailed') + ': ' + err.message, logs: [] });
+            setUpdateResult({ success: false, message: t('update.updateFailed') + ': ' + err.message });
+            setSourceProgress(null);
         } finally {
             setUpdating(false);
         }
@@ -128,7 +153,9 @@ export default function UpdateBanner() {
                         {updating
                             ? (downloadProgress
                                 ? `⬇️ ${downloadProgress.progress}%`
-                                : t('update.updating'))
+                                : sourceProgress
+                                    ? `${sourceProgress.label} (${sourceProgress.step}/${sourceProgress.total})`
+                                    : t('update.updating'))
                             : t('update.updateNow')
                         }
                     </button>
@@ -144,6 +171,20 @@ export default function UpdateBanner() {
                             width: `${downloadProgress.progress}%`, height: '100%',
                             background: '#a7f3d0', borderRadius: 3,
                             transition: 'width 0.3s ease',
+                        }} />
+                    </div>
+                )}
+
+                {/* 源码更新进度条 */}
+                {updating && sourceProgress && (
+                    <div style={{
+                        width: 120, height: 6, background: 'rgba(255,255,255,0.2)',
+                        borderRadius: 3, overflow: 'hidden', flexShrink: 0,
+                    }}>
+                        <div style={{
+                            width: `${(sourceProgress.step / sourceProgress.total) * 100}%`, height: '100%',
+                            background: sourceProgress.status === 'error' ? '#fca5a5' : '#a7f3d0',
+                            borderRadius: 3, transition: 'width 0.5s ease',
                         }} />
                     </div>
                 )}

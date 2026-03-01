@@ -477,6 +477,7 @@ export default function HelpPanel({ open, onClose }) {
     const [updating, setUpdating] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState(null); // { progress, downloaded, total }
     const [updateDone, setUpdateDone] = useState(null); // { success, message, logs }
+    const [sourceProgress, setSourceProgress] = useState(null); // { step, total, label, status }
 
     const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
@@ -528,24 +529,49 @@ export default function HelpPanel({ open, onClose }) {
         }
     };
 
-    // 源码部署：git pull + build
+    // 源码部署：SSE 流式更新
     const handleSourceUpdate = async () => {
         setUpdating(true);
         setUpdateDone(null);
+        setSourceProgress(null);
         try {
-            const res = await fetch('/api/update-source', { method: 'POST' });
-            const data = await res.json();
-            if (data.success) {
-                if (data.alreadyUpToDate) {
-                    setUpdateDone({ success: true, message: t('update.alreadyLatest'), logs: data.logs });
-                } else {
-                    setUpdateDone({ success: true, message: t('update.updateSuccess'), logs: data.logs });
+            const res = await fetch('/api/update-source-stream', { method: 'POST' });
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                const lines = buffer.split('\n\n');
+                buffer = lines.pop() || '';
+
+                for (const block of lines) {
+                    const dataLine = block.split('\n').find(l => l.startsWith('data: '));
+                    if (!dataLine) continue;
+                    const data = JSON.parse(dataLine.slice(6));
+
+                    if (data.done) {
+                        if (data.success) {
+                            if (data.alreadyUpToDate) {
+                                setUpdateDone({ success: true, message: t('update.alreadyLatest') });
+                            } else {
+                                setUpdateDone({ success: true, message: t('update.updateSuccess') });
+                            }
+                        } else {
+                            setUpdateDone({ success: false, message: t('update.updateFailed') + ': ' + (data.error || '') });
+                        }
+                        setSourceProgress(null);
+                    } else {
+                        setSourceProgress(data);
+                    }
                 }
-            } else {
-                setUpdateDone({ success: false, message: t('update.updateFailed') + ': ' + (data.error || ''), logs: data.logs });
             }
         } catch (err) {
-            setUpdateDone({ success: false, message: t('update.updateFailed') + ': ' + err.message, logs: [] });
+            setUpdateDone({ success: false, message: t('update.updateFailed') + ': ' + err.message });
+            setSourceProgress(null);
         } finally {
             setUpdating(false);
         }
@@ -706,6 +732,30 @@ export default function HelpPanel({ open, onClose }) {
                                 </div>
                                 <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
                                     ⬇️ {downloadProgress.progress}%
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 源码更新进度条 */}
+                        {updating && sourceProgress && (
+                            <div style={{ margin: '16px 0' }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, opacity: 0.8 }}>
+                                    {sourceProgress.label}
+                                    <span style={{ opacity: 0.5, marginLeft: 8 }}>
+                                        ({sourceProgress.step}/{sourceProgress.total})
+                                    </span>
+                                </div>
+                                <div style={{
+                                    width: '100%', height: 8, background: 'var(--bg-secondary)',
+                                    borderRadius: 4, overflow: 'hidden',
+                                }}>
+                                    <div style={{
+                                        width: `${(sourceProgress.step / sourceProgress.total) * 100}%`,
+                                        height: '100%',
+                                        background: sourceProgress.status === 'error' ? '#ef4444' : 'var(--accent)',
+                                        borderRadius: 4,
+                                        transition: 'width 0.5s ease',
+                                    }} />
                                 </div>
                             </div>
                         )}

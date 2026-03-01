@@ -387,9 +387,9 @@ ipcMain.handle('download-and-install-update', async (event) => {
 
         log(`Download complete: ${savePath}`);
 
-        // 4. 启动安装程序（静默模式）并退出当前应用
+        // 4. 启动安装程序（显示进度条 + 完成对话框）并退出当前应用
         log('Launching installer...');
-        const installer = spawn(savePath, ['/S'], {
+        const installer = spawn(savePath, [], {
             detached: true,
             stdio: 'ignore',
         });
