@@ -32,8 +32,9 @@ export async function POST(request) {
             ...(topP != null ? { top_p: topP } : {}),
         };
 
-        // 添加思考等级（默认 medium）
-        const effort = apiConfig?.reasoningEffort || 'medium';
+        // 添加思考等级（默认 medium，不受高级参数面板影响）
+        const rawEffort = apiConfig?.reasoningEffort;
+        const effort = (!rawEffort || rawEffort === 'auto') ? 'medium' : rawEffort;
         if (['low', 'medium', 'high', 'xhigh'].includes(effort)) {
             requestBody.reasoning = { effort, summary: 'auto' };
         }

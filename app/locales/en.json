@@ -465,7 +465,10 @@
     "maxContextLength": "Max Context Length",
     "maxContextLengthDesc": "Maximum context tokens sent to the model",
     "maxOutputTokens": "Max Output Tokens",
-    "maxOutputTokensDesc": "Maximum tokens per model response"
+    "maxOutputTokensDesc": "Maximum tokens per model response",
+    "reasoningEffort": "Reasoning Effort",
+    "reasoningAuto": "Auto (no override)",
+    "reasoningEffortDesc": "Controls reasoning depth, only affects models that support reasoning"
   },
   "preferences": {
     "intro": "You can change your language and visual theme preferences here at any time. All changes take effect immediately and are saved locally.",

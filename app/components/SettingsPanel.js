@@ -1135,20 +1135,43 @@ function ApiConfigForm({ data, onChange }) {
                         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{t('apiConfig.maxContextLengthDesc')}</div>
                     </div>
 
-                    {/* 最大输出 Token */}
-                    <div style={{ marginBottom: 0 }}>
-                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
-                            {t('apiConfig.maxOutputTokens')}
-                        </label>
-                        <input
-                            type="number" min="256" step="256"
-                            className="modal-input"
-                            style={{ margin: 0, width: 160, padding: '5px 8px', fontSize: 13 }}
-                            value={data.maxOutputTokens ?? 65536}
-                            onChange={e => update('maxOutputTokens', parseInt(e.target.value) || 4096)}
-                        />
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{t('apiConfig.maxOutputTokensDesc')}</div>
-                    </div>
+                    {/* 最大输出 Token — Responses API 不适用 */}
+                    {data.provider !== 'openai-responses' && (
+                        <div style={{ marginBottom: 14 }}>
+                            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
+                                {t('apiConfig.maxOutputTokens')}
+                            </label>
+                            <input
+                                type="number" min="256" step="256"
+                                className="modal-input"
+                                style={{ margin: 0, width: 160, padding: '5px 8px', fontSize: 13 }}
+                                value={data.maxOutputTokens ?? 65536}
+                                onChange={e => update('maxOutputTokens', parseInt(e.target.value) || 4096)}
+                            />
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{t('apiConfig.maxOutputTokensDesc')}</div>
+                        </div>
+                    )}
+
+                    {/* 思考层级 — Responses API 有自己的内置思考层级 */}
+                    {data.provider !== 'openai-responses' && (
+                        <div style={{ marginBottom: 0 }}>
+                            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5 }}>
+                                {t('apiConfig.reasoningEffort')}
+                            </label>
+                            <select
+                                className="modal-input"
+                                style={{ margin: 0, width: 160, padding: '5px 8px', fontSize: 13 }}
+                                value={data.reasoningEffort || 'auto'}
+                                onChange={e => update('reasoningEffort', e.target.value)}
+                            >
+                                <option value="auto">{t('apiConfig.reasoningAuto')}</option>
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                            </select>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{t('apiConfig.reasoningEffortDesc')}</div>
+                        </div>
+                    )}
                 </div>
             )}
 

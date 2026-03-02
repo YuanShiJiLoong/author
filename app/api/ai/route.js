@@ -5,7 +5,7 @@ export const runtime = 'edge';
 
 export async function POST(request) {
     try {
-        const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP } = await request.json();
+        const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, reasoningEffort } = await request.json();
 
         const apiKey = apiConfig?.apiKey || process.env.ZHIPU_API_KEY;
         const baseUrl = apiConfig?.baseUrl || 'https://open.bigmodel.cn/api/paas/v4';
@@ -33,9 +33,10 @@ export async function POST(request) {
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userPrompt }
                 ],
-                temperature: temperature ?? 0.8,
+                ...(temperature != null ? { temperature } : {}),
                 ...(topP != null ? { top_p: topP } : {}),
                 ...(maxTokens ? { max_tokens: maxTokens } : {}),
+                ...(reasoningEffort && reasoningEffort !== 'auto' ? { reasoning_effort: reasoningEffort } : {}),
                 stream: true,
             }),
         });

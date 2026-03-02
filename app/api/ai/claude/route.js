@@ -5,7 +5,7 @@ export const runtime = 'edge';
 
 export async function POST(request) {
     try {
-        const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP } = await request.json();
+        const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, reasoningEffort } = await request.json();
 
         const apiKey = apiConfig?.apiKey;
         const baseUrl = (apiConfig?.baseUrl || 'https://api.anthropic.com').replace(/\/$/, '');
@@ -23,7 +23,7 @@ export async function POST(request) {
         // 构造 Messages API 请求体
         const requestBody = {
             model,
-            max_tokens: maxTokens || 4096,
+            max_tokens: maxTokens || 8192,
             system: systemPrompt,
             messages: [
                 { role: 'user', content: userPrompt }
@@ -33,8 +33,16 @@ export async function POST(request) {
             ...(topP != null ? { top_p: topP } : {}),
         };
 
-        // 如果模型支持 extended thinking (claude-3-7-sonnet)，可以启用
-        // 但默认不启用，因为需要额外的 budget 参数
+        // 扩展思考 (extended thinking) — 当 reasoningEffort 不为 auto 时启用
+        if (reasoningEffort && reasoningEffort !== 'auto') {
+            const budgetMap = { low: 2048, medium: 8192, high: 32768 };
+            requestBody.thinking = {
+                type: 'enabled',
+                budget_tokens: budgetMap[reasoningEffort] || 8192,
+            };
+            // 扩展思考不支持同时设 temperature
+            delete requestBody.temperature;
+        }
 
         const response = await fetch(url, {
             method: 'POST',

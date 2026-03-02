@@ -214,7 +214,8 @@ export default function AiSidebar({ onInsertText }) {
                     maxTokens: apiConfig.maxOutputTokens || 65536,
                     temperature: apiConfig.temperature ?? 1,
                     topP: apiConfig.topP ?? 0.95,
-                } : { maxTokens: 4096 }),
+                    reasoningEffort: apiConfig.reasoningEffort || 'auto',
+                } : {}),
             }),
         });
 

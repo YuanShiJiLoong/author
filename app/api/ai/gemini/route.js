@@ -5,7 +5,7 @@ export const runtime = 'edge';
 
 export async function POST(request) {
     try {
-        const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP } = await request.json();
+        const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, reasoningEffort } = await request.json();
 
         const apiKey = apiConfig?.apiKey || process.env.GEMINI_API_KEY;
         let rawBaseUrl = apiConfig?.baseUrl;
@@ -36,9 +36,14 @@ export async function POST(request) {
                 }
             ],
             generationConfig: {
-                temperature: temperature ?? 0.8,
-                topP: topP ?? 0.9,
+                ...(temperature != null ? { temperature } : {}),
+                ...(topP != null ? { topP } : {}),
                 ...(maxTokens ? { maxOutputTokens: maxTokens } : {}),
+                ...(reasoningEffort && reasoningEffort !== 'auto' ? {
+                    thinkingConfig: {
+                        thinkingBudget: { low: 1024, medium: 8192, high: 32768 }[reasoningEffort] || 8192,
+                    },
+                } : {}),
             },
         };
 
