@@ -38,11 +38,12 @@ I watched the versatility of these models being gutted. I don't want us to live 
 - Real-time word / character / paragraph count
 
 ### 🤖 AI Writing Assistant
-- **Multi-provider support**: ZhipuAI GLM-4 / DeepSeek / OpenAI / Google Gemini
+- **Multi-provider support**: ZhipuAI GLM-4 / DeepSeek / OpenAI / Google Gemini / Alibaba Cloud Bailian / MiniMax
 - **Continue / Rewrite / Polish / Expand** — one-click generation
 - **Ghost Text** streaming preview — see AI output in real-time like Cursor, with accept/reject
 - **Free chat mode** — discuss plot, characters, and settings with AI
 - **Context engine** — AI automatically reads your character profiles, worldbuilding, and previous chapters to maintain story consistency
+- **API format switching** — Alibaba Cloud Bailian and MiniMax support both OpenAI and Anthropic API formats
 
 ### 📚 Worldbuilding Manager
 - **Tree-structured** management for characters, locations, items, outlines, and writing rules
@@ -156,6 +157,8 @@ Author supports multiple AI providers. Configure via **environment variables** o
 | Google Gemini | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
 | DeepSeek | In-app config | [platform.deepseek.com](https://platform.deepseek.com/) |
 | OpenAI / Compatible | In-app config | [platform.openai.com](https://platform.openai.com/) |
+| Alibaba Cloud Bailian | In-app config | [bailian.console.aliyun.com](https://bailian.console.aliyun.com/) |
+| MiniMax | In-app config | [platform.minimaxi.com](https://platform.minimaxi.com/) |
 
 > 💡 **No API key required** for most editing features. AI features need at least one provider configured.
 

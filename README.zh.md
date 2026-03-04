@@ -38,11 +38,12 @@
 - 实时字数/字符/段落统计
 
 ### 🤖 AI 写作助手
-- **多 AI 供应商**：智谱 GLM-4 / DeepSeek / OpenAI / Google Gemini
+- **多 AI 供应商**：智谱 GLM-4 / DeepSeek / OpenAI / Google Gemini / 阿里云百炼 / MiniMax
 - **续写 / 改写 / 润色 / 扩写**，一键生成
 - **Ghost Text** 流式预览 — 像 Cursor 一样实时显示 AI 生成内容，支持接受/拒绝
 - **自由对话模式** — 与 AI 讨论剧情、角色、设定
 - **上下文引擎** — AI 自动感知你的角色设定、世界观、前文，保持剧情连贯
+- **API 格式切换** — 阿里云百炼和 MiniMax 同时支持 OpenAI 和 Anthropic 两种 API 格式
 
 ### 📚 设定集管理
 - **树形结构**管理角色、地点、物品、大纲、写作规则
@@ -159,6 +160,8 @@ Author 支持多种 AI 供应商，你可以通过 **环境变量** 或 **应用
 | Google Gemini | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
 | DeepSeek | 应用内配置 | [platform.deepseek.com](https://platform.deepseek.com/) |
 | OpenAI / 兼容 | 应用内配置 | [platform.openai.com](https://platform.openai.com/) |
+| 阿里云百炼 | 应用内配置 | [bailian.console.aliyun.com](https://bailian.console.aliyun.com/) |
+| MiniMax | 应用内配置 | [platform.minimaxi.com](https://platform.minimaxi.com/) |
 
 > 💡 **无需 API Key 也能使用**大部分编辑功能。AI 功能需要至少配置一个供应商。
 

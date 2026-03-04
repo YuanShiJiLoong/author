@@ -802,12 +802,14 @@ const PROVIDERS = [
     { key: 'zhipu', label: '智谱AI (GLM)', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-flash', 'glm-4-plus', 'glm-4-long', 'glm-4'] },
     { key: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
     { key: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'] },
-    { key: 'claude', label: 'Claude (Anthropic)', baseUrl: 'https://api.anthropic.com', models: ['claude-sonnet-4-20250514', 'claude-3-7-sonnet-20250219', 'claude-3-5-haiku-20241022'] },
+    { key: 'claude', label: 'Claude (Anthropic)', baseUrl: 'https://api.anthropic.com', models: ['claude-sonnet-4-20250514', 'claude-3-7-sonnet-20250219', 'claude-3-5-haiku-20241022'], apiFormat: 'anthropic' },
     { key: 'gemini', label: 'Gemini (OpenAI兼容)', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'] },
     { key: 'gemini-native', label: 'Gemini（原生格式）', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'] },
     { key: 'openai-responses', label: 'OpenAI Responses', baseUrl: 'https://api.openai.com/v1', models: [] },
+    { key: 'bailian', label: '阿里云百炼', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', anthropicBaseUrl: 'https://dashscope.aliyuncs.com/apps/anthropic', models: ['qwen3.5-plus', 'qwen3-max'], supportedFormats: ['openai', 'anthropic'], defaultFormat: 'openai', allowCustomModel: true },
+    { key: 'volcengine', label: '火山引擎 (豆包)', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: [], hint: '需在火山引擎控制台创建推理接入点，填入 endpoint_id 作为模型名' },
+    { key: 'minimax', label: 'MiniMax', baseUrl: 'https://api.minimax.chat/v1', anthropicBaseUrl: 'https://api.minimaxi.com/anthropic', models: ['MiniMax-M2.5', 'MiniMax-M2.1', 'MiniMax-M2.5-highspeed'], supportedFormats: ['openai', 'anthropic'], defaultFormat: 'openai', allowCustomModel: true },
     { key: 'siliconflow', label: 'SiliconFlow (硅基流动)', baseUrl: 'https://api.siliconflow.cn/v1', models: ['deepseek-ai/DeepSeek-V3', 'Qwen/Qwen2.5-72B-Instruct', 'THUDM/glm-4-9b-chat'] },
-    { key: 'volcengine', label: '火山引擎 (豆包)', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: [] },
     { key: 'moonshot', label: 'Moonshot (Kimi)', baseUrl: 'https://api.moonshot.cn/v1', models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'] },
     { key: 'custom', label: '自定义 (OpenAI兼容)', baseUrl: '', models: [] },
     { key: 'custom-gemini', label: '自定义 (Gemini格式)', baseUrl: '', models: [] },
@@ -888,6 +890,16 @@ function ApiConfigForm({ data, onChange }) {
     const [showSaveInput, setShowSaveInput] = useState(false);
     const { t } = useI18n();
 
+    // 根据 provider 和 apiFormat 获取正确的 baseUrl
+    const getBaseUrl = (provider, apiFormat) => {
+        const p = PROVIDERS.find(pr => pr.key === provider);
+        if (!p) return '';
+        if (apiFormat === 'anthropic' && p.anthropicBaseUrl) {
+            return p.anthropicBaseUrl;
+        }
+        return p.baseUrl || '';
+    };
+
     useEffect(() => {
         try {
             const saved = localStorage.getItem('author-api-profiles');
@@ -918,12 +930,34 @@ function ApiConfigForm({ data, onChange }) {
     const handleProviderChange = (providerKey) => {
         const provider = PROVIDERS.find(p => p.key === providerKey);
         if (provider) {
-            onChange({ ...data, provider: providerKey, baseUrl: providerKey === 'custom' ? '' : (provider.baseUrl || data.baseUrl), model: providerKey === 'custom' ? '' : (provider.models[0] || data.model) });
+            const defaultFormat = provider.defaultFormat || 'openai';
+            const newConfig = {
+                ...data,
+                provider: providerKey,
+                baseUrl: providerKey === 'custom' ? '' : getBaseUrl(providerKey, provider.supportedFormats ? defaultFormat : undefined),
+                model: providerKey === 'custom' ? '' : (provider.models[0] || data.model)
+            };
+            // 设置默认 apiFormat
+            if (provider.supportedFormats) {
+                newConfig.apiFormat = defaultFormat;
+            } else if (provider.apiFormat) {
+                newConfig.apiFormat = provider.apiFormat;
+            } else {
+                // 不需要 apiFormat 的 provider，清除该字段
+                delete newConfig.apiFormat;
+            }
+            onChange(newConfig);
         }
         setTestStatus(null);
         setFetchedModels(null);
         setFetchedEmbedModels(null);
         setBalanceInfo(null);
+    };
+
+    // 切换 apiFormat 时自动更新 baseUrl
+    const handleApiFormatChange = (format) => {
+        const newBaseUrl = getBaseUrl(data.provider, format);
+        onChange({ ...data, apiFormat: format, baseUrl: newBaseUrl });
     };
 
     const handleTestConnection = async () => {
@@ -1024,6 +1058,49 @@ function ApiConfigForm({ data, onChange }) {
                         {t('apiConfig.geminiNativeHint')}
                     </div>
                 )}
+                {data.provider === 'volcengine' && (
+                    <div style={{ marginTop: 8, padding: '8px 12px', background: 'var(--accent-light)', borderRadius: 'var(--radius-sm)', fontSize: 11, color: 'var(--accent)', lineHeight: 1.6 }}>
+                        火山引擎需要先在控制台创建「推理接入点」，然后将 endpoint_id（如 ep-xxxx）填入模型字段。支持豆包系列模型。
+                    </div>
+                )}
+                {data.provider === 'bailian' && (
+                    <div style={{ marginTop: 8 }}>
+                        <div style={{ padding: '8px 12px', background: 'var(--accent-light)', borderRadius: 'var(--radius-sm)', fontSize: 11, color: 'var(--accent)', lineHeight: 1.6, marginBottom: 8 }}>
+                            阿里云百炼平台 API Key 在「模型服务灵积」控制台获取，支持通义千问系列模型。
+                        </div>
+                        <div style={{ marginTop: 6 }}>
+                            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 4 }}>API 格式</label>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                                {[
+                                    { key: 'openai', label: 'OpenAI 兼容' },
+                                    { key: 'anthropic', label: 'Anthropic 兼容' },
+                                ].map(opt => (
+                                    <button key={opt.key} style={{ padding: '5px 12px', border: (data.apiFormat || 'openai') === opt.key ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: (data.apiFormat || 'openai') === opt.key ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 11, fontWeight: (data.apiFormat || 'openai') === opt.key ? 600 : 400, color: (data.apiFormat || 'openai') === opt.key ? 'var(--accent)' : 'var(--text-primary)', transition: 'all 0.15s' }} onClick={() => handleApiFormatChange(opt.key)}>{opt.label}</button>
+                                ))}
+                            </div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>Anthropic 格式可解锁 Claude 代码复用，OpenAI 格式兼容性更广</div>
+                        </div>
+                    </div>
+                )}
+                {data.provider === 'minimax' && (
+                    <div style={{ marginTop: 8 }}>
+                        <div style={{ padding: '8px 12px', background: 'var(--accent-light)', borderRadius: 'var(--radius-sm)', fontSize: 11, color: 'var(--accent)', lineHeight: 1.6, marginBottom: 8 }}>
+                            MiniMax API Key 在开放平台获取，支持 abab 系列和 MiniMax-Text 系列模型。
+                        </div>
+                        <div style={{ marginTop: 6 }}>
+                            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 4 }}>API 格式</label>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                                {[
+                                    { key: 'openai', label: 'OpenAI 兼容' },
+                                    { key: 'anthropic', label: 'Anthropic 兼容' },
+                                ].map(opt => (
+                                    <button key={opt.key} style={{ padding: '5px 12px', border: (data.apiFormat || 'openai') === opt.key ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: (data.apiFormat || 'openai') === opt.key ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 11, fontWeight: (data.apiFormat || 'openai') === opt.key ? 600 : 400, color: (data.apiFormat || 'openai') === opt.key ? 'var(--accent)' : 'var(--text-primary)', transition: 'all 0.15s' }} onClick={() => handleApiFormatChange(opt.key)}>{opt.label}</button>
+                                ))}
+                            </div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>Anthropic 格式可解锁 Claude 代码复用，OpenAI 格式兼容性更广</div>
+                        </div>
+                    </div>
+                )}
                 {data.provider === 'openai-responses' && (
                     <div style={{ marginTop: 10 }}>
                         <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 6 }}>思考等级 (Reasoning Effort)</label>
@@ -1110,6 +1187,12 @@ function ApiConfigForm({ data, onChange }) {
                         ))}
                     </div>
                     {Array.isArray(fetchedModels) && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('apiConfig.fetchedCount').replace('{count}', fetchedModels.length)}</div>}
+                    {/* 支持自定义模型的 provider 显示输入框 */}
+                    {currentProvider.allowCustomModel && (
+                        <div style={{ marginTop: 8 }}>
+                            <input className="modal-input" style={{ marginBottom: 0 }} value={data.model || ''} onChange={e => update('model', e.target.value)} placeholder="或输入自定义模型名称" />
+                        </div>
+                    )}
                 </div>
             ) : (
                 <div style={{ marginBottom: 14 }}>

@@ -225,7 +225,7 @@ export default function Home() {
       const { apiConfig } = getProjectSettings();
       const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
         : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-          : ['claude', 'custom-claude'].includes(apiConfig?.provider) ? '/api/ai/claude'
+          : (['claude', 'custom-claude'].includes(apiConfig?.provider) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
             : '/api/ai';
 
       const res = await fetch(apiEndpoint, {

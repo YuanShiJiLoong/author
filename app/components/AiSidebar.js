@@ -47,11 +47,13 @@ function getProviderColor(provider, model) {
     if (p.includes('anthropic') || m.includes('claude')) return 'linear-gradient(135deg, #d97757 0%, #b85d3f 100%)';
     if (p.includes('gemini') || p.includes('google') || m.includes('gemini')) return 'linear-gradient(135deg, #4285f4 0%, #8ab4f8 100%)';
     if (p.includes('deepseek') || m.includes('deepseek')) return 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)';
-    if (p.includes('qwen') || p.includes('dashscope') || p.includes('ali') || m.includes('qwen')) return 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)';
+    if (p.includes('qwen') || p.includes('dashscope') || p.includes('ali') || p.includes('bailian') || m.includes('qwen')) return 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)';
     if (p.includes('siliconflow') || m.includes('silicon')) return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
     if (p.includes('ollama') || m.includes('llama')) return 'linear-gradient(135deg, #14b8a6 0%, #0f766e 100%)';
     if (p.includes('custom')) return 'linear-gradient(135deg, #4b5563 0%, #374151 100%)';
     if (p.includes('openrouter')) return 'linear-gradient(135deg, #818cf8 0%, #6366f1 100%)';
+    if (p.includes('volcengine') || p.includes('火山') || m.includes('doubao')) return 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)';
+    if (p.includes('minimax') || m.includes('abab')) return 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)';
 
     // Hash-based dynamic fallback colors for anything else
     const colors = [
@@ -89,6 +91,12 @@ function ProviderLogo({ provider, model, className = '' }) {
         svg = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>;
     } else if (p.includes('openrouter')) {
         svg = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /><path d="M2 12h20" /></svg>;
+    } else if (p.includes('volcengine') || p.includes('火山') || m.includes('doubao')) {
+        svg = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" /></svg>;
+    } else if (p.includes('minimax') || m.includes('abab')) {
+        svg = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>;
+    } else if (p.includes('bailian') || p.includes('qwen')) {
+        svg = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>;
     }
 
     return svg;
@@ -296,7 +304,7 @@ export default function AiSidebar({ onInsertText }) {
             const { apiConfig } = getProjectSettings();
             const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
                 : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-                    : ['claude', 'custom-claude'].includes(apiConfig?.provider) ? '/api/ai/claude'
+                    : (['claude', 'custom-claude'].includes(apiConfig?.provider) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
                         : '/api/ai';
 
             const context = await buildContext(activeChapterId, text, contextSelection.size > 0 ? contextSelection : null);
@@ -363,7 +371,7 @@ export default function AiSidebar({ onInsertText }) {
             const { apiConfig } = getProjectSettings();
             const apiEndpoint = ['gemini-native', 'custom-gemini'].includes(apiConfig?.provider) ? '/api/ai/gemini'
                 : apiConfig?.provider === 'openai-responses' ? '/api/ai/responses'
-                    : ['claude', 'custom-claude'].includes(apiConfig?.provider) ? '/api/ai/claude'
+                    : (['claude', 'custom-claude'].includes(apiConfig?.provider) || apiConfig?.apiFormat === 'anthropic') ? '/api/ai/claude'
                         : '/api/ai';
 
             const context = await buildContext(activeChapterId, userMsg.content, contextSelection.size > 0 ? contextSelection : null);

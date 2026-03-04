@@ -19,6 +19,8 @@ const PROVIDER_CN_RATIO = {
     siliconflow: 2.5,
     volcengine: 2.5,
     moonshot: 2.5,
+    bailian: 2.5,      // 阿里云百炼 (Qwen) - OpenAI 格式
+    minimax: 2.5,      // MiniMax - OpenAI 格式
     // 西方模型 — 中文效率较低
     openai: 1.5,
     'openai-responses': 1.5,
@@ -37,6 +39,11 @@ function getCnRatio() {
     try {
         const settings = getProjectSettings();
         const provider = settings.apiConfig?.provider || 'custom';
+        const apiFormat = settings.apiConfig?.apiFormat;
+        // 如果使用 Anthropic 格式，使用 Claude 的比例
+        if (apiFormat === 'anthropic') {
+            return 1.8;
+        }
         return PROVIDER_CN_RATIO[provider] || 2.0;
     } catch {
         return 2.0;
