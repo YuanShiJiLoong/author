@@ -38,7 +38,8 @@ I watched the versatility of these models being gutted. I don't want us to live 
 - Real-time word / character / paragraph count
 
 ### 🤖 AI Writing Assistant
-- **Multi-provider support**: ZhipuAI GLM-4 / DeepSeek / OpenAI / Google Gemini / Alibaba Cloud Bailian / MiniMax
+
+- **Multi-provider support**: ZhipuAI GLM-4 / DeepSeek / OpenAI / Google Gemini / Claude / SiliconFlow / Volcengine / Alibaba Cloud Bailian / MiniMax / Moonshot + custom endpoints
 - **Continue / Rewrite / Polish / Expand** — one-click generation
 - **Ghost Text** streaming preview — see AI output in real-time like Cursor, with accept/reject
 - **Free chat mode** — discuss plot, characters, and settings with AI
@@ -154,11 +155,20 @@ Author supports multiple AI providers. Configure via **environment variables** o
 | Provider | Env Variable | Get API Key |
 |----------|-------------|-------------|
 | ZhipuAI (GLM-4) | `ZHIPU_API_KEY` | [open.bigmodel.cn](https://open.bigmodel.cn/) |
-| Google Gemini | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
+| Google Gemini (Native) | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
+| Google Gemini (OpenAI-compat) | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
 | DeepSeek | In-app config | [platform.deepseek.com](https://platform.deepseek.com/) |
-| OpenAI / Compatible | In-app config | [platform.openai.com](https://platform.openai.com/) |
+| OpenAI | In-app config | [platform.openai.com](https://platform.openai.com/) |
+| OpenAI Responses | In-app config | [platform.openai.com](https://platform.openai.com/) |
+| Claude (Anthropic) | `CLAUDE_API_KEY` | [console.anthropic.com](https://console.anthropic.com/) |
+| SiliconFlow (硅基流动) | In-app config | [siliconflow.cn](https://siliconflow.cn/) |
+| Volcengine (火山引擎/豆包) | In-app config | [console.volcengine.com](https://console.volcengine.com/) |
 | Alibaba Cloud Bailian | In-app config | [bailian.console.aliyun.com](https://bailian.console.aliyun.com/) |
 | MiniMax | In-app config | [platform.minimaxi.com](https://platform.minimaxi.com/) |
+| Moonshot (Kimi) | In-app config | [platform.moonshot.cn](https://platform.moonshot.cn/) |
+| Custom (OpenAI-compat) | In-app config | Any OpenAI-compatible endpoint |
+| Custom (Gemini format) | In-app config | Any Gemini-compatible endpoint |
+| Custom (Claude format) | In-app config | Any Claude-compatible endpoint |
 
 > 💡 **No API key required** for most editing features. AI features need at least one provider configured.
 

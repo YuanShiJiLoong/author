@@ -38,7 +38,7 @@
 - 实时字数/字符/段落统计
 
 ### 🤖 AI 写作助手
-- **多 AI 供应商**：智谱 GLM-4 / DeepSeek / OpenAI / Google Gemini / 阿里云百炼 / MiniMax
+- **多 AI 供应商**：智谱 GLM-4 / DeepSeek / OpenAI / Google Gemini / Claude / SiliconFlow / 火山引擎 / 阿里云百炼 / MiniMax / Moonshot + 自定义端点
 - **续写 / 改写 / 润色 / 扩写**，一键生成
 - **Ghost Text** 流式预览 — 像 Cursor 一样实时显示 AI 生成内容，支持接受/拒绝
 - **自由对话模式** — 与 AI 讨论剧情、角色、设定
@@ -157,11 +157,20 @@ Author 支持多种 AI 供应商，你可以通过 **环境变量** 或 **应用
 | 供应商 | 环境变量 | 获取 API Key |
 |--------|---------|-------------|
 | 智谱 AI (GLM-4) | `ZHIPU_API_KEY` | [open.bigmodel.cn](https://open.bigmodel.cn/) |
-| Google Gemini | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
+| Google Gemini（原生格式） | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
+| Google Gemini（OpenAI 兼容） | `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) |
 | DeepSeek | 应用内配置 | [platform.deepseek.com](https://platform.deepseek.com/) |
-| OpenAI / 兼容 | 应用内配置 | [platform.openai.com](https://platform.openai.com/) |
+| OpenAI | 应用内配置 | [platform.openai.com](https://platform.openai.com/) |
+| OpenAI Responses | 应用内配置 | [platform.openai.com](https://platform.openai.com/) |
+| Claude (Anthropic) | `CLAUDE_API_KEY` | [console.anthropic.com](https://console.anthropic.com/) |
+| SiliconFlow (硅基流动) | 应用内配置 | [siliconflow.cn](https://siliconflow.cn/) |
+| 火山引擎 (豆包) | 应用内配置 | [console.volcengine.com](https://console.volcengine.com/) |
 | 阿里云百炼 | 应用内配置 | [bailian.console.aliyun.com](https://bailian.console.aliyun.com/) |
 | MiniMax | 应用内配置 | [platform.minimaxi.com](https://platform.minimaxi.com/) |
+| Moonshot (Kimi) | 应用内配置 | [platform.moonshot.cn](https://platform.moonshot.cn/) |
+| 自定义（OpenAI 兼容） | 应用内配置 | 任何 OpenAI 兼容端点 |
+| 自定义（Gemini 格式） | 应用内配置 | 任何 Gemini 兼容端点 |
+| 自定义（Claude 格式） | 应用内配置 | 任何 Claude 兼容端点 |
 
 > 💡 **无需 API Key 也能使用**大部分编辑功能。AI 功能需要至少配置一个供应商。
 
