@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { proxyFetch } from '../../lib/proxy-fetch';
 
 // ==================== API 余额查询 ====================
 // 三层瀑布策略：
@@ -8,7 +9,7 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request) {
     try {
-        const { provider, apiKey, baseUrl } = await request.json();
+        const { provider, apiKey, baseUrl, proxyUrl } = await request.json();
         if (!apiKey) {
             return NextResponse.json({ error: '未配置 API Key' }, { status: 400 });
         }
@@ -21,18 +22,18 @@ export async function POST(request) {
 
         if (isKnown) {
             // 已知供应商：专用接口优先（避免通用接口返回错误数据）
-            const providerResult = await tryProviderSpecific(provider, effectiveBaseUrl, apiKey);
+            const providerResult = await tryProviderSpecific(provider, effectiveBaseUrl, apiKey, proxyUrl);
             if (providerResult) return NextResponse.json(providerResult);
         }
 
         // 通用接口：/dashboard/billing/subscription + /dashboard/billing/usage
         // 覆盖 NewAPI / OneAPI / ChatGPT-Next-Web 等中转
-        const universalResult = await tryUniversalBilling(effectiveBaseUrl, apiKey);
+        const universalResult = await tryUniversalBilling(effectiveBaseUrl, apiKey, proxyUrl);
         if (universalResult) return NextResponse.json(universalResult);
 
         // 未知供应商 + 自定义：尝试所有专用接口
         if (!isKnown) {
-            const providerResult = await tryProviderSpecific(provider, effectiveBaseUrl, apiKey);
+            const providerResult = await tryProviderSpecific(provider, effectiveBaseUrl, apiKey, proxyUrl);
             if (providerResult) return NextResponse.json(providerResult);
         }
 
@@ -49,7 +50,7 @@ export async function POST(request) {
 
 // ==================== 1. 通用 NewAPI/OneAPI 计费接口 ====================
 
-async function tryUniversalBilling(baseUrl, apiKey) {
+async function tryUniversalBilling(baseUrl, apiKey, proxyUrl) {
     if (!baseUrl) return null;
 
     // 去掉可能的 /v1 后缀，因为 billing 接口在根路径下
@@ -64,8 +65,8 @@ async function tryUniversalBilling(baseUrl, apiKey) {
         const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().slice(0, 10);
 
         const [subRes, usageRes] = await Promise.all([
-            fetchWithTimeout(`${root}/dashboard/billing/subscription`, { headers }, 8000),
-            fetchWithTimeout(`${root}/dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`, { headers }, 8000),
+            fetchWithTimeout(`${root}/dashboard/billing/subscription`, { headers }, 8000, proxyUrl),
+            fetchWithTimeout(`${root}/dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`, { headers }, 8000, proxyUrl),
         ]);
 
         if (!subRes.ok && !usageRes.ok) return null;
@@ -111,7 +112,7 @@ async function tryUniversalBilling(baseUrl, apiKey) {
 
 // ==================== 2. 供应商专用接口 ====================
 
-async function tryProviderSpecific(provider, baseUrl, apiKey) {
+async function tryProviderSpecific(provider, baseUrl, apiKey, proxyUrl) {
     const handlers = {
         deepseek: tryDeepSeek,
         siliconflow: trySiliconFlow,
@@ -122,14 +123,14 @@ async function tryProviderSpecific(provider, baseUrl, apiKey) {
     // 根据已知供应商直接尝试
     const handler = handlers[provider];
     if (handler) {
-        const result = await handler(baseUrl, apiKey);
+        const result = await handler(baseUrl, apiKey, proxyUrl);
         if (result) return result;
     }
 
     // 对于自定义供应商，尝试所有已知的接口模式
     if (provider === 'custom' || provider === 'custom-gemini' || provider === 'custom-claude') {
         for (const fn of Object.values(handlers)) {
-            const result = await fn(baseUrl, apiKey);
+            const result = await fn(baseUrl, apiKey, proxyUrl);
             if (result) return result;
         }
     }
@@ -138,12 +139,12 @@ async function tryProviderSpecific(provider, baseUrl, apiKey) {
 }
 
 // --- DeepSeek ---
-async function tryDeepSeek(baseUrl, apiKey) {
+async function tryDeepSeek(baseUrl, apiKey, proxyUrl) {
     try {
         const root = (baseUrl || 'https://api.deepseek.com/v1').replace(/\/v1\/?$/, '');
         const res = await fetchWithTimeout(`${root}/user/balance`, {
             headers: { 'Authorization': `Bearer ${apiKey}` },
-        }, 8000);
+        }, 8000, proxyUrl);
         if (!res.ok) return null;
         const data = await res.json();
         if (!data.balance_infos && !data.is_available) return null;
@@ -166,12 +167,12 @@ async function tryDeepSeek(baseUrl, apiKey) {
 }
 
 // --- SiliconFlow ---
-async function trySiliconFlow(baseUrl, apiKey) {
+async function trySiliconFlow(baseUrl, apiKey, proxyUrl) {
     try {
         const root = (baseUrl || 'https://api.siliconflow.cn/v1').replace(/\/v1\/?$/, '');
         const res = await fetchWithTimeout(`${root}/v1/user/info`, {
             headers: { 'Authorization': `Bearer ${apiKey}` },
-        }, 8000);
+        }, 8000, proxyUrl);
         if (!res.ok) return null;
         const data = await res.json();
         const d = data.data || data;
@@ -194,11 +195,11 @@ async function trySiliconFlow(baseUrl, apiKey) {
 }
 
 // --- OpenRouter ---
-async function tryOpenRouter(baseUrl, apiKey) {
+async function tryOpenRouter(baseUrl, apiKey, proxyUrl) {
     try {
         const res = await fetchWithTimeout('https://openrouter.ai/api/v1/credits', {
             headers: { 'Authorization': `Bearer ${apiKey}` },
-        }, 8000);
+        }, 8000, proxyUrl);
         if (!res.ok) return null;
         const data = await res.json();
         const d = data.data || data;
@@ -222,12 +223,12 @@ async function tryOpenRouter(baseUrl, apiKey) {
 }
 
 // --- Moonshot ---
-async function tryMoonshot(baseUrl, apiKey) {
+async function tryMoonshot(baseUrl, apiKey, proxyUrl) {
     try {
         const root = (baseUrl || 'https://api.moonshot.cn/v1').replace(/\/v1\/?$/, '');
         const res = await fetchWithTimeout(`${root}/v1/users/me/balance`, {
             headers: { 'Authorization': `Bearer ${apiKey}` },
-        }, 8000);
+        }, 8000, proxyUrl);
         if (!res.ok) return null;
         const data = await res.json();
         const d = data.data || data;
@@ -256,11 +257,11 @@ function round(n) {
     return Math.round(n * 100) / 100;
 }
 
-async function fetchWithTimeout(url, options, timeoutMs = 8000) {
+async function fetchWithTimeout(url, options, timeoutMs = 8000, proxyUrl) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        const res = await fetch(url, { ...options, signal: controller.signal });
+        const res = await proxyFetch(url, { ...options, signal: controller.signal }, proxyUrl);
         return res;
     } finally {
         clearTimeout(timer);

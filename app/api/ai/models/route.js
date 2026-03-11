@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
+import { proxyFetch } from '../../../lib/proxy-fetch';
 
 // 通用模型列表拉取 — 支持 OpenAI 兼容格式和 Gemini 原生格式
 export async function POST(request) {
     try {
-        const { apiKey, baseUrl, provider, embedOnly } = await request.json();
+        const { apiKey, baseUrl, provider, embedOnly, proxyUrl } = await request.json();
 
         if (!apiKey) {
             return NextResponse.json(
@@ -14,16 +15,16 @@ export async function POST(request) {
 
         // Gemini 原生格式
         if (['gemini-native', 'custom-gemini'].includes(provider)) {
-            return await fetchGeminiModels(apiKey, baseUrl, embedOnly);
+            return await fetchGeminiModels(apiKey, baseUrl, embedOnly, proxyUrl);
         }
 
         // Claude/Anthropic（多策略拉取）
         if (['claude', 'custom-claude'].includes(provider)) {
-            return await fetchClaudeModels(apiKey, baseUrl);
+            return await fetchClaudeModels(apiKey, baseUrl, proxyUrl);
         }
 
         // OpenAI 兼容格式（适用于所有其他供应商）
-        return await fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider);
+        return await fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider, proxyUrl);
 
     } catch (error) {
         console.error('拉取模型列表错误:', error);
@@ -35,7 +36,7 @@ export async function POST(request) {
 }
 
 // Gemini 原生格式拉取模型 — 支持分页，兼容中转
-async function fetchGeminiModels(apiKey, baseUrl, embedOnly) {
+async function fetchGeminiModels(apiKey, baseUrl, embedOnly, proxyUrl) {
     const base = (baseUrl || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
     let allModels = [];
     let pageToken = '';
@@ -44,19 +45,19 @@ async function fetchGeminiModels(apiKey, baseUrl, embedOnly) {
     do {
         const url = `${base}/models?key=${apiKey}&pageSize=1000${pageToken ? `&pageToken=${pageToken}` : ''}`;
 
-        const response = await fetch(url, {
+        const response = await proxyFetch(url, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
-        });
+        }, proxyUrl);
 
         if (!response.ok) {
             // 分页请求失败时，尝试不带 pageSize 参数（有些中转不支持）
             if (allModels.length === 0) {
                 const fallbackUrl = `${base}/models?key=${apiKey}`;
-                const fallbackRes = await fetch(fallbackUrl, {
+                const fallbackRes = await proxyFetch(fallbackUrl, {
                     method: 'GET',
                     headers: { 'Content-Type': 'application/json' },
-                });
+                }, proxyUrl);
                 if (!fallbackRes.ok) {
                     return handleFetchError(fallbackRes);
                 }
@@ -123,7 +124,7 @@ function extractModelArray(data) {
 
 // OpenAI 兼容格式拉取模型（/v1/models）
 // 参考 Cherry Studio：多路径尝试 + 多格式兼容 + 超时处理
-async function fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider) {
+async function fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider, proxyUrl) {
     const base = (baseUrl || '').replace(/\/$/, '');
     if (!base) {
         return NextResponse.json(
@@ -157,11 +158,11 @@ async function fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider) {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 15000);
 
-            const response = await fetch(url, {
+            const response = await proxyFetch(url, {
                 method: 'GET',
                 headers,
                 signal: controller.signal,
-            });
+            }, proxyUrl);
             clearTimeout(timeout);
 
             if (!response.ok) {
@@ -254,13 +255,13 @@ async function handleFetchError(response) {
 // 策略1: Anthropic 原生 API（直连 api.anthropic.com）
 // 策略2: OpenAI 兼容格式（中转/代理）
 // 策略3: 预定义列表（兜底）
-async function fetchClaudeModels(apiKey, baseUrl) {
+async function fetchClaudeModels(apiKey, baseUrl, proxyUrl) {
     const base = (baseUrl || 'https://api.anthropic.com').replace(/\/$/, '');
 
     // 策略1: 尝试 Anthropic 原生 /v1/models
     if (apiKey) {
         try {
-            const models = await tryAnthropicNativeModels(apiKey, base);
+            const models = await tryAnthropicNativeModels(apiKey, base, proxyUrl);
             if (models.length > 0) {
                 return NextResponse.json({ models });
             }
@@ -270,7 +271,7 @@ async function fetchClaudeModels(apiKey, baseUrl) {
 
         // 策略2: 尝试 OpenAI 兼容格式 /v1/models（很多中转用这种格式）
         try {
-            const models = await tryOpenAICompatModels(apiKey, base);
+            const models = await tryOpenAICompatModels(apiKey, base, proxyUrl);
             if (models.length > 0) {
                 return NextResponse.json({ models });
             }
@@ -294,7 +295,7 @@ async function fetchClaudeModels(apiKey, baseUrl) {
 }
 
 // Anthropic 原生格式：x-api-key + anthropic-version header
-async function tryAnthropicNativeModels(apiKey, base) {
+async function tryAnthropicNativeModels(apiKey, base, proxyUrl) {
     let allModels = [];
     let hasMore = true;
     let afterId = null;
@@ -303,14 +304,14 @@ async function tryAnthropicNativeModels(apiKey, base) {
         let url = `${base}/v1/models?limit=100`;
         if (afterId) url += `&after_id=${afterId}`;
 
-        const response = await fetch(url, {
+        const response = await proxyFetch(url, {
             method: 'GET',
             headers: {
                 'x-api-key': apiKey,
                 'anthropic-version': '2023-06-01',
                 'Content-Type': 'application/json',
             },
-        });
+        }, proxyUrl);
 
         if (!response.ok) return [];
 
@@ -333,7 +334,7 @@ async function tryAnthropicNativeModels(apiKey, base) {
 }
 
 // OpenAI 兼容格式：Bearer token + /v1/models（多数中转使用此格式）
-async function tryOpenAICompatModels(apiKey, base) {
+async function tryOpenAICompatModels(apiKey, base, proxyUrl) {
     // 根据 base 是否已含版本前缀，构建候选路径
     const pathsToTry = [];
     if (base.endsWith('/v1') || base.endsWith('/v1beta')) {
@@ -348,14 +349,14 @@ async function tryOpenAICompatModels(apiKey, base) {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 10000);
 
-            const response = await fetch(url, {
+            const response = await proxyFetch(url, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${apiKey}`,
                 },
                 signal: controller.signal,
-            });
+            }, proxyUrl);
             clearTimeout(timeout);
 
             if (!response.ok) continue;

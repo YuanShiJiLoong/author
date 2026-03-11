@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
+import { proxyFetch } from '../../../lib/proxy-fetch';
 
 // 测试 API 连接（通用 — 支持 OpenAI 兼容格式和 Gemini 原生格式）
 export async function POST(request) {
     try {
         const { apiConfig } = await request.json();
-        const { apiKey, baseUrl, model, provider } = apiConfig || {};
+        const { apiKey, baseUrl, model, provider, proxyUrl } = apiConfig || {};
 
         if (!apiKey) {
             return NextResponse.json(
@@ -15,21 +16,21 @@ export async function POST(request) {
 
         // Gemini 原生格式的测试
         if (['gemini-native', 'custom-gemini'].includes(provider)) {
-            return await testGeminiNative(apiKey, baseUrl, model);
+            return await testGeminiNative(apiKey, baseUrl, model, proxyUrl);
         }
 
         // OpenAI Responses 格式的测试
         if (provider === 'openai-responses') {
-            return await testResponsesAPI(apiKey, baseUrl, model);
+            return await testResponsesAPI(apiKey, baseUrl, model, proxyUrl);
         }
 
         // Claude/Anthropic 格式的测试
         if (['claude', 'custom-claude'].includes(provider)) {
-            return await testClaude(apiKey, baseUrl, model);
+            return await testClaude(apiKey, baseUrl, model, proxyUrl);
         }
 
         // OpenAI 兼容格式的测试
-        return await testOpenAICompat(apiKey, baseUrl, model);
+        return await testOpenAICompat(apiKey, baseUrl, model, proxyUrl);
 
     } catch (error) {
         console.error('API测试错误:', error);
@@ -40,19 +41,19 @@ export async function POST(request) {
     }
 }
 
-async function testGeminiNative(apiKey, baseUrl, model) {
+async function testGeminiNative(apiKey, baseUrl, model, proxyUrl) {
     const base = (baseUrl || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
     const m = model || 'gemini-2.0-flash';
     const url = `${base}/models/${m}:generateContent?key=${apiKey}`;
 
-    const response = await fetch(url, {
+    const response = await proxyFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: '说"连接成功"' }] }],
             generationConfig: { maxOutputTokens: 20 },
         }),
-    });
+    }, proxyUrl);
 
     if (!response.ok) {
         const errText = await response.text();
@@ -75,12 +76,12 @@ async function testGeminiNative(apiKey, baseUrl, model) {
     });
 }
 
-async function testOpenAICompat(apiKey, baseUrl, model) {
+async function testOpenAICompat(apiKey, baseUrl, model, proxyUrl) {
     const base = (baseUrl || 'https://open.bigmodel.cn/api/paas/v4').replace(/\/$/, '');
     const m = model || 'gpt-4o-mini';
     const url = `${base}/chat/completions`;
 
-    const response = await fetch(url, {
+    const response = await proxyFetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -91,7 +92,7 @@ async function testOpenAICompat(apiKey, baseUrl, model) {
             messages: [{ role: 'user', content: '说"连接成功"' }],
             max_tokens: 20,
         }),
-    });
+    }, proxyUrl);
 
     if (!response.ok) {
         const errText = await response.text();
@@ -114,12 +115,12 @@ async function testOpenAICompat(apiKey, baseUrl, model) {
     });
 }
 
-async function testResponsesAPI(apiKey, baseUrl, model) {
+async function testResponsesAPI(apiKey, baseUrl, model, proxyUrl) {
     const base = (baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
     const m = model || 'gpt-4o-mini';
     const url = `${base}/responses`;
 
-    const response = await fetch(url, {
+    const response = await proxyFetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -130,7 +131,7 @@ async function testResponsesAPI(apiKey, baseUrl, model) {
             input: '说"连接成功"',
             max_output_tokens: 20,
         }),
-    });
+    }, proxyUrl);
 
     if (!response.ok) {
         const errText = await response.text();
@@ -155,12 +156,12 @@ async function testResponsesAPI(apiKey, baseUrl, model) {
     });
 }
 
-async function testClaude(apiKey, baseUrl, model) {
+async function testClaude(apiKey, baseUrl, model, proxyUrl) {
     const base = (baseUrl || 'https://api.anthropic.com').replace(/\/$/, '');
     const m = model || 'claude-sonnet-4-20250514';
     const url = `${base}/v1/messages`;
 
-    const response = await fetch(url, {
+    const response = await proxyFetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -172,7 +173,7 @@ async function testClaude(apiKey, baseUrl, model) {
             max_tokens: 20,
             messages: [{ role: 'user', content: '说"连接成功"' }],
         }),
-    });
+    }, proxyUrl);
 
     if (!response.ok) {
         const errText = await response.text();

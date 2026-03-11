@@ -1179,7 +1179,7 @@ function ApiConfigForm({ data, onChange }) {
     const handleFetchModels = async () => {
         setFetchedModels('loading');
         try {
-            const res = await fetch('/api/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: data.apiKey, baseUrl: data.baseUrl, provider: data.provider }) });
+            const res = await fetch('/api/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: data.apiKey, baseUrl: data.baseUrl, provider: data.provider, proxyUrl: data.proxyUrl }) });
             const result = await res.json();
             if (result.error) { setFetchedModels(null); setTestStatus({ success: false, error: result.error }); }
             else { setFetchedModels(result.models || []); setShowModelModal(true); setModelSearch(''); }
@@ -1191,7 +1191,7 @@ function ApiConfigForm({ data, onChange }) {
         try {
             const embedKey = data.embedApiKey || data.apiKey;
             const embedBase = data.embedBaseUrl || data.baseUrl;
-            const res = await fetch('/api/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: embedKey, baseUrl: embedBase, provider: data.embedProvider, embedOnly: true }) });
+            const res = await fetch('/api/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: embedKey, baseUrl: embedBase, provider: data.embedProvider, embedOnly: true, proxyUrl: data.proxyUrl }) });
             const result = await res.json();
             if (result.error) { setFetchedEmbedModels(null); setTestStatus({ success: false, error: t('apiConfig.embedApiPrefix') + result.error }); }
             else { setFetchedEmbedModels(result.models || []); }
@@ -1222,7 +1222,7 @@ function ApiConfigForm({ data, onChange }) {
             const res = await fetch('/api/balance', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ provider: data.provider, apiKey: data.apiKey, baseUrl: data.baseUrl }),
+                body: JSON.stringify({ provider: data.provider, apiKey: data.apiKey, baseUrl: data.baseUrl, proxyUrl: data.proxyUrl }),
             });
             const result = await res.json();
             if (res.ok) {
