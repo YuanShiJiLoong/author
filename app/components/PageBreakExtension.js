@@ -207,8 +207,8 @@ export const PageBreakExtension = Extension.create({
                                     if (spacerHeight > 0) {
                                         // 判断：段落整体已经超出当前页可用区域时，整块推走
                                         // 否则使用行内断裂（即使越界行是第一行，前面仍有段间空白可利用）
-                                        if (actualTop >= limitY) {
-                                            // 段落完全在边界之后，整体推到下一页
+                                        if (actualTop >= limitY || lineStartPos === pos + 1) {
+                                            // 段落完全在边界之后，或者分页刚好位于段首处，整体推到下一页
                                             spacerData.push({ pos, height: nextTopY - actualTop, isBlock: true });
                                             accumulatedSpacers += (nextTopY - actualTop);
                                             actualBottom += (nextTopY - actualTop);
