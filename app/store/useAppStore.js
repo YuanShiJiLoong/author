@@ -1,7 +1,11 @@
 import { create } from 'zustand';
+import { useRef, useState, useEffect } from 'react';
 import { persistSet } from '../lib/persistence';
 
-export const useAppStore = create((set, get) => ({
+// ============================================================
+// 内部 store
+// ============================================================
+const store = create((set, get) => ({
     // --- Chapter State ---
     chapters: [],
     activeChapterId: null,
@@ -30,13 +34,12 @@ export const useAppStore = create((set, get) => ({
     toggleAiSidebar: () => set((state) => ({ aiSidebarOpen: !state.aiSidebarOpen })),
 
     // --- Sidebar Layout Mode (overlay / push) ---
-    // 默认值必须与 SSR 一致，localStorage 值通过 _hydrateSidebarModes 在客户端 useEffect 中加载
-    sidebarPushMode: false,   // 默认覆盖
+    sidebarPushMode: false,
     setSidebarPushMode: (push) => set(() => {
         if (typeof window !== 'undefined') localStorage.setItem('author-sidebar-push', String(push));
         return { sidebarPushMode: push };
     }),
-    aiSidebarPushMode: true,  // 默认挤开
+    aiSidebarPushMode: true,
     setAiSidebarPushMode: (push) => set(() => {
         if (typeof window !== 'undefined') localStorage.setItem('author-ai-sidebar-push', String(push));
         return { aiSidebarPushMode: push };
@@ -51,14 +54,14 @@ export const useAppStore = create((set, get) => ({
         if (Object.keys(updates).length) set(updates);
     },
 
-    showSettings: false, // false | 'settings' | 'apiConfig' | 'preferences'
+    showSettings: false,
     setShowSettings: (show, tab) => set({ showSettings: (show === true ? (tab || 'settings') : show) || false }),
 
     showBookInfo: false,
     setShowBookInfo: (show) => set({ showBookInfo: !!show }),
 
     // 分类独立弹窗
-    openCategoryModal: null, // null | 'character' | 'location' | 'world' | 'object' | 'plot' | 'rules' | ...
+    openCategoryModal: null,
     setOpenCategoryModal: (cat, jumpNodeId) => set({ openCategoryModal: cat || null, jumpToNodeId: jumpNodeId || null }),
 
     jumpToNodeId: null,
@@ -136,3 +139,66 @@ export const useAppStore = create((set, get) => ({
     setGenerationArchive: (archive) => set({ generationArchive: typeof archive === 'function' ? archive(get().generationArchive) : archive }),
     addGenerationArchive: (record) => set((state) => ({ generationArchive: [...state.generationArchive, record] })),
 }));
+
+// ============================================================
+// 自动追踪 hook — 组件只在实际访问的属性变化时重渲染
+//
+// 原理：
+// 1. 返回一个 Proxy 代理 state — 记录组件访问了哪些属性
+// 2. 订阅 store —— 只在被追踪的属性变化时触发 forceUpdate
+// 3. 组件从不接触 showSettings → showSettings 变化不重渲染
+//
+// 效果：
+//   Sidebar 访问 chapters, setShowSettings 等
+//   showSettings 变化 → Sidebar 不重渲染（setShowSettings 是函数引用，不变）
+//   chapters 变化 → Sidebar 重渲染
+// ============================================================
+export function useAppStore(selector) {
+    // 手动 selector 模式 — 直接代理到 zustand
+    if (selector) return store(selector);
+
+    // -- 自动追踪模式 --
+    const [, forceRender] = useState(0);
+    const accessedKeysRef = useRef(new Set());
+    const proxyRef = useRef(null);
+    const stateRef = useRef(store.getState());
+
+    // 订阅 store — 只在被追踪的属性变化时触发重渲染
+    useEffect(() => {
+        const unsub = store.subscribe((newState, prevState) => {
+            const keys = accessedKeysRef.current;
+            for (const key of keys) {
+                if (newState[key] !== prevState[key]) {
+                    stateRef.current = newState;
+                    forceRender(c => c + 1);
+                    return;
+                }
+            }
+            // 没有被追踪的属性变化 —— 不更新，不重渲染
+            stateRef.current = newState;
+        });
+        return unsub;
+    }, []);
+
+    // 每次 render 重新创建 Proxy 以追踪新的访问
+    const state = store.getState();
+    stateRef.current = state;
+    const accessed = new Set();
+    accessedKeysRef.current = accessed;
+
+    const proxy = new Proxy(state, {
+        get(target, prop) {
+            if (typeof prop === 'string') {
+                accessed.add(prop);
+            }
+            return target[prop];
+        },
+    });
+
+    return proxy;
+}
+
+// 保留静态方法供非组件代码使用
+useAppStore.getState = store.getState;
+useAppStore.setState = store.setState;
+useAppStore.subscribe = store.subscribe;

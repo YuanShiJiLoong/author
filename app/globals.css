@@ -317,7 +317,7 @@ body {
   align-items: center;
   gap: 4px;
   width: 100%;
-  padding: 0 4px;
+  padding: 0;
 }
 
 .sidebar-nav-pane.sidebar-nav-expanded .sidebar-nav-top,
@@ -343,7 +343,7 @@ body {
 .sidebar-nav-pane.sidebar-nav-expanded .nav-item {
   width: auto;
   height: 32px;
-  justify-content: flex-start;
+  justify-content: center;
   padding: 0 6px;
   gap: 6px;
 }
@@ -2358,8 +2358,6 @@ body.resizing .main-content {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   z-index: 1000;
   display: flex;
   align-items: center;

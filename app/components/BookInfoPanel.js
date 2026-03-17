@@ -189,24 +189,40 @@ function ActivityChart({ chapters, period = 'day' }) {
     );
 }
 
-// 统计卡片
-function StatCard({ label, value, icon: Icon, color, bg }) {
+// 统计卡片 — 紧凑数字格式
+function fmtStatValue(v) {
+    if (typeof v === 'string') {
+        const n = Number(v.replace(/,/g, ''));
+        if (!isNaN(n)) v = n; else return v;
+    }
+    if (typeof v !== 'number') return v;
+    if (v >= 100000000) return (v / 100000000).toFixed(1).replace(/\.0$/, '') + '亿';
+    if (v >= 10000) return (v / 10000).toFixed(1).replace(/\.0$/, '') + '万';
+    return v.toLocaleString();
+}
+
+function StatCard({ label, value, icon: Icon, color, bg, onClick }) {
+    const displayValue = fmtStatValue(value);
     return (
         <div style={{
-            padding: '16px 18px', borderRadius: 16,
+            padding: '14px 16px', borderRadius: 14,
             border: '1px solid var(--border-light)', background: 'var(--bg-primary)',
-            transition: 'all 0.2s', cursor: 'default',
+            transition: 'all 0.2s', cursor: onClick ? 'pointer' : 'default',
         }}
+            onClick={onClick}
             onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
             onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
         >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>
-                    <Icon size={18} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 9, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>
+                    <Icon size={16} />
                 </div>
-                <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{value}</span>
+                <span style={{
+                    fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1,
+                    fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em',
+                }}>{displayValue}</span>
             </div>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, fontWeight: 500 }}>{label}</p>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, fontWeight: 500 }}>{label}</p>
         </div>
     );
 }
@@ -257,12 +273,50 @@ export default function BookInfoPanel() {
 
     // 统计数据
     const stats = useMemo(() => {
+        const builtInCats = new Set(['character', 'location', 'world', 'object', 'plot', 'rules', 'bookInfo']);
+        const workId = getActiveWorkId();
+        
+        // Build parent lookup for tracing items to root folders
+        const nodeMap = {};
+        nodes.forEach(n => { nodeMap[n.id] = n; });
+        
+        // Find root-level custom folders
+        const customFolders = nodes.filter(n =>
+            (n.type === 'folder' || n.type === 'special') && n.parentId === workId && !builtInCats.has(n.category)
+        );
+        
         const catCounts = {};
+        const customFolderLabels = {}; // custom__id → folder name
+        customFolders.forEach(f => {
+            const key = `custom__${f.id}`;
+            catCounts[key] = 0;
+            customFolderLabels[key] = f.name || '自定义';
+        });
+        
+        // Helper: trace an item to its root folder
+        const getRootFolderId = (node) => {
+            let cur = node;
+            while (cur && cur.parentId && cur.parentId !== workId) {
+                cur = nodeMap[cur.parentId];
+            }
+            return cur?.id;
+        };
+        
         const recentItems = [];
         nodes.forEach(n => {
-            if (n.type === 'item') {
-                const cat = n.category || 'custom';
-                catCounts[cat] = (catCounts[cat] || 0) + 1;
+            if (n.type === 'item' && n.category !== 'bookInfo') {
+                if (builtInCats.has(n.category)) {
+                    catCounts[n.category] = (catCounts[n.category] || 0) + 1;
+                } else {
+                    // Custom item: trace to root folder
+                    const rootId = getRootFolderId(n);
+                    const key = `custom__${rootId}`;
+                    if (key in catCounts) {
+                        catCounts[key] = (catCounts[key] || 0) + 1;
+                    } else {
+                        catCounts['custom'] = (catCounts['custom'] || 0) + 1;
+                    }
+                }
                 recentItems.push(n);
             }
         });
@@ -281,7 +335,24 @@ export default function BookInfoPanel() {
                 .sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''))
                 .slice(0, 5)
             : [];
-        return { catCounts, recentItems: recentItems.slice(0, 5), totalItems, totalWords, chapterCount, recentChapters };
+        // Build ordered entries: built-in first, then custom
+        const builtInOrder = ['character', 'location', 'world', 'object', 'plot', 'rules'];
+        const orderedCatEntries = [];
+        builtInOrder.forEach(cat => {
+            if (cat in catCounts) orderedCatEntries.push({ key: cat, count: catCounts[cat] });
+        });
+        // Add remaining built-in keys not in the predefined order
+        Object.keys(catCounts).forEach(cat => {
+            if (!cat.startsWith('custom__') && !builtInOrder.includes(cat)) {
+                orderedCatEntries.push({ key: cat, count: catCounts[cat] });
+            }
+        });
+        // Then custom folders
+        customFolders.forEach(f => {
+            const key = `custom__${f.id}`;
+            orderedCatEntries.push({ key, count: catCounts[key] || 0 });
+        });
+        return { catCounts, customFolderLabels, orderedCatEntries, recentItems: recentItems.slice(0, 5), totalItems, totalWords, chapterCount, recentChapters };
     }, [nodes, chapters]);
 
     if (!showBookInfo) return null;
@@ -394,17 +465,43 @@ export default function BookInfoPanel() {
                             display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
                             gap: 12, marginBottom: 28,
                         }}>
-                            <StatCard label="总设定条目" value={stats.totalItems} icon={Layers} color="#6366f1" bg="rgba(99,102,241,0.1)" />
+                            <StatCard label="总设定条目" value={stats.totalItems} icon={Layers} color="#6366f1" bg="rgba(99,102,241,0.1)" onClick={() => { setShowBookInfo(false); setTimeout(() => useAppStore.getState().setShowSettings('settings'), 80); }} />
                             <StatCard label="总字数" value={stats.totalWords.toLocaleString()} icon={FileText} color="#10b981" bg="rgba(16,185,129,0.1)" />
                             <StatCard label="章节数" value={stats.chapterCount} icon={BookOpen} color="#8b5cf6" bg="rgba(139,92,246,0.1)" />
-                            {Object.entries(stats.catCounts).slice(0, 3).map(([cat, count]) => {
-                                const Icon = CAT_ICONS[cat] || SettingsIcon;
-                                const c = CAT_COLORS[cat] || CAT_COLORS.custom;
-                                const labels = { character: '人物', location: '地点', world: '世界观', object: '物品', plot: '大纲', rules: '规则' };
+                            {stats.orderedCatEntries.map(({ key: cat, count }) => {
+                                const isCustomFolder = cat.startsWith('custom__');
+                                const Icon = isCustomFolder ? SettingsIcon : (CAT_ICONS[cat] || SettingsIcon);
+                                const c = isCustomFolder ? CAT_COLORS.custom : (CAT_COLORS[cat] || CAT_COLORS.custom);
+                                const builtInLabels = { character: '人物', location: '地点', world: '世界观', object: '物品', plot: '大纲', rules: '规则', custom: '自定义', bookInfo: '作品信息' };
+                                const label = isCustomFolder ? (stats.customFolderLabels[cat] || '自定义') : (builtInLabels[cat] || cat);
+                                const handleClick = () => {
+                                    setShowBookInfo(false);
+                                    setTimeout(() => {
+                                        const realCat = isCustomFolder ? 'custom' : cat;
+                                        useAppStore.getState().setOpenCategoryModal(realCat);
+                                    }, 80);
+                                };
                                 return (
-                                    <StatCard key={cat} label={labels[cat] || cat} value={count} icon={Icon} color={c.color} bg={c.bg} />
+                                    <StatCard key={cat} label={label} value={count} icon={Icon} color={c.color} bg={c.bg} onClick={handleClick} />
                                 );
                             })}
+                            {/* 新建分类 */}
+                            <div
+                                style={{
+                                    padding: '14px 16px', borderRadius: 14,
+                                    border: '1.5px dashed var(--border-medium, #d1d5db)', background: 'transparent',
+                                    transition: 'all 0.2s', cursor: 'pointer',
+                                    display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 4,
+                                }}
+                                onClick={() => { setShowBookInfo(false); setTimeout(() => useAppStore.getState().setShowSettings('settings'), 80); }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent, #6366f1)'; e.currentTarget.style.background = 'rgba(99,102,241,0.04)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-medium, #d1d5db)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'none'; }}
+                            >
+                                <div style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                                    <Plus size={16} />
+                                </div>
+                                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, fontWeight: 500 }}>新建分类</p>
+                            </div>
                         </div>
 
                         {/* 创作热度曲线 */}

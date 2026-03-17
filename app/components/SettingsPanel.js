@@ -178,7 +178,7 @@ export default function SettingsPanel() {
     const stats = useMemo(() => {
         const items = visibleNodes.filter(n => n.type === 'item');
         const workId = getActiveWorkId();
-        // 内置分类
+        // 内置分类（排除 bookInfo — 已移至独立面板）
         const builtIn = Object.entries(CAT_STYLES).filter(([cat]) => cat !== 'work').map(([cat, style]) => {
             const rf = visibleNodes.find(n => n.type === 'folder' && n.category === cat && n.parentId && n.parentId.startsWith('work-') && !visibleNodes.some(p => p.id === n.parentId));
             return {
@@ -190,22 +190,26 @@ export default function SettingsPanel() {
                 ...style,
             };
         });
-        // 用户自建分类（parentId === workId 的 folder，且 category 不在 CAT_STYLES 内）
+        // 用户自建分类（parentId === workId 的 folder/special，且 category 不在 CAT_STYLES 内，排除 bookInfo）
         const builtInCats = new Set(Object.keys(CAT_STYLES));
+        builtInCats.add('bookInfo');
         const customFolders = visibleNodes.filter(n =>
-            n.type === 'folder' && n.parentId === workId && !builtInCats.has(n.category)
+            (n.type === 'folder' || n.type === 'special') && n.parentId === workId && !builtInCats.has(n.category)
         );
-        // 按 category 分组，每个唯一 category 只出一张卡片
-        const customCatMap = new Map();
-        customFolders.forEach(rf => {
-            if (!customCatMap.has(rf.category)) {
-                customCatMap.set(rf.category, rf);
-            }
-        });
-        const custom = Array.from(customCatMap.entries()).map(([cat, rf]) => ({
-            category: cat,
-            count: items.filter(n => n.category === cat).length,
-            label: rf.name || cat,
+        // 每个自定义 folder 独立出一张卡片（不按 category 去重，因为多个 folder 可能共享 category='custom'）
+        const countDescendants = (folderId) => {
+            let count = 0;
+            visibleNodes.filter(n => n.parentId === folderId).forEach(child => {
+                if (child.type === 'item') count++;
+                else count += countDescendants(child.id);
+            });
+            return count;
+        };
+        const custom = customFolders.map(rf => ({
+            category: `custom__${rf.id}`,
+            realCategory: rf.category,
+            count: countDescendants(rf.id),
+            label: rf.name || rf.category,
             customIcon: rf.icon || null,
             rootFolderId: rf.id,
             color: 'var(--cat-custom, #64748b)',
@@ -651,8 +655,9 @@ export default function SettingsPanel() {
     };
     const currentPanel = panelTitles[open] || panelTitles.settings;
 
+    // 始终挂载在 DOM，用 CSS display 切换可见性 —— 零渲染开销
     return (
-        <div className="settings-panel-overlay" onMouseDown={e => { e.currentTarget._mouseDownTarget = e.target; }} onClick={e => { if (e.currentTarget._mouseDownTarget === e.currentTarget) onClose(); }}>
+        <div className="settings-panel-overlay" style={{ display: open ? '' : 'none' }} onMouseDown={e => { e.currentTarget._mouseDownTarget = e.target; }} onClick={e => { if (e.currentTarget._mouseDownTarget === e.currentTarget) onClose(); }}>
             <div className={`settings-panel-container glass-panel${isFullscreen ? ' fullscreen' : ''}`} onClick={e => e.stopPropagation()}>
                 {/* 头部 */}
                 <div className="settings-header" style={{ background: 'transparent' }}>
@@ -810,7 +815,7 @@ export default function SettingsPanel() {
                                             cursor: 'pointer', transition: 'all 0.25s ease', overflow: 'hidden',
                                             minHeight: 170,
                                         }}
-                                            onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setOpenCategoryModal(cat.category), 80); }}
+                                            onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setOpenCategoryModal(cat.realCategory || cat.category), 80); }}
                                             onMouseEnter={e => {
                                                 e.currentTarget.style.transform = 'translateY(-4px)';
                                                 e.currentTarget.style.boxShadow = `0 12px 32px ${color}18, 0 0 0 1px ${color}30`;

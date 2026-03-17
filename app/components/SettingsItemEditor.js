@@ -314,7 +314,7 @@ function ButtonGroup({ label, value, options: defaultOptions, onChange, customOp
                             </div>
                         ) : (
                             <button
-                                onClick={() => onChange(opt.value)}
+                                onClick={() => onChange(value === opt.value ? '' : opt.value)}
                                 style={{
                                     padding: '7px 16px', borderRadius: 20, fontSize: 12, fontWeight: 500,
                                     border: value === opt.value ? '1.5px solid var(--accent)' : '1px solid var(--border-light)',

@@ -575,9 +575,40 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
     const [dropTargetId, setDropTargetId] = useState(null);
     const [dropPosition, setDropPosition] = useState(null); // 'before' | 'after' | 'inside'
 
-    const getChildren = useCallback((parentId) => {
-        return nodes.filter(n => n.parentId === parentId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    // 预计算 children map 和 item count map，避免每次渲染都 O(n) 扫描
+    const { childrenMap, itemCountMap } = useMemo(() => {
+        const cMap = new Map();
+        for (const n of nodes) {
+            const pid = n.parentId;
+            if (!cMap.has(pid)) cMap.set(pid, []);
+            cMap.get(pid).push(n);
+        }
+        // 排序每个 parent 的 children
+        for (const [, children] of cMap) {
+            children.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        }
+        // 递归统计 item 数量
+        const iMap = new Map();
+        const count = (parentId) => {
+            if (iMap.has(parentId)) return iMap.get(parentId);
+            const ch = cMap.get(parentId) || [];
+            let total = 0;
+            for (const c of ch) {
+                if (c.type === 'item') total++;
+                else total += count(c.id);
+            }
+            iMap.set(parentId, total);
+            return total;
+        };
+        for (const n of nodes) {
+            if (n.type === 'folder') count(n.id);
+        }
+        return { childrenMap: cMap, itemCountMap: iMap };
     }, [nodes]);
+
+    const getChildren = useCallback((parentId) => {
+        return childrenMap.get(parentId) || [];
+    }, [childrenMap]);
 
     const matchesSearch = useCallback((node) => {
         if (!searchQuery) return true;
@@ -609,16 +640,10 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
         });
     };
 
-    // Count all items recursively
+    // Count all items recursively (uses pre-computed map)
     const countItems = useCallback((parentId) => {
-        const children = nodes.filter(n => n.parentId === parentId);
-        let count = 0;
-        for (const child of children) {
-            if (child.type === 'item') count++;
-            else count += countItems(child.id);
-        }
-        return count;
-    }, [nodes]);
+        return itemCountMap.get(parentId) || 0;
+    }, [itemCountMap]);
 
     // ---- 拖拽处理 ----
     const handleDragStart = (e, node) => {
@@ -939,6 +964,11 @@ export default function CategorySettingsModal() {
 
     // 加载作品列表
     useEffect(() => {
+        // bookInfo 已移至独立的 BookInfoPanel，不在设定集管理中显示
+        if (category === 'bookInfo') {
+            setOpenCategoryModal(null);
+            return;
+        }
         if (category) {
             (async () => {
                 const allWorks = await getAllWorks();
@@ -1239,7 +1269,7 @@ export default function CategorySettingsModal() {
         incrementSettingsVersion();
     };
 
-    if (!category) return null;
+    if (!category || category === 'bookInfo') return null;
 
     return createPortal(
         <div style={S.overlay} onMouseDown={e => { e.currentTarget._md = e.target; }} onClick={e => { if (e.currentTarget._md === e.currentTarget) onClose(); }}>
@@ -1256,6 +1286,22 @@ export default function CategorySettingsModal() {
                         <div>
                             <h2 style={S.headerTitle}>{meta.label}</h2>
                             <span style={{ fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>{itemCount} 个设定条目</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+                            <button
+                                style={{ border: 'none', background: 'rgba(255,255,255,0.65)', backdropFilter: 'blur(6px)', padding: '4px 10px', borderRadius: 8, fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s', fontWeight: 500, whiteSpace: 'nowrap' }}
+                                onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setShowSettings('settings'), 80); }}
+                                onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}15`; }}
+                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'rgba(255,255,255,0.65)'; }}
+                                title="返回完整设定集面板"
+                            ><Layers size={12} style={{ marginRight: 3, verticalAlign: -1 }} />设定集面板</button>
+                            <button
+                                style={{ border: 'none', background: 'rgba(255,255,255,0.65)', backdropFilter: 'blur(6px)', padding: '4px 10px', borderRadius: 8, fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.15s', fontWeight: 500, whiteSpace: 'nowrap' }}
+                                onClick={() => { onClose(); setTimeout(() => useAppStore.getState().setShowBookInfo(true), 80); }}
+                                onMouseEnter={e => { e.currentTarget.style.color = meta.color; e.currentTarget.style.background = `${meta.color}15`; }}
+                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'rgba(255,255,255,0.65)'; }}
+                                title="返回作品信息管理"
+                            ><BookOpen size={12} style={{ marginRight: 3, verticalAlign: -1 }} />作品信息</button>
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center', zIndex: 1 }}>
