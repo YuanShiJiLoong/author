@@ -6,7 +6,7 @@ import { getSettingsNodes, getActiveWorkId, addSettingsNode } from '../lib/setti
 import { useI18n } from '../lib/useI18n';
 import {
     User, MapPin, Globe, Gem, ClipboardList, Ruler, BookOpen,
-    Plus, ChevronRight, ChevronDown, FileText, FolderOpen, Eye, EyeOff,
+    Plus, ChevronRight, ChevronDown, FileText, FolderOpen, Eye, EyeOff, Search, X,
     Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers,
     Bookmark, Crown, Flame, Lightbulb, Music, Palette, Sword, Target,
     Moon, Sun, Cloud, TreePine, Mountain, Waves, Building, Car,
@@ -82,6 +82,7 @@ export default function SettingsCategoryPanel({ category }) {
     const [rootFolder, setRootFolder] = useState(null);
     const [collapsed, setCollapsed] = useState({}); // folderId → bool
     const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
     const colors = getCategoryColor(category);
     const CatIcon = getCategoryIcon(category, rootFolder?.icon);
     const label = getCategoryLabel(category, t);
@@ -144,10 +145,31 @@ export default function SettingsCategoryPanel({ category }) {
     };
 
     // 渲染节点
+    // 搜索过滤辅助
+    const matchesSearch = useCallback((node) => {
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.trim().toLowerCase();
+        return node.name?.toLowerCase().includes(q) || node.id?.toLowerCase().includes(q);
+    }, [searchQuery]);
+
+    const hasDescendantMatch = useCallback((parentId) => {
+        const children = nodes.filter(n => n.parentId === parentId);
+        return children.some(c =>
+            (c.type === 'item' && matchesSearch(c)) ||
+            (c.type === 'folder' && (matchesSearch(c) || hasDescendantMatch(c.id)))
+        );
+    }, [nodes, matchesSearch]);
+
     const renderNode = (node, depth = 0) => {
         const isFolder = node.type === 'folder';
         const isItem = node.type === 'item';
         const isSpecial = node.type === 'special';
+
+        // 搜索过滤
+        if (searchQuery.trim()) {
+            if (isItem && !matchesSearch(node)) return null;
+            if (isFolder && !matchesSearch(node) && !hasDescendantMatch(node.id)) return null;
+        }
         const isCollapsed = collapsed[node.id];
         const children = getChildren(node.id);
         const indent = depth * 16;
@@ -234,6 +256,42 @@ export default function SettingsCategoryPanel({ category }) {
                     </Tooltip>
                 </div>
             </div>
+
+            {/* 搜索框 */}
+            {rootChildren.length > 0 && (
+                <div style={{ padding: '6px 10px' }}>
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '5px 10px',
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-light)',
+                        borderRadius: 8,
+                        transition: 'all 0.2s',
+                    }}
+                        onFocus={e => { e.currentTarget.style.borderColor = colors.color; }}
+                        onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; }}
+                    >
+                        <Search size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder={`搜索${label}...`}
+                            style={{
+                                flex: 1, border: 'none', outline: 'none',
+                                background: 'transparent', color: 'var(--text-primary)',
+                                fontSize: 12, padding: 0,
+                            }}
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 1, display: 'flex', alignItems: 'center', borderRadius: 3 }}
+                            ><X size={11} /></button>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* 条目列表 */}
             <div className="scp-list">

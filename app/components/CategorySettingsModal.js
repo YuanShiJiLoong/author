@@ -634,7 +634,8 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
 
     const matchesSearch = useCallback((node) => {
         if (!searchQuery) return true;
-        return node.name?.toLowerCase().includes(searchQuery.toLowerCase());
+        const q = searchQuery.toLowerCase();
+        return node.name?.toLowerCase().includes(q) || node.id?.toLowerCase().includes(q);
     }, [searchQuery]);
 
     const startRename = (e, node) => {

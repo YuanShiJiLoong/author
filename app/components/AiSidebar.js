@@ -12,8 +12,113 @@ import { getProjectSettings, getChatApiConfig, getActiveWorkId, getSettingsNodes
 import { useAppStore } from '../store/useAppStore';
 import ChatMarkdown from './ChatMarkdown';
 import ModelPicker from './ModelPicker';
-import { FolderOpen, Plus, X, Pencil, Trash2 } from 'lucide-react';
+import { FolderOpen, Plus, X, Pencil, Trash2, RefreshCw, GitBranch, CornerDownLeft, ClipboardList, Copy, Code2, FileText } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
+
+/* ---------- 上下文查看器弹窗组件 ---------- */
+function ContextViewerModal({ viewingContext, onClose }) {
+    const [tab, setTab] = useState('context'); // 'context' | 'raw'
+    const [copied, setCopied] = useState(false);
+    const { context, rawRequest } = viewingContext || {};
+
+    const handleCopy = () => {
+        const text = rawRequest ? JSON.stringify(rawRequest, null, 2) : '';
+        navigator.clipboard.writeText(text).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+
+    return (
+        <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }} onClick={onClose}>
+            <div style={{
+                background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)',
+                width: '90%', maxWidth: 700, maxHeight: '85vh', overflow: 'hidden',
+                padding: 0, boxShadow: 'var(--shadow-xl)', display: 'flex', flexDirection: 'column',
+            }} onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px 12px', borderBottom: '1px solid var(--border-light)' }}>
+                    <div style={{ display: 'flex', gap: 4, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', padding: 2 }}>
+                        <button onClick={() => setTab('context')} style={{
+                            display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                            border: 'none', borderRadius: 'var(--radius-xs)', cursor: 'pointer', transition: 'all .15s',
+                            background: tab === 'context' ? 'var(--bg-primary)' : 'transparent',
+                            color: tab === 'context' ? 'var(--text-primary)' : 'var(--text-muted)',
+                            boxShadow: tab === 'context' ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                        }}><FileText size={13} />上下文</button>
+                        <button onClick={() => setTab('raw')} style={{
+                            display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                            border: 'none', borderRadius: 'var(--radius-xs)', cursor: 'pointer', transition: 'all .15s',
+                            background: tab === 'raw' ? 'var(--bg-primary)' : 'transparent',
+                            color: tab === 'raw' ? 'var(--text-primary)' : 'var(--text-muted)',
+                            boxShadow: tab === 'raw' ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                        }}><Code2 size={13} />原始请求</button>
+                    </div>
+                    <button onClick={onClose} style={{
+                        background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)',
+                        width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-xs)',
+                    }} title="关闭">✕</button>
+                </div>
+
+                {/* Body */}
+                <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px 20px' }}>
+                    {tab === 'context' && context && (
+                        Object.entries(context).map(([key, value]) => (
+                            <details key={key} style={{ marginBottom: 10 }}>
+                                <summary style={{
+                                    cursor: 'pointer', padding: '8px 10px', fontSize: 13, fontWeight: 500,
+                                    background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)',
+                                    color: 'var(--text-secondary)', userSelect: 'none',
+                                }}>{key}
+                                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                                        {typeof value === 'string' ? `${value.length} 字` : ''}
+                                    </span>
+                                </summary>
+                                <pre style={{
+                                    margin: '6px 0 0', padding: '10px 12px', fontSize: 12, lineHeight: 1.6,
+                                    background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)',
+                                    whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--text-primary)',
+                                    maxHeight: 300, overflow: 'auto', border: '1px solid var(--border-light)',
+                                }}>{typeof value === 'string' ? value : JSON.stringify(value, null, 2)}</pre>
+                            </details>
+                        ))
+                    )}
+                    {tab === 'raw' && (
+                        <div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                                <button onClick={handleCopy} style={{
+                                    display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px',
+                                    fontSize: 12, border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)',
+                                    background: 'var(--bg-secondary)', color: 'var(--text-secondary)',
+                                    cursor: 'pointer', transition: 'all .15s',
+                                }}>
+                                    <Copy size={12} />
+                                    {copied ? '✓ 已复制' : '复制 JSON'}
+                                </button>
+                            </div>
+                            {rawRequest ? (
+                                <pre style={{
+                                    margin: 0, padding: '14px 16px', fontSize: 11.5, lineHeight: 1.5,
+                                    background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)',
+                                    whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--text-primary)',
+                                    maxHeight: 'calc(85vh - 140px)', overflow: 'auto', border: '1px solid var(--border-light)',
+                                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+                                }}>{JSON.stringify(rawRequest, null, 2)}</pre>
+                            ) : (
+                                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                                    本条消息没有保存原始请求数据（仅新请求会记录）
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
 
 // 解析消息中的 [SETTINGS_ACTION] 块
 // 彻底版：多模式匹配 + 流式不完整块隐藏 + 渐进式 JSON 修复
@@ -285,7 +390,7 @@ export default function AiSidebar({ onInsertText }) {
     const chatContainerRef = useRef(null);
     const inputRef = useRef(null);
     const abortRef = useRef(null);
-    const [viewingContext, setViewingContext] = useState(null);
+    const [viewingContext, setViewingContext] = useState(null); // { context, rawRequest }
 
     // 新消息时只在用户已滚动到底部时才自动滚动（不劫持用户滚动）
     useEffect(() => {
@@ -301,9 +406,13 @@ export default function AiSidebar({ onInsertText }) {
         }
     }, [chatHistory]);
 
-    // 切到聊天 Tab 时聚焦输入框
+    // 切到聊天 Tab / 重新打开侧栏时，滚动到底部并聚焦输入框
     useEffect(() => {
         if (activeTab === 'chat' && open) {
+            // 延迟一帧等待 DOM 渲染完成后再滚动到底部
+            requestAnimationFrame(() => {
+                chatEndRef.current?.scrollIntoView({ behavior: 'instant' });
+            });
             setTimeout(() => inputRef.current?.focus(), 100);
         }
     }, [activeTab, open]);
@@ -372,19 +481,20 @@ export default function AiSidebar({ onInsertText }) {
         }
 
         const startTime = Date.now();
+        const requestBody = {
+            systemPrompt, userPrompt, apiConfig,
+            ...(apiConfig?.useAdvancedParams ? {
+                maxTokens: apiConfig.maxOutputTokens || 65536,
+                temperature: apiConfig.temperature ?? 1,
+                topP: apiConfig.topP ?? 0.95,
+                reasoningEffort: apiConfig.reasoningEffort || 'auto',
+            } : {}),
+            ...(toolsPayload ? { tools: toolsPayload } : {}),
+        };
         const res = await fetch(apiEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                systemPrompt, userPrompt, apiConfig,
-                ...(apiConfig?.useAdvancedParams ? {
-                    maxTokens: apiConfig.maxOutputTokens || 65536,
-                    temperature: apiConfig.temperature ?? 1,
-                    topP: apiConfig.topP ?? 0.95,
-                    reasoningEffort: apiConfig.reasoningEffort || 'auto',
-                } : {}),
-                ...(toolsPayload ? { tools: toolsPayload } : {}),
-            }),
+            body: JSON.stringify(requestBody),
             ...(signal ? { signal } : {}),
         });
 
@@ -457,6 +567,7 @@ export default function AiSidebar({ onInsertText }) {
         setStatsVersion(v => v + 1);
 
         onDone(fullText, fullThinking, toolCalls);
+        return requestBody;
     }, []);
 
     // 终止生成
@@ -502,10 +613,10 @@ export default function AiSidebar({ onInsertText }) {
             if (context.currentChapter) contextSnapshot['当前章节'] = context.currentChapter;
             contextSnapshot['对话历史'] = userPrompt;
 
-            const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], timestamp: Date.now(), _context: contextSnapshot };
+            const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], timestamp: Date.now(), _context: contextSnapshot, _rawRequest: null };
             setSessionStore(prev => addMessage(prev, aiPlaceholder));
 
-            await streamResponse(apiEndpoint, systemPrompt, userPrompt, apiConfig,
+            const returnedBody = await streamResponse(apiEndpoint, systemPrompt, userPrompt, apiConfig,
                 (snapText, snapThinking, snapToolCalls) => {
                     setSessionStore(prev => ({
                         ...prev, sessions: prev.sessions.map(s => {
@@ -531,6 +642,19 @@ export default function AiSidebar({ onInsertText }) {
                 },
                 controller.signal
             );
+            // Store raw request body on the AI message
+            if (returnedBody) {
+                setSessionStore(prev => {
+                    const updated = {
+                        ...prev, sessions: prev.sessions.map(s => {
+                            if (s.id !== prev.activeSessionId) return s;
+                            return { ...s, messages: s.messages.map(m => m.id === aiMsgId ? { ...m, _rawRequest: returnedBody } : m) };
+                        }),
+                    };
+                    saveSessionStore(updated);
+                    return updated;
+                });
+            }
         } catch (err) {
             if (err.name === 'AbortError') {
                 // 用户主动终止 — 保留已生成的内容
@@ -1202,41 +1326,41 @@ export default function AiSidebar({ onInsertText }) {
                                                 <button
                                                     className="btn-mini-icon"
                                                     onClick={() => startEdit(msg)}
-                                                // title="编辑"
-                                                >{t('aiSidebar.btnEdit')}</button>
+                                                    title={t('aiSidebar.btnEdit')}
+                                                ><Pencil size={13} /></button>
                                                 {msg.role === 'user' && (
                                                     <button
                                                         className="btn-mini-icon"
                                                         onClick={() => handleResend(msg.id)}
-                                                        // title="重新发送"
+                                                        title={t('aiSidebar.btnResend')}
                                                         disabled={chatStreaming}
-                                                    >{t('aiSidebar.btnResend')}</button>
+                                                    ><CornerDownLeft size={13} /></button>
                                                 )}
                                                 {msg.role === 'assistant' && (
                                                     <button
                                                         className="btn-mini-icon"
                                                         onClick={() => onRegenerate?.(msg.id)}
-                                                        // title="重新生成"
+                                                        title={t('aiSidebar.btnRegenerate')}
                                                         disabled={chatStreaming}
-                                                    >{t('aiSidebar.btnRegenerate')}</button>
+                                                    ><RefreshCw size={13} /></button>
                                                 )}
                                                 {msg.role === 'assistant' && msg._context && (
                                                     <button
                                                         className="btn-mini-icon"
-                                                        onClick={() => setViewingContext(msg._context)}
+                                                        onClick={() => setViewingContext({ context: msg._context, rawRequest: msg._rawRequest })}
                                                         title="查看发送给 AI 的上下文"
-                                                    >📋</button>
+                                                    ><ClipboardList size={13} /></button>
                                                 )}
                                                 <button
                                                     className="btn-mini-icon"
                                                     onClick={() => onBranch?.(msg.id)}
-                                                // title="从此创建分支"
-                                                >{t('aiSidebar.btnBranch')}</button>
+                                                    title={t('aiSidebar.btnBranch')}
+                                                ><GitBranch size={13} /></button>
                                                 <button
                                                     className="btn-mini-icon danger"
                                                     onClick={() => onDeleteMessage?.(msg.id)}
                                                     title={t('aiSidebar.delete')}
-                                                >{t('aiSidebar.clearChat')}</button>
+                                                ><Trash2 size={13} /></button>
                                             </div>
                                         </div>
 
@@ -1826,42 +1950,10 @@ export default function AiSidebar({ onInsertText }) {
             {/* 上下文查看器弹窗 */}
             {
                 viewingContext && (
-                    <div style={{
-                        position: 'fixed', inset: 0, zIndex: 9999,
-                        background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }} onClick={() => setViewingContext(null)}>
-                        <div style={{
-                            background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)',
-                            width: '90%', maxWidth: 600, maxHeight: '80vh', overflow: 'auto',
-                            padding: '20px 24px', boxShadow: 'var(--shadow-xl)',
-                        }} onClick={e => e.stopPropagation()}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                                <h3 style={{ margin: 0, fontSize: 15, color: 'var(--text-primary)' }}>📋 发送给 AI 的上下文</h3>
-                                <button onClick={() => setViewingContext(null)} style={{
-                                    background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)',
-                                }}>✕</button>
-                            </div>
-                            {Object.entries(viewingContext).map(([key, value]) => (
-                                <details key={key} style={{ marginBottom: 10 }}>
-                                    <summary style={{
-                                        cursor: 'pointer', padding: '8px 10px', fontSize: 13, fontWeight: 500,
-                                        background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)',
-                                        color: 'var(--text-secondary)', userSelect: 'none',
-                                    }}>{key}
-                                        <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                                            {value.length} 字
-                                        </span>
-                                    </summary>
-                                    <pre style={{
-                                        margin: '6px 0 0', padding: '10px 12px', fontSize: 12, lineHeight: 1.6,
-                                        background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)',
-                                        whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--text-primary)',
-                                        maxHeight: 300, overflow: 'auto', border: '1px solid var(--border-light)',
-                                    }}>{value}</pre>
-                                </details>
-                            ))}
-                        </div>
-                    </div>
+                    <ContextViewerModal
+                        viewingContext={viewingContext}
+                        onClose={() => setViewingContext(null)}
+                    />
                 )
             }
         </>

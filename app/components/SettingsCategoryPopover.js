@@ -5,7 +5,8 @@ import { createPortal } from 'react-dom';
 import {
     User, MapPin, Globe, Gem, ClipboardList, Ruler, BookOpen,
     Plus, Pencil, Check, X, FolderOpen, FileText, Settings as SettingsIcon,
-    Sparkles, Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers
+    Sparkles, Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers,
+    Search,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { getSettingsNodes, getActiveWorkId, deleteSettingsNode, saveSettingsNodes, addSettingsNode } from '../lib/settings';
@@ -162,6 +163,7 @@ export function savePinnedCategories(list) {
  */
 export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCategory, onAddCategory }) {
     const { t } = useI18n();
+    const { setOpenCategoryModal } = useAppStore();
     const popoverRef = useRef(null);
     const [mounted, setMounted] = useState(false);
     const [editMode, setEditMode] = useState(false);
@@ -172,6 +174,8 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
     const [showNewInput, setShowNewInput] = useState(false);
     const [newCatName, setNewCatName] = useState('');
     const newInputRef = useRef(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [allNodes, setAllNodes] = useState([]);
 
     // 共享刷新逻辑：从 nodes 重建分类列表（含虚拟内置分类）
     const refreshCategoriesFromNodes = (nodes, workId) => {
@@ -240,6 +244,7 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                     parentId: workId,
                 }));
             virtualEntries.forEach(v => { counts[v.category] = 0; });
+            setAllNodes(nodes);
             refreshCategoriesFromNodes(nodes, workId);
         };
         loadCategories();
@@ -352,10 +357,103 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                     <div style={styles.hint}>勾选显示在导航栏，点 × 删除分类</div>
                 )}
 
+                {/* 搜索框 */}
+                {!editMode && (
+                    <div style={{ padding: '0 12px 8px' }}>
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: 7,
+                            padding: '7px 11px',
+                            background: 'var(--bg-secondary, #f9fafb)',
+                            border: '1px solid var(--border-light, #e5e7eb)',
+                            borderRadius: 10,
+                            transition: 'all 0.2s',
+                        }}
+                            onFocus={e => { e.currentTarget.style.borderColor = 'var(--accent, #3b82f6)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.08)'; }}
+                            onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-light, #e5e7eb)'; e.currentTarget.style.boxShadow = 'none'; }}
+                        >
+                            <Search size={13} style={{ color: 'var(--text-muted, #9ca3af)', flexShrink: 0 }} />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder="搜索设定..."
+                                style={{
+                                    flex: 1, border: 'none', outline: 'none',
+                                    background: 'transparent', color: 'var(--text-primary, #1f2937)',
+                                    fontSize: 12, padding: 0,
+                                }}
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 1, display: 'flex', alignItems: 'center', borderRadius: 3 }}
+                                ><X size={11} /></button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* 搜索结果：匹配的条目 */}
+                {!editMode && searchQuery.trim() && (() => {
+                    const q = searchQuery.trim().toLowerCase();
+                    const matchedItems = allNodes.filter(n => {
+                        if (n.type !== 'item') return false;
+                        if (n.name?.toLowerCase().includes(q)) return true;
+                        // 按 ID 搜索
+                        if (n.id?.toLowerCase().includes(q)) return true;
+                        if (n.content && typeof n.content === 'object') {
+                            return Object.values(n.content).some(v =>
+                                typeof v === 'string' && v.toLowerCase().includes(q)
+                            );
+                        }
+                        return false;
+                    });
+                    if (matchedItems.length === 0) return null;
+                    return (
+                        <div style={{ padding: '0 12px 8px', maxHeight: 150, overflowY: 'auto' }}>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
+                                匹配条目 ({matchedItems.length})
+                            </div>
+                            {matchedItems.slice(0, 20).map(node => {
+                                const colors = CAT_COLORS[node.category] || CAT_COLORS.custom;
+                                return (
+                                    <button
+                                        key={node.id}
+                                        onClick={() => {
+                                            onClose?.();
+                                            setTimeout(() => setOpenCategoryModal(node.category, node.id), 80);
+                                        }}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: 8,
+                                            width: '100%', padding: '6px 10px', textAlign: 'left',
+                                            border: 'none', borderRadius: 8,
+                                            background: 'transparent', cursor: 'pointer',
+                                            transition: 'all 0.12s', fontSize: 12,
+                                            color: 'var(--text-primary, #1f2937)',
+                                        }}
+                                        onMouseEnter={e => { e.currentTarget.style.background = colors.bg; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                                    >
+                                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: colors.color, flexShrink: 0 }} />
+                                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
+                                        <span style={{ fontSize: 9, color: colors.color, fontWeight: 600, flexShrink: 0 }}>›</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    );
+                })()}
+
                 {/* 网格 */}
                 <div style={styles.gridScroll}>
                     <div style={styles.grid}>
-                        {categories.map(cat => {
+                        {categories.filter(cat => {
+                            if (!searchQuery.trim()) return true;
+                            const q = searchQuery.trim().toLowerCase();
+                            if (cat.name?.toLowerCase().includes(q)) return true;
+                            if ((CAT_LABELS[cat.category] || '').toLowerCase().includes(q)) return true;
+                            return false;
+                        }).map(cat => {
                             const Icon = (cat.icon && getIconByName(cat.icon)) || CAT_ICONS[cat.category] || FileText;
                             const colors = CAT_COLORS[cat.category] || CAT_COLORS.custom;
                             const count = itemCounts[cat.category] || 0;

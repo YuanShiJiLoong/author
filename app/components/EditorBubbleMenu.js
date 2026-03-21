@@ -57,12 +57,21 @@ export default function EditorBubbleMenu({ editor }) {
             requestAnimationFrame(updatePosition);
         };
 
+        // 点击工具栏时隐藏气泡菜单，避免遮挡下拉菜单
+        const onToolbarClick = (e) => {
+            if (e.target.closest('.editor-toolbar')) {
+                setVisible(false);
+            }
+        };
+
         editor.on('selectionUpdate', onSelectionUpdate);
         editor.on('blur', () => setVisible(false));
+        document.addEventListener('mousedown', onToolbarClick);
 
         return () => {
             editor.off('selectionUpdate', onSelectionUpdate);
             editor.off('blur', () => setVisible(false));
+            document.removeEventListener('mousedown', onToolbarClick);
         };
     }, [editor, updatePosition]);
 

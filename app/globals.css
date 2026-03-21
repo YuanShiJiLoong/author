@@ -7366,22 +7366,38 @@ h5.chat-md-heading {
   border-radius: calc(var(--radius-sm) - 2px);
   background: transparent;
   transition: background var(--transition-fast);
+  z-index: 0;
+}
+
+.bubble-btn svg {
+  position: relative;
+  z-index: 1;
 }
 
 .bubble-btn:hover {
   color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .bubble-btn:hover::after {
-  background: var(--bg-hover);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .bubble-btn.active {
   color: var(--accent);
+  background: var(--accent-light);
 }
 
 .bubble-btn.active::after {
   background: var(--accent-light);
+}
+
+[data-theme="dark"] .bubble-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .bubble-btn:hover::after {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .bubble-btn:active {

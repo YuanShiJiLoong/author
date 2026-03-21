@@ -796,6 +796,131 @@ export default function SettingsPanel() {
                                 </div>
                             </div>
 
+                            {/* 全局搜索框 */}
+                            <div style={{ maxWidth: 880, margin: '0 auto 16px', position: 'relative' }}>
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', gap: 10,
+                                    padding: '10px 16px',
+                                    background: 'var(--bg-card, #fff)',
+                                    border: '1.5px solid var(--border-light)',
+                                    borderRadius: 14,
+                                    transition: 'all 0.25s ease',
+                                    boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                                }}
+                                    onFocus={e => { e.currentTarget.style.borderColor = 'var(--accent, #6366f1)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-glow, rgba(99,102,241,0.12))'; }}
+                                    onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.04)'; }}
+                                >
+                                    <Search size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                    <input
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={e => setSearchQuery(e.target.value)}
+                                        placeholder="搜索设定条目（名称、内容或 ID）..."
+                                        style={{
+                                            flex: 1, border: 'none', outline: 'none',
+                                            background: 'transparent', color: 'var(--text-primary)',
+                                            fontSize: 13,
+                                        }}
+                                    />
+                                    {searchQuery && (
+                                        <button
+                                            onClick={() => setSearchQuery('')}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center' }}
+                                        ><X size={14} /></button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* 搜索结果 or 分类卡片网格 */}
+                            {searchQuery.trim() ? (() => {
+                                const q = searchQuery.trim().toLowerCase();
+                                const results = visibleNodes.filter(n => {
+                                    if (n.type !== 'item') return false;
+                                    if (n.name?.toLowerCase().includes(q)) return true;
+                                    // 按 ID 搜索
+                                    if (n.id?.toLowerCase().includes(q)) return true;
+                                    // 也搜索 content 字段值
+                                    if (n.content && typeof n.content === 'object') {
+                                        return Object.values(n.content).some(v =>
+                                            typeof v === 'string' && v.toLowerCase().includes(q)
+                                        );
+                                    }
+                                    return false;
+                                });
+                                if (results.length === 0) {
+                                    return (
+                                        <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-muted)' }}>
+                                            <Search size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
+                                            <div style={{ fontSize: 14, fontWeight: 500 }}>未找到匹配的设定条目</div>
+                                            <div style={{ fontSize: 12, marginTop: 6, opacity: 0.7 }}>试试更换关键词</div>
+                                        </div>
+                                    );
+                                }
+                                return (
+                                    <div style={{ maxWidth: 880, margin: '0 auto' }}>
+                                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+                                            找到 <strong style={{ color: 'var(--text-primary)' }}>{results.length}</strong> 个匹配结果
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            {results.map(node => {
+                                                const catStyle = CAT_STYLES[node.category] || { color: '#64748b', bg: 'rgba(100,116,139,0.08)' };
+                                                const catLabel = t(`settings.categories.${node.category}`) || node.category;
+                                                const CatIconComp = CAT_ICONS[node.category] || FileText;
+                                                // 高亮匹配片段
+                                                const matchField = node.name?.toLowerCase().includes(q) ? null
+                                                    : node.content && typeof node.content === 'object'
+                                                        ? Object.entries(node.content).find(([, v]) => typeof v === 'string' && v.toLowerCase().includes(q))
+                                                        : null;
+                                                return (
+                                                    <button
+                                                        key={node.id}
+                                                        onClick={() => {
+                                                            onClose();
+                                                            setTimeout(() => useAppStore.getState().setOpenCategoryModal(node.category, node.id), 80);
+                                                        }}
+                                                        style={{
+                                                            display: 'flex', alignItems: 'center', gap: 12,
+                                                            padding: '12px 16px', width: '100%', textAlign: 'left',
+                                                            border: '1px solid var(--border-light)', borderRadius: 12,
+                                                            background: 'var(--bg-primary)', cursor: 'pointer',
+                                                            transition: 'all 0.15s ease',
+                                                        }}
+                                                        onMouseEnter={e => { e.currentTarget.style.borderColor = catStyle.color; e.currentTarget.style.background = catStyle.bg; e.currentTarget.style.transform = 'translateX(4px)'; }}
+                                                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.background = 'var(--bg-primary)'; e.currentTarget.style.transform = 'none'; }}
+                                                    >
+                                                        <span style={{
+                                                            width: 32, height: 32, borderRadius: 9,
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            color: catStyle.color, background: catStyle.bg, flexShrink: 0,
+                                                        }}>
+                                                            <CatIconComp size={16} />
+                                                        </span>
+                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                {node.name}
+                                                            </div>
+                                                            {matchField && (
+                                                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                    匹配字段: {matchField[1]?.substring(0, 60)}{matchField[1]?.length > 60 ? '...' : ''}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <span style={{
+                                                            fontSize: 10, fontWeight: 600, padding: '3px 10px',
+                                                            borderRadius: 8, color: catStyle.color, background: catStyle.bg,
+                                                            whiteSpace: 'nowrap', flexShrink: 0,
+                                                        }}>
+                                                            {catLabel}
+                                                        </span>
+                                                        <span style={{ fontSize: 14, color: 'var(--text-muted)', flexShrink: 0 }}>›</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })() : (
+                            <>
                             {/* 分类卡片网格 */}
                             <style>{`
                                 .settings-cat-card:hover {
@@ -1080,6 +1205,8 @@ export default function SettingsPanel() {
                                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>新建分类</span>
                                 </button>
                             </div>
+                            </>
+                            )}
                         </div>
                     </div>
                 )}
@@ -1368,7 +1495,19 @@ function PreferencesForm() {
 }
 
 function ApiConfigForm({ data, onChange }) {
-    const update = (field, value) => onChange({ ...data, [field]: value });
+    // 同步更新 top-level 字段与 providerConfigs[当前供应商] 的对应值
+    // 修复：用户更改 apiKey/baseUrl/model/apiFormat 后，providerConfigs 中仍保留旧值导致切换供应商再切回时还原旧值
+    const update = (field, value) => {
+        const synced = ['apiKey', 'baseUrl', 'model', 'apiFormat'];
+        const next = { ...data, [field]: value };
+        if (synced.includes(field) && next.provider && next.providerConfigs?.[next.provider]) {
+            next.providerConfigs = {
+                ...next.providerConfigs,
+                [next.provider]: { ...next.providerConfigs[next.provider], [field]: value },
+            };
+        }
+        onChange(next);
+    };
     const [testStatus, setTestStatus] = useState(null);
     const [fetchedModels, setFetchedModels] = useState(null);
     const [fetchedEmbedModels, setFetchedEmbedModels] = useState(null);

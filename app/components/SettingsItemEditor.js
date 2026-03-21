@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
     ClipboardList, Sparkles, BookOpen, FileText, Eye, Moon, Swords, BarChart3,
-    FolderOpen, PenLine, Target, Maximize2, Pencil, X,
+    FolderOpen, PenLine, Target, Maximize2, Pencil, X, Copy,
     User, MapPin, Globe, Gem, Ruler, Settings as SettingsIcon,
     Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers
 } from 'lucide-react';
@@ -800,12 +800,21 @@ function GenericEditor({ node, onUpdate }) {
 // ==================== 面包屑导航 ====================
 
 function Breadcrumb({ node, allNodes, onSelect }) {
+    const [copied, setCopied] = useState(false);
     const path = [];
     let current = node;
     while (current) {
         path.unshift(current);
         current = current.parentId ? allNodes.find(n => n.id === current.parentId) : null;
     }
+
+    const handleCopyId = (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(node.id).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+        });
+    };
 
     return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', marginBottom: 20, flexWrap: 'wrap' }}>
@@ -833,6 +842,27 @@ function Breadcrumb({ node, allNodes, onSelect }) {
                     </span>
                 );
             })}
+            {/* 复制 ID 按钮 */}
+            <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                <button
+                    onClick={handleCopyId}
+                    title={`复制 ID: ${node.id}`}
+                    style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '3px 10px', borderRadius: 8,
+                        border: '1px solid var(--border-light)',
+                        background: copied ? 'var(--accent)' : 'transparent',
+                        color: copied ? '#fff' : 'var(--text-muted)',
+                        fontSize: 10, fontFamily: 'monospace', cursor: 'pointer',
+                        transition: 'all 0.2s', whiteSpace: 'nowrap',
+                    }}
+                    onMouseEnter={e => { if (!copied) { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; } }}
+                    onMouseLeave={e => { if (!copied) { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; } }}
+                >
+                    <Copy size={10} />
+                    {copied ? '已复制!' : `ID: ${node.id}`}
+                </button>
+            </span>
         </div>
     );
 }
