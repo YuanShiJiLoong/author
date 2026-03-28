@@ -71,7 +71,7 @@ jobs:
 
           # 2. 尝试读取预热好的双语详细日记
           if [ -f "RELEASE_NOTES.md" ]; then
-            cp RELEASE_NOTES.md release_notes.md
+            cp RELEASE_NOTES.md RELEASE_BODY.md
           else
             # 兼容旧逻辑：回退到拉取 commits 列表
             PREV_TAG=$(git tag --sort=-creatordate | head -n 2 | tail -n 1)
@@ -83,28 +83,28 @@ jobs:
               NOTES=$(git log --oneline ${PREV_TAG}..${CURR_TAG} --pretty=format:"- %s")
             fi
             
-            echo "## 📋 更新内容 / Changelog" > release_notes.md
-            echo "" >> release_notes.md
-            echo "### 🇨🇳 中文" >> release_notes.md
-            echo "" >> release_notes.md
-            echo "$NOTES" >> release_notes.md
-            echo "" >> release_notes.md
-            echo "📦 下载 \`.exe\` 安装包即可使用，云同步功能已内置。" >> release_notes.md
-            echo "" >> release_notes.md
-            echo "---" >> release_notes.md
-            echo "" >> release_notes.md
-            echo "### 🇺🇸 English" >> release_notes.md
-            echo "" >> release_notes.md
-            echo "$NOTES" >> release_notes.md
-            echo "" >> release_notes.md
-            echo "📦 Download the \`.exe\` installer to get started. Cloud sync is built-in." >> release_notes.md
+            echo "## 📋 更新内容 / Changelog" > RELEASE_BODY.md
+            echo "" >> RELEASE_BODY.md
+            echo "### 🇨🇳 中文" >> RELEASE_BODY.md
+            echo "" >> RELEASE_BODY.md
+            echo "$NOTES" >> RELEASE_BODY.md
+            echo "" >> RELEASE_BODY.md
+            echo "📦 下载 \`.exe\` 安装包即可使用，云同步功能已内置。" >> RELEASE_BODY.md
+            echo "" >> RELEASE_BODY.md
+            echo "---" >> RELEASE_BODY.md
+            echo "" >> RELEASE_BODY.md
+            echo "### 🇺🇸 English" >> RELEASE_BODY.md
+            echo "" >> RELEASE_BODY.md
+            echo "$NOTES" >> RELEASE_BODY.md
+            echo "" >> RELEASE_BODY.md
+            echo "📦 Download the \`.exe\` installer to get started. Cloud sync is built-in." >> RELEASE_BODY.md
           fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: Author ${{ github.ref_name }} — ${{ steps.notes.outputs.title_desc }}
-          body_path: release_notes.md
+          body_path: RELEASE_BODY.md
           draft: false
           prerelease: false
           files: |
