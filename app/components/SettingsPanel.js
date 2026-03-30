@@ -2063,6 +2063,9 @@ function ApiConfigForm({ data, onChange }) {
                         placeholder="搜索供应商..."
                         value={providerSearch}
                         onChange={e => setProviderSearch(e.target.value)}
+                        autoComplete="off"
+                        data-lpignore="true"
+                        data-1p-ignore="true"
                     />
                     {[
                         { group: '🇨🇳 国内', keys: ['zhipu', 'deepseek', 'bailian', 'volcengine', 'moonshot', 'stepfun', 'yi', 'baichuan', 'hunyuan', 'baidu', 'minimax', 'siliconflow'] },
@@ -2225,6 +2228,9 @@ function ApiConfigForm({ data, onChange }) {
                                         value={modelSearch}
                                         onChange={e => setModelSearch(e.target.value)}
                                         autoFocus
+                                        autoComplete="off"
+                                        data-lpignore="true"
+                                        data-1p-ignore="true"
                                     />
                                 </div>
                                 {/* 模型列表 */}
@@ -2490,6 +2496,9 @@ function ApiConfigForm({ data, onChange }) {
                             placeholder="搜索供应商..."
                             value={embedProviderSearch}
                             onChange={e => setEmbedProviderSearch(e.target.value)}
+                            autoComplete="off"
+                            data-lpignore="true"
+                            data-1p-ignore="true"
                         />
                         {[
                             { group: '🇨🇳 国内', keys: ['zhipu', 'bailian', 'hunyuan', 'baichuan', 'siliconflow'] },
@@ -2589,6 +2598,9 @@ function ApiConfigForm({ data, onChange }) {
                                             value={embedModelSearch}
                                             onChange={e => setEmbedModelSearch(e.target.value)}
                                             autoFocus
+                                            autoComplete="off"
+                                            data-lpignore="true"
+                                            data-1p-ignore="true"
                                         />
                                     </div>
                                     <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px 12px' }}>
@@ -2659,7 +2671,7 @@ function ApiConfigForm({ data, onChange }) {
                         </button>
                     ) : (
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                            <input className="modal-input" style={{ margin: 0, flex: 1, padding: '7px 10px', fontSize: 13 }} value={profileName} onChange={e => setProfileName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSaveProfile()} placeholder={t('apiConfig.saveProfilePlaceholder')} autoFocus />
+                            <input className="modal-input" style={{ margin: 0, flex: 1, padding: '7px 10px', fontSize: 13 }} value={profileName} onChange={e => setProfileName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSaveProfile()} placeholder={t('apiConfig.saveProfilePlaceholder')} autoFocus autoComplete="off" data-lpignore="true" data-1p-ignore="true" />
                             <button className="btn btn-primary btn-sm" style={{ padding: '7px 14px', whiteSpace: 'nowrap' }} onClick={handleSaveProfile}>{t('apiConfig.saveBtn')}</button>
                             <button className="btn btn-ghost btn-sm" style={{ padding: '7px 10px' }} onClick={() => setShowSaveInput(false)}>{t('common.cancel')}</button>
                         </div>
@@ -2685,7 +2697,7 @@ function FieldInput({ label, value, onChange, placeholder, multiline, rows, secr
                 <Component
                     className="modal-input"
                     style={{ marginBottom: 0, ...(multiline ? { resize: 'vertical', minHeight: `${(rows || 3) * 22}px` } : {}), ...(secret ? { paddingRight: 36 } : {}) }}
-                    {...(!multiline ? { type: secret && !showSecret ? 'password' : 'text' } : {})}
+                    {...(!multiline ? { type: secret && !showSecret ? 'password' : 'text', autoComplete: secret ? 'new-password' : 'off', 'data-lpignore': 'true', 'data-1p-ignore': 'true' } : {})}
                     value={value || ''}
                     onChange={e => onChange(e.target.value)}
                     placeholder={placeholder}

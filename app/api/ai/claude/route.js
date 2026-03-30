@@ -6,6 +6,7 @@ export const maxDuration = 120;
 
 import { applyContentSafety } from '../../../lib/content-safety';
 import { proxyFetch } from '../../../lib/proxy-fetch';
+import { rotateKey } from '../../../lib/keyRotator';
 
 // Anthropic 格式的搜索工具定义
 const WEB_SEARCH_TOOL = {
@@ -23,6 +24,7 @@ const WEB_SEARCH_TOOL = {
 // 内联搜索执行（与 /api/ai/route.js 共享逻辑）
 async function executeSearch(query, searchConfig, proxyUrl) {
     const provider = searchConfig.provider || 'tavily';
+    searchConfig.apiKey = rotateKey(searchConfig.apiKey);
     switch (provider) {
         case 'tavily': {
             const tavilyBase = (searchConfig.baseUrl || 'https://api.tavily.com').replace(/\/$/, '');
@@ -55,7 +57,7 @@ export async function POST(request) {
         const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, reasoningEffort, tools: toolsConfig } = await request.json();
         const proxyUrl = apiConfig?.proxyUrl || '';
 
-        const apiKey = apiConfig?.apiKey || process.env.CLAUDE_API_KEY;
+        const apiKey = rotateKey(apiConfig?.apiKey || process.env.CLAUDE_API_KEY);
         const baseUrl = (apiConfig?.baseUrl || process.env.CLAUDE_BASE_URL || 'https://api.anthropic.com').replace(/\/$/, '');
         const model = apiConfig?.model || process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514';
 

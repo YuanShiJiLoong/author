@@ -6,13 +6,14 @@ export const maxDuration = 120;
 
 import { applyContentSafety } from '../../../lib/content-safety';
 import { proxyFetch } from '../../../lib/proxy-fetch';
+import { rotateKey } from '../../../lib/keyRotator';
 
 export async function POST(request) {
     try {
         const { systemPrompt, userPrompt, apiConfig, maxTokens, temperature, topP, reasoningEffort, tools: toolsConfig } = await request.json();
         const proxyUrl = apiConfig?.proxyUrl || '';
 
-        const apiKey = apiConfig?.apiKey || process.env.GEMINI_API_KEY;
+        const apiKey = rotateKey(apiConfig?.apiKey || process.env.GEMINI_API_KEY);
         let rawBaseUrl = apiConfig?.baseUrl;
         if (!rawBaseUrl || rawBaseUrl.includes('open.bigmodel.cn')) {
             rawBaseUrl = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';

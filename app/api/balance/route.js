@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../lib/proxy-fetch';
+import { rotateKey } from '../../lib/keyRotator';
 
 // ==================== API 余额查询 ====================
 // 三层瀑布策略：
@@ -9,7 +10,8 @@ import { proxyFetch } from '../../lib/proxy-fetch';
 
 export async function POST(request) {
     try {
-        const { provider, apiKey, baseUrl, proxyUrl } = await request.json();
+        let { provider, apiKey, baseUrl, proxyUrl } = await request.json();
+        apiKey = rotateKey(apiKey);
         if (!apiKey) {
             return NextResponse.json({ error: '未配置 API Key' }, { status: 400 });
         }

@@ -249,6 +249,8 @@ Author supports multiple AI providers. Configure via **environment variables** o
 | Custom (Gemini format) | In-app config | Any Gemini-compatible endpoint |
 | Custom (Claude format) | In-app config | Any Claude-compatible endpoint |
 
+> 💡 **Tip:** You can configure **multiple API keys** for the same provider to create a key pool. Simply separate the keys with commas `,` or spaces. The system will automatically rotate through them (round-robin) to distribute the load and avoid rate limits.
+
 > 💡 **No API key required** for most editing features. AI features need at least one provider configured.
 
 ---

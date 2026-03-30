@@ -3,6 +3,7 @@
 export const runtime = 'nodejs';
 
 import { proxyFetch } from '../../lib/proxy-fetch';
+import { rotateKey } from '../../lib/keyRotator';
 
 export async function POST(request) {
     try {
@@ -11,7 +12,7 @@ export async function POST(request) {
 
         const isCustomEmbed = apiConfig?.useCustomEmbed;
         const provider = isCustomEmbed ? apiConfig.embedProvider : (apiConfig?.provider || 'zhipu');
-        const apiKey = isCustomEmbed ? (apiConfig.embedApiKey || apiConfig?.apiKey) : apiConfig?.apiKey;
+        const apiKey = rotateKey(isCustomEmbed ? (apiConfig.embedApiKey || apiConfig?.apiKey) : apiConfig?.apiKey);
 
         // 自动识别默认填写或遗留的智谱URL并矫正为对应官方URL
         let defaultBaseUrl = ['gemini-native', 'custom-gemini'].includes(provider) ? 'https://generativelanguage.googleapis.com/v1beta' : 'https://open.bigmodel.cn/api/paas/v4';

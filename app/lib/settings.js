@@ -206,8 +206,32 @@ export function getProjectSettings() {
     if (typeof window === 'undefined') return DEFAULT_SETTINGS;
     try {
         const data = localStorage.getItem(SETTINGS_KEY);
-        if (!data) return DEFAULT_SETTINGS;
-        const settings = { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+        const parsed = data ? JSON.parse(data) : null;
+        const settings = { ...DEFAULT_SETTINGS, ...(parsed || {}) };
+
+        // 从独立的 author-api-config 中读取 API 设置（防止从云同步覆盖或缺失）
+        const apiDataRaw = localStorage.getItem('author-api-config');
+        if (apiDataRaw) {
+            try {
+                const apiData = JSON.parse(apiDataRaw);
+                settings.apiConfig = apiData.apiConfig || settings.apiConfig;
+                settings.chatApiConfig = apiData.chatApiConfig !== undefined ? apiData.chatApiConfig : settings.chatApiConfig;
+            } catch { /* ignore */ }
+        }
+
+        // 自动迁移：如果旧的 SETTINGS_KEY 里还存在 apiConfig（特别是包含配置时），并且还没有独立的 author-api-config，分离它
+        if (data && !apiDataRaw && settings.apiConfig) {
+             const apiConfigData = {
+                 apiConfig: settings.apiConfig,
+                 chatApiConfig: settings.chatApiConfig
+             };
+             localStorage.setItem('author-api-config', JSON.stringify(apiConfigData));
+
+             const syncSettings = { ...settings };
+             delete syncSettings.apiConfig;
+             delete syncSettings.chatApiConfig;
+             localStorage.setItem(SETTINGS_KEY, JSON.stringify(syncSettings));
+        }
         // 自动迁移：旧数据没有 providerConfigs 时，将当前活跃供应商的配置种入
         if (settings.apiConfig && !settings.apiConfig.providerConfigs) {
             settings.apiConfig.providerConfigs = {};
@@ -243,9 +267,21 @@ export function getProjectSettings() {
 // 保存项目设定（同步写 localStorage + 异步写服务端）
 export function saveProjectSettings(settings) {
     if (typeof window === 'undefined') return;
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    // 抽出 apiConfig 和 chatApiConfig，单独存入本地，不要同步到云端
+    const apiConfigData = {
+        apiConfig: settings.apiConfig,
+        chatApiConfig: settings.chatApiConfig,
+    };
+    localStorage.setItem('author-api-config', JSON.stringify(apiConfigData));
+
+    // 从 settings 拷贝一份剔除 API 配置后用于云同步
+    const syncSettings = { ...settings };
+    delete syncSettings.apiConfig;
+    delete syncSettings.chatApiConfig;
+
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(syncSettings));
     // 异步写入服务端（不阻塞 UI）
-    persistSet(SETTINGS_KEY, settings).catch(() => { });
+    persistSet(SETTINGS_KEY, syncSettings).catch(() => { });
 }
 
 /**

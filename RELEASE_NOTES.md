@@ -1,25 +1,23 @@
 ## 📋 本次焕新简报 / Release Overview
 
-本次常规更新（v1.2.9）为核心模型调度引入了更多自由度量控制机制，大幅优化了本地系统底层对官方 Token Caching 的识别表现。同时，我们修复了由高度估测错算导致的开局向导组件渲染越出屏幕边界的历史沉疴。
+本次常规更新（v1.2.10）为高频请求作者们带来了一项硬核杀手锏特性——**API Key 级负载均衡与调用池（Key Pool Load Balancing）**。它将伴随着多节点并发调用，彻底打破单一模型账单或服务商的速率限流瓶颈（Rate Limits）。
 
 ### 🇨🇳 中文更新概览
 
-- 🎛️ **开放更自由的底层模型参数配置**：为进阶创作者们特别新增了「高级模型参数配置」组件。现在可在设定面板针对特定的供应商模型**独立修改并覆盖**其专属的 *Temperature*（温度）、*Top P*（核采样约束）、*Max Output Tokens*（最大输出限制）甚至最新的 *Reasoning Effort*（深度思考推理强度）。
-- 📉 **Prompt Caching 命中记录可见化**：优化后台长文本统计逻辑的接入，系统底层正式打通最新 API 上下文缓存流的解析链路；右侧 AI 面板「统计」选项卡内现已实时刷新并高亮显示 **缓存命中 Tokens (Cache Hits)**，直观展现为你节省的巨量输入开销。
-- 🔧 **修复全屏向导悬浮定位越屏的缺陷**：根绝了在新安装应用触发应用引导功能（TourOverlay）时，因为其组件内部把初始气泡估算高度硬编码为异常庞大的 `460px` ，造成原本指代左下角云同步图标的说明框向飞出窗口顶部错乱的问题。
-- 📖 **应用内部语料库补充与热修缮**：重构并充实了应用内按下齿轮选项后弹出的「帮助与指南」面板文档。已详细涵盖 RAG 本地向量机制及相关智能缓存的操作讲解，同时彻底校对梳理了全版本多语环境（特别是英语与俄语）的显示遗漏。
+- ⚖️ **全新 API 密钥池与负载均衡策略**：不再局限于单一凭证！现在你可以在 API 设定中通过英文逗号（`,`）一次性填入多个 API Key 以构建「钥匙池」了（例如：`sk-a,sk-b,sk-c`）。
+- 🚀 **突破限频，智能高并发轮询**：Author 底层网络请求模块现已接管了一套随机算法轮询拦截器（Key Rotator）。无论是你点击生成速度极快连续续写，还是面对长篇多文档大体量设定集并发做 RAG 向量化（Embedding）更新请求，系统都会在底层智能且隐形地分摊并发流量到不同的 Key 上，大幅降爆 429 请求超限错误率。
+- 🌍 **多国语言与内部文档全面解谜**：不仅在 UI 面板（应用内帮助文档）更新了关于负载均衡特性的详细讲解，而且我们一并将中/英/俄/阿四国语言环境下的全仓 `README.md` 也进行了详尽且统一的机制说明补全，确保信息完美同步。
 
-📦 全自动封装构建流程完毕，点击下方 `.exe` 图标立刻开启纯粹自由的写作心流。
+📦 全自动封装构建流程完毕，点击下方 `.exe` 图标即可立刻安装。
 
 ---
 
 ### 🇺🇸 English Release Notes
 
-The Version 1.2.9 release unlocks a vast grid of low-level LLM parameter tweaks, explicitly surfacing prompt context cache statistics directly onto the UI, alongside a critical UX hotfix correcting heavily misaligned out-of-bound onboarding elements.
+The Version 1.2.10 update arrives with a much-requested, hardcore optimization geared heavily toward our powerhouse writers: **Native API Key Pooling & Load Balancing**. This breakthrough allows fluid, rapid multi-node scaling without immediately hitting provider-imposed strict Rate Limits (429 errors).
 
-- 🎛️ **Independent Advanced Tuning Matrix:** Added dynamic switches allowing deeper configuration logic for specialized writing behaviors! Users can now explicitly force-override *Temperature*, *Top P*, *Max Output Tokens*, and new complex *Reasoning Effort* traits independently per LLM provider right inside API settings.
-- 📉 **Native Prompt Caching Visor:** We've heavily tapped into token-spend optimization protocols—meaning you get deep API context-cache metric integrations! A real-time **Cache Hit Rate (Tokens)** tracker has been mapped cleanly inside your AI Sidebar's stat tab highlighting your exact long-context savings dynamically!
-- 🔧 **Tour Overlay Off-Canvas Alignment Fix:** Extinguished an annoying long-standing glitch where newly executed application tutorials deployed tooltip overlays using a huge `460px` height-guess threshold causing lower-anchored popups (especially bottom sync menus) to physically fly miles away tracking off-screen bounds. 
-- 📖 **Embedded Local Documentation Reworks:** We've comprehensively overhauled inner "Help & Info" document blocks to strictly incorporate the shiny features previously pushed like the intricate offline RAG text vector mechanism or the new parameter bounds. Entire multi-lingual JSON files (EN/RU/ZH) were thoroughly reviewed to align perfectly.
+- ⚖️ **Fluid Multi-API Key Load Pools:** Let's transcend single-credential locks! You can now string together multiple API keys comma-separated (e.g., `sk-one,sk-two,sk-three`) within your settings, dynamically constructing a multi-layered local credential "Key Pool".
+- 🚀 **Anti-Rate-Limit Traffic Rotator:** We embedded a brand-new Key Rotator interceptor down deep inside Author's network handling stack. Whether you are blasting fast ghost-text continuations or triggering massive batch API requests for RAG background-embeddings processing during initial 50+ lore setups—the system now silently spreads internal traffic uniformly across random keys, practically crushing aggressive IP/token request limits.
+- 🌍 **Omni-Lingual Documentation Refresh:** Every corner of our readmes—EN, RU, AR, ZH—combined with offline inner-UI help panels, has been deeply overhauled detailing this specific Load-Balancing trick, securing uniform intel-syncs worldwide.
 
-📦 Simply grab the `.exe` installer right below and run it directly. Cloud sync engine is already packed nicely inside.
+📦 Simply grab the `.exe` installer right below and launch your new high-volume creative rig.

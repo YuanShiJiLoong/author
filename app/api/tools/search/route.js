@@ -3,6 +3,8 @@
 
 export const runtime = 'edge';
 
+import { rotateKey } from '../../../lib/keyRotator';
+
 export async function POST(request) {
     try {
         const { query, searchConfig } = await request.json();
@@ -15,6 +17,8 @@ export async function POST(request) {
         }
 
         let results = [];
+        
+        searchConfig.apiKey = rotateKey(searchConfig.apiKey);
 
         switch (searchConfig.provider) {
 

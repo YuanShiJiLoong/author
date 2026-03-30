@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../../../lib/proxy-fetch';
+import { rotateKey } from '../../../../lib/keyRotator';
 
 // 拉取 Gemini 可用模型列表（支持分页，兼容中转）
 export async function POST(request) {
     try {
-        const { apiKey, baseUrl, proxyUrl } = await request.json();
+        let { apiKey, baseUrl, proxyUrl } = await request.json();
+        apiKey = rotateKey(apiKey);
 
         if (!apiKey) {
             return NextResponse.json(

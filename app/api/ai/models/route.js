@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../../lib/proxy-fetch';
+import { rotateKey } from '../../../lib/keyRotator';
 
 // 通用模型列表拉取 — 支持 OpenAI 兼容格式和 Gemini 原生格式
 export async function POST(request) {
     try {
-        const { apiKey, baseUrl, provider, embedOnly, proxyUrl } = await request.json();
+        let { apiKey, baseUrl, provider, embedOnly, proxyUrl } = await request.json();
+        apiKey = rotateKey(apiKey);
 
         if (!apiKey) {
             return NextResponse.json(
