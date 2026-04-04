@@ -57,6 +57,9 @@ mcp_config.json
 *草稿*/
 *draft*/
 
+# flutter mobile (private repo)
+/mobile
+
 # firebase local cache
 .firebase/
 
