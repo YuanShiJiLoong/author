@@ -9,6 +9,17 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '50mb',
     },
+    outputFileTracingExcludes: {
+      '*': [
+        'mobile/**/*',
+        'docs/**/*',
+        '.idea/**/*',
+        '.agent/**/*',
+        '.venv/**/*',
+        'build/**/*',
+        'dist/**/*'
+      ],
+    },
   },
 };
 
