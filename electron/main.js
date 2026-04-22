@@ -637,11 +637,18 @@ function cleanupBundledNonRuntimeFiles() {
         const topLevelEntries = fs.readdirSync(standaloneDir, { withFileTypes: true });
         const staleDirPatterns = [/^方案/i, /^计划/i, /草稿/i, /draft/i];
         for (const entry of topLevelEntries) {
-            if (!entry.isDirectory()) continue;
-            if (!staleDirPatterns.some((pattern) => pattern.test(entry.name))) continue;
-
             const targetPath = path.join(standaloneDir, entry.name);
-            fs.rmSync(targetPath, { recursive: true, force: true });
+            if (entry.isDirectory()) {
+                if (!staleDirPatterns.some((pattern) => pattern.test(entry.name))) continue;
+
+                fs.rmSync(targetPath, { recursive: true, force: true });
+                log(`[Cleanup] Removed stale bundled path: ${targetPath}`);
+                continue;
+            }
+
+            if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== '.log') continue;
+
+            fs.rmSync(targetPath, { force: true });
             log(`[Cleanup] Removed stale bundled path: ${targetPath}`);
         }
     } catch (err) {
