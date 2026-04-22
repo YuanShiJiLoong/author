@@ -15,6 +15,7 @@
 #### 📝 文档与说明
 - **帮助页已修正同步范围说明**：AI 对话记录仅保存在本地，快照历史默认保存在本地，云端只保留最近一次快照
 - **同步相关界面补充了更清楚的提示**：在退出弹窗、账号面板和同步菜单中补充说明，减少对同步范围的误解
+- **优化桌面版打包过滤**：进一步排除与运行无关的文档文件，避免它们被带入安装目录
 
 ---
 
@@ -33,3 +34,4 @@
 #### 📝 Docs and UX Copy
 - **Corrected help-page wording about sync scope**: AI chat history is local-only, while snapshot history stays local by default and only the latest snapshot is kept in cloud sync
 - **Added clearer messaging in sync-related UI**: The exit modal, account panel, and sync menu now explain the actual sync scope more clearly
+- **Refined desktop packaging filters**: Further excluded non-runtime documentation files so they are not bundled into the installed app directory
