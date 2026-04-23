@@ -68,7 +68,7 @@ function MoreMenuPortal({ anchorRef, t, setShowSettings, setShowMoreMenu, onOpen
 }
 
 /** 云同步下拉菜单（Portal 渲染到 body，根据实际高度动态调整避免被容器裁剪或超出屏幕） */
-function SyncMenuPortal({ anchorRef, cloudinarySyncStatus, setShowSyncMenu, setShowSyncConfirmModal }) {
+function SyncMenuPortal({ anchorRef, t, cloudinarySyncStatus, setShowSyncMenu, setShowSyncConfirmModal }) {
     const menuRef = useRef(null);
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
@@ -878,6 +878,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                             {showSyncMenu && (
                                 <SyncMenuPortal 
                                     anchorRef={syncMenuAnchorRef} 
+                                    t={t}
                                     cloudinarySyncStatus={cloudSyncStatus} 
                                     setShowSyncMenu={setShowSyncMenu} 
                                     setShowSyncConfirmModal={setShowSyncConfirmModal} 
