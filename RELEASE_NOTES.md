@@ -1,47 +1,47 @@
-## v1.2.18 — 修复退出同步时最后内容丢失，并补充更清晰的保存提醒 | Fixed last-minute text loss on sync exit and added clearer save guidance
+## v1.2.19 — 支持 DeepSeek V4 并修复发版 lint | Added DeepSeek V4 support and fixed release lint
 
 ### 🇨🇳 中文
 
-#### 🐛 修复
-- **修复“同步后退出”时最后输入内容可能丢失的问题**：如果刚写完一段内容就立刻退出，系统现在会先保存当前文字，再执行云同步，避免最后几百字没有被带上
-- **修复手动同步、创建快照时可能漏掉最新内容的问题**：这些关键操作现在都会先保存编辑器里正在写的内容，再继续执行
-- **修复同步失败后仍然直接退出的问题**：当云同步失败时，退出弹窗会明确提示原因，并允许你选择重试同步，或仅带着本地已保存内容退出
+#### 🤖 DeepSeek V4 支持
+- **更新 DeepSeek 默认接口地址**：OpenAI 兼容接口默认 Base URL 改为 `https://api.deepseek.com`，匹配 DeepSeek V4 官方文档
+- **更新 DeepSeek 默认模型**：新增并优先使用 `deepseek-v4-pro`、`deepseek-v4-flash`，旧 `deepseek-chat`、`deepseek-reasoner` 保留在列表中用于兼容
+- **补充旧模型停用提醒**：在设置页中对 `deepseek-chat` / `deepseek-reasoner` 显示 `2026-07-24` 停用提示，避免用户误选旧模型
 
-#### 💾 数据安全改进
-- **统一了关键操作前的保存方式**：退出、同步、创建快照等操作，现在都会先保存你眼前正在编辑的内容，减少因为操作太快导致的遗漏
-- **从云端覆盖本地内容前自动创建备份**：执行“从云端同步”前，会先生成一份本地快照，方便在误覆盖后恢复
-- **同步等待更可靠**：如果后台已经在同步，新的退出同步或手动同步会等当前同步完成，不会误以为已经同步结束
+#### 🧠 思考模式与 Tool Calls
+- **支持 DeepSeek V4 `thinking` 参数**：默认开启思考模式；选择关闭思考或 `reasoningEffort: "none"` 时会发送 `thinking: { type: "disabled" }`
+- **优化高级参数行为**：DeepSeek V4 思考模式开启时不再发送 `temperature` / `top_p`，避免这些参数被模型忽略造成误解
+- **修复 DeepSeek 思考模式工具调用上下文**：当模型返回 `tool_calls` 时，会保留 `reasoning_content` 进入下一轮请求，符合 DeepSeek V4 文档要求
 
-#### 📝 文档与说明
-- **帮助页已修正同步范围说明**：AI 对话记录仅保存在本地，快照历史默认保存在本地，云端只保留最近一次快照
-- **同步相关界面补充了更清楚的提示**：在退出弹窗、账号面板和同步菜单中补充说明，减少对同步范围的误解
-- **优化桌面版打包过滤**：进一步排除与运行无关的文档文件，避免它们被带入安装目录
+#### 🔌 连接测试与配置示例
+- **更新 DeepSeek 连接测试**：测试连接默认使用 `deepseek-v4-pro` 和新 Base URL，并关闭思考以降低测试延迟和成本
+- **更新 `.env.example` 示例**：DeepSeek 示例配置改为 `API_BASE_URL=https://api.deepseek.com`、`API_MODEL=deepseek-v4-pro`
+- **清理 Key 占位符写法**：示例环境变量改为空值形式，避免发版安全脚本把说明文字误判为密钥
 
-#### 🔧 同版修复
-- **修复桌面客户端模型连接测试可能失败的问题**：安装版现在可以正常处理本地模型连接测试，不会在测试开始前就显示内部错误
-- **优化模型连接测试失败提示**：网络、代理或 API 地址异常时，会显示更明确的失败原因
-- **补充网页版访问统计支持**：官方网页版可在配置后记录基础页面浏览统计；桌面客户端不参与这类统计
+#### 🧹 发版与 lint 修复
+- **修复完整 lint 失败问题**：排除构建产物和 KaTeX 静态资源，并将 React Compiler 迁移类检查降为 warning
+- **修复真实 Hook 顺序问题**：调整应用 store 和编辑器工具栏中的 Hook 调用顺序，保留关键 Hook 规则为 error
+- **优化发版安全脚本**：删除行不再被当作即将发布的密钥内容，减少安全检查误报
 
 ---
 
 ### 🇬🇧 English
 
-#### 🐛 Fixes
-- **Fixed possible loss of the latest text when choosing “Sync and Exit”**: If you exited right after typing, the app now saves the current text first and only then runs cloud sync, preventing the last few hundred characters from being missed
-- **Fixed missing latest content during manual sync and snapshot creation**: These important actions now save the text currently being edited before continuing
-- **Fixed direct exit after sync failure**: When cloud sync fails, the exit modal now explains the problem clearly and lets you retry sync or exit with the already-saved local content
+#### 🤖 DeepSeek V4 Support
+- **Updated the default DeepSeek endpoint**: The OpenAI-compatible Base URL now defaults to `https://api.deepseek.com`, matching the official DeepSeek V4 documentation
+- **Updated default DeepSeek models**: Added and prioritized `deepseek-v4-pro` and `deepseek-v4-flash`, while keeping `deepseek-chat` and `deepseek-reasoner` for compatibility
+- **Added legacy model deprecation hints**: The settings page now warns that `deepseek-chat` / `deepseek-reasoner` are scheduled for deprecation on `2026-07-24`
 
-#### 💾 Data Safety Improvements
-- **Unified saving before critical actions**: Exit, sync, and snapshot actions now save what you are currently editing first, reducing the chance of missing recent changes
-- **Create a backup before cloud overwrite**: Before “Sync from Cloud” replaces local content, the app now creates a local snapshot for recovery
-- **More reliable sync waiting**: If a sync is already running, exit-sync and manual-sync actions now wait for it to finish instead of incorrectly assuming sync is done
+#### 🧠 Thinking Mode and Tool Calls
+- **Added DeepSeek V4 `thinking` support**: Thinking is enabled by default; disabling thinking or using `reasoningEffort: "none"` sends `thinking: { type: "disabled" }`
+- **Improved advanced parameter handling**: `temperature` and `top_p` are no longer sent while DeepSeek V4 thinking mode is enabled, avoiding confusing ignored parameters
+- **Fixed tool-call context in DeepSeek thinking mode**: When the model returns `tool_calls`, `reasoning_content` is preserved for the next request as required by the DeepSeek V4 docs
 
-#### 📝 Docs and UX Copy
-- **Corrected help-page wording about sync scope**: AI chat history is local-only, while snapshot history stays local by default and only the latest snapshot is kept in cloud sync
-- **Added clearer messaging in sync-related UI**: The exit modal, account panel, and sync menu now explain the actual sync scope more clearly
-- **Refined desktop packaging filters**: Further excluded non-runtime documentation files so they are not bundled into the installed app directory
+#### 🔌 Connection Tests and Examples
+- **Updated DeepSeek connection tests**: Test calls now default to `deepseek-v4-pro` and the new Base URL, with thinking disabled to reduce latency and cost
+- **Updated `.env.example`**: The DeepSeek example now uses `API_BASE_URL=https://api.deepseek.com` and `API_MODEL=deepseek-v4-pro`
+- **Cleaned up API key placeholders**: Example environment variables now use empty values so release safety checks do not mistake explanatory placeholders for secrets
 
-#### 🔧 Same-Version Hotfix
-- **Fixed possible desktop model connection test failures**: The installed desktop app can now handle local model connection tests normally instead of showing an internal error before the test starts
-- **Improved model connection test failure messages**: Network, proxy, or API URL problems now show a clearer failure reason
-- **Added web page-view analytics support**: The official web version can record basic page-view statistics when configured; the desktop client is excluded from this analytics flow
+#### 🧹 Release and Lint Fixes
+- **Fixed full lint failures**: Build artifacts and KaTeX static assets are excluded, and React Compiler migration checks are reported as warnings
+- **Fixed real Hook ordering issues**: Store and editor toolbar hook order was adjusted while keeping critical hook rules as errors
+- **Improved the release safety script**: Deleted diff lines are no longer treated as soon-to-be-published secret content, reducing false positives

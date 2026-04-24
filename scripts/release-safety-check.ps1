@@ -48,6 +48,14 @@ function Match-GitOutput {
     return @($output | Select-String -Pattern $Pattern -CaseSensitive:$false)
 }
 
+function Get-CurrentDiffLines {
+    param([object[]]$Lines)
+
+    return @($Lines | Where-Object {
+        -not ([string]$_).StartsWith('-')
+    })
+}
+
 Write-Host '== Author release safety check =='
 Write-Host "Repository: $repoRoot"
 Write-Host 'Automated guardrail only. Manual semantic privacy review is still required before release.'
@@ -104,7 +112,7 @@ if ($sensitiveTracked.Count -gt 0) {
 
 $diffOutput = @(& git diff -- . ':(exclude)package-lock.json' ':(exclude)scripts/release-safety-check.ps1')
 $stagedDiffOutput = @(& git diff --cached -- . ':(exclude)package-lock.json' ':(exclude)scripts/release-safety-check.ps1')
-$allDiffOutput = @($diffOutput) + @($stagedDiffOutput)
+$allDiffOutput = Get-CurrentDiffLines (@($diffOutput) + @($stagedDiffOutput))
 
 $highConfidenceSecretPattern = 'sk-[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9._~+/=-]{20,}|(api[_-]?key|secret[_-]?key|private[_-]?key|firebase[_-]?api|password|credential|token)\s*[:=]\s*["'']?\S{12,}'
 $highConfidenceSecretDiff = @($allDiffOutput | Select-String -Pattern $highConfidenceSecretPattern -CaseSensitive:$false)

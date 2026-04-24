@@ -1,1 +1,1 @@
-修复桌面客户端模型连接测试失败 | Fixed desktop model connection test failures
+支持 DeepSeek V4 并修复发版 lint | Added DeepSeek V4 support and fixed release lint

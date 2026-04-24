@@ -1617,8 +1617,6 @@ const FONT_SIZES = [12, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32];
 
 // ==================== 工具栏 ====================
 function EditorToolbar({ editor, margins, setMargins }) {
-    if (!editor) return null;
-
     const [showFontColor, setShowFontColor] = useState(false);
     const [showBgColor, setShowBgColor] = useState(false);
     const [showFontFamily, setShowFontFamily] = useState(false);
@@ -1674,6 +1672,8 @@ function EditorToolbar({ editor, margins, setMargins }) {
         el.addEventListener('wheel', onWheel, { passive: false });
         return () => el.removeEventListener('wheel', onWheel);
     }, []);
+
+    if (!editor) return null;
 
     const currentFontFamily = editor.getAttributes('textStyle').fontFamily || '';
     const currentFontLabel = FONT_FAMILIES.find(f => f.value === currentFontFamily)?.label || '默认';

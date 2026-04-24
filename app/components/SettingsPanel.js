@@ -1293,10 +1293,12 @@ export default function SettingsPanel() {
     );
 }
 
+const DEEPSEEK_DEPRECATED_MODELS = new Set(['deepseek-chat', 'deepseek-reasoner']);
+
 export const PROVIDERS = [
     // === 国内供应商 ===
     { key: 'zhipu', label: '智谱AI (GLM)', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-flash', 'glm-4-plus', 'glm-4-long', 'glm-4'] },
-    { key: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
+    { key: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com', models: ['deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-chat', 'deepseek-reasoner'] },
     { key: 'bailian', label: '阿里云百炼 (千问)', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', anthropicBaseUrl: 'https://dashscope.aliyuncs.com/apps/anthropic', models: ['qwen3.5-plus', 'qwen3-max'], supportedFormats: ['openai', 'anthropic'], defaultFormat: 'openai', allowCustomModel: true },
     { key: 'volcengine', label: '火山引擎 (豆包)', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', models: [], hint: '需在火山引擎控制台创建推理接入点，填入 endpoint_id 作为模型名' },
     { key: 'moonshot', label: 'Moonshot (Kimi)', baseUrl: 'https://api.moonshot.cn/v1', models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'] },
@@ -2221,6 +2223,9 @@ function ApiConfigForm({ data, onChange }) {
                     {resolvedProviderType === 'minimax' && (
                         <div className="provider-hint">MiniMax API Key 在开放平台获取，支持 abab 系列和 MiniMax-Text 系列模型。</div>
                     )}
+                    {resolvedProviderType === 'deepseek' && (
+                        <div className="provider-hint">DeepSeek V4 使用 https://api.deepseek.com；deepseek-chat / deepseek-reasoner 将于 2026-07-24 停用，建议切换到 deepseek-v4-pro 或 deepseek-v4-flash。</div>
+                    )}
 
                     {/* API 格式选择（多格式供应商） */}
                     {(resolvedProviderType === 'bailian' || resolvedProviderType === 'minimax') && (
@@ -2293,19 +2298,25 @@ function ApiConfigForm({ data, onChange }) {
                         {data.model && (() => {
                             const savedModels = data.providerConfigs?.[data.provider]?.models || [];
                             const isInList = savedModels.includes(data.model);
+                            const isDeprecatedDeepSeekModel = resolvedProviderType === 'deepseek' && DEEPSEEK_DEPRECATED_MODELS.has(data.model);
                             return (
-                                <button style={{ marginTop: 6, padding: '4px 12px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: isInList ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 11, color: isInList ? 'var(--accent)' : 'var(--text-secondary)' }} onClick={() => {
-                                    const configs = { ...(data.providerConfigs || {}) };
-                                    if (!configs[data.provider]) configs[data.provider] = {};
-                                    const models = [...(configs[data.provider].models || [])];
-                                    if (isInList) {
-                                        configs[data.provider] = { ...configs[data.provider], models: models.filter(x => x !== data.model) };
-                                    } else {
-                                        models.push(data.model);
-                                        configs[data.provider] = { ...configs[data.provider], models };
-                                    }
-                                    onChange({ ...data, providerConfigs: configs });
-                                }}>{isInList ? '☑ 已在快切列表' : '☐ 加入快切列表'}</button>
+                                <>
+                                    <button style={{ marginTop: 6, padding: '4px 12px', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: isInList ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 11, color: isInList ? 'var(--accent)' : 'var(--text-secondary)' }} onClick={() => {
+                                        const configs = { ...(data.providerConfigs || {}) };
+                                        if (!configs[data.provider]) configs[data.provider] = {};
+                                        const models = [...(configs[data.provider].models || [])];
+                                        if (isInList) {
+                                            configs[data.provider] = { ...configs[data.provider], models: models.filter(x => x !== data.model) };
+                                        } else {
+                                            models.push(data.model);
+                                            configs[data.provider] = { ...configs[data.provider], models };
+                                        }
+                                        onChange({ ...data, providerConfigs: configs });
+                                    }}>{isInList ? '☑ 已在快切列表' : '☐ 加入快切列表'}</button>
+                                    {isDeprecatedDeepSeekModel && (
+                                        <div style={{ fontSize: 11, color: 'var(--warning, #b45309)', marginTop: 6 }}>当前 DeepSeek 旧模型名将于 2026-07-24 停用，建议改用 deepseek-v4-pro 或 deepseek-v4-flash。</div>
+                                    )}
+                                </>
                             );
                         })()}
                     </div>
@@ -2346,6 +2357,7 @@ function ApiConfigForm({ data, onChange }) {
                                             const mParams = getModelParams(data.provider, m.id);
                                             const hasParams = !!mParams;
                                             const isEditing = editingModelParams === m.id;
+                                            const isDeprecatedDeepSeekModel = resolvedProviderType === 'deepseek' && DEEPSEEK_DEPRECATED_MODELS.has(m.id);
                                             return (
                                                 <div key={m.id}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 'var(--radius-sm, 6px)', cursor: 'pointer', transition: 'background 0.1s', background: isActive ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'transparent' }}
@@ -2367,6 +2379,7 @@ function ApiConfigForm({ data, onChange }) {
                                                         }}>{isInList ? '✓' : ''}</button>
                                                         {/* 模型名 */}
                                                         <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { update('model', m.id); }} title={`使用 ${m.id}`}>{m.id}</span>
+                                                        {isDeprecatedDeepSeekModel && <span style={{ fontSize: 9, color: 'var(--warning, #b45309)', background: 'color-mix(in srgb, var(--warning, #b45309) 12%, transparent)', padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>2026-07-24 停用</span>}
                                                         {/* 模型参数指示 */}
                                                         {hasParams && !isEditing && <span style={{ fontSize: 9, color: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 10%, transparent)', padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>自定义参数</span>}
                                                         {/* 齿轮图标 */}

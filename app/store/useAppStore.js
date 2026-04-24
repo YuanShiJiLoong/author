@@ -161,6 +161,8 @@ const store = create((set, get) => ({
     addGenerationArchive: (record) => set((state) => ({ generationArchive: [...state.generationArchive, record] })),
 }));
 
+const EMPTY_SELECTOR = () => null;
+
 // ============================================================
 // 自动追踪 hook — 组件只在实际访问的属性变化时重渲染
 //
@@ -174,10 +176,7 @@ const store = create((set, get) => ({
 //   showSettings 变化 → Sidebar 不重渲染（setShowSettings 是函数引用，不变）
 //   chapters 变化 → Sidebar 重渲染
 // ============================================================
-export function useAppStore(selector) {
-    // 手动 selector 模式 — 直接代理到 zustand
-    if (selector) return store(selector);
-
+function useTrackedAppStore() {
     // -- 自动追踪模式 --
     const [, forceRender] = useState(0);
     const accessedKeysRef = useRef(new Set());
@@ -217,6 +216,16 @@ export function useAppStore(selector) {
     });
 
     return proxy;
+}
+
+export function useAppStore(selector) {
+    // Always call the same hooks in the same order. Selector users subscribe to
+    // zustand directly; non-selector users get the tracked proxy below.
+    const selectedState = store(selector || EMPTY_SELECTOR);
+    const trackedState = useTrackedAppStore();
+
+    if (selector) return selectedState;
+    return trackedState;
 }
 
 // 保留静态方法供非组件代码使用

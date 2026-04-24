@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
 
+const DEEPSEEK_V4_MODELS = new Set(['deepseek-v4-pro', 'deepseek-v4-flash']);
+
+function isDeepSeekProvider(provider, baseUrl, model) {
+    return provider === 'deepseek'
+        || (baseUrl || '').includes('api.deepseek.com')
+        || DEEPSEEK_V4_MODELS.has((model || '').trim().toLowerCase());
+}
+
 // 测试 API 连接（通用 — 支持 OpenAI 兼容格式和 Gemini 原生格式）
 export async function POST(request) {
     try {
@@ -32,7 +40,7 @@ export async function POST(request) {
         }
 
         // OpenAI 兼容格式的测试
-        return await testOpenAICompat(apiKey, baseUrl, model, proxyUrl);
+        return await testOpenAICompat(apiKey, baseUrl, model, proxyUrl, provider);
 
     } catch (error) {
         console.warn('API测试连接失败:', error?.message || error);
@@ -77,10 +85,12 @@ async function testGeminiNative(apiKey, baseUrl, model, proxyUrl) {
     });
 }
 
-async function testOpenAICompat(apiKey, baseUrl, model, proxyUrl) {
-    const base = (baseUrl || 'https://open.bigmodel.cn/api/paas/v4').replace(/\/$/, '');
-    const m = model || 'gpt-4o-mini';
+async function testOpenAICompat(apiKey, baseUrl, model, proxyUrl, provider) {
+    const isDeepSeek = isDeepSeekProvider(provider, baseUrl, model);
+    const base = (baseUrl || (isDeepSeek ? 'https://api.deepseek.com' : 'https://open.bigmodel.cn/api/paas/v4')).replace(/\/$/, '');
+    const m = model || (isDeepSeek ? 'deepseek-v4-pro' : 'gpt-4o-mini');
     const url = `${base}/chat/completions`;
+    const isDeepSeekV4 = DEEPSEEK_V4_MODELS.has(m.trim().toLowerCase());
 
     const response = await proxyFetch(url, {
         method: 'POST',
@@ -92,6 +102,7 @@ async function testOpenAICompat(apiKey, baseUrl, model, proxyUrl) {
             model: m,
             messages: [{ role: 'user', content: '说"连接成功"' }],
             max_tokens: 20,
+            ...(isDeepSeekV4 ? { thinking: { type: 'disabled' } } : {}),
         }),
     }, proxyUrl);
 

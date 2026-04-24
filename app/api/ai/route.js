@@ -28,6 +28,46 @@ const WEB_SEARCH_TOOL = {
     },
 };
 
+const DEEPSEEK_V4_MODELS = new Set(['deepseek-v4-pro', 'deepseek-v4-flash']);
+const DEEPSEEK_LEGACY_REASONER_MODEL = 'deepseek-reasoner';
+
+function normalizeModel(model) {
+    return (model || '').trim().toLowerCase();
+}
+
+function isDeepSeekRequest(apiConfig, baseUrl, model) {
+    const provider = (apiConfig?.providerType || apiConfig?.provider || '').toLowerCase();
+    return provider === 'deepseek'
+        || (baseUrl || '').includes('api.deepseek.com')
+        || DEEPSEEK_V4_MODELS.has(normalizeModel(model));
+}
+
+function isDeepSeekV4Model(model) {
+    return DEEPSEEK_V4_MODELS.has(normalizeModel(model));
+}
+
+function isDeepSeekThinkingMode(apiConfig, baseUrl, model, reasoningEffort) {
+    if (!isDeepSeekRequest(apiConfig, baseUrl, model)) return false;
+    const normalizedModel = normalizeModel(model);
+    if (normalizedModel === DEEPSEEK_LEGACY_REASONER_MODEL) return true;
+    if (!isDeepSeekV4Model(model)) return false;
+    return reasoningEffort !== 'none';
+}
+
+function buildBaseParams({ model, maxTokens, temperature, topP, reasoningEffort }) {
+    const isV4 = isDeepSeekV4Model(model);
+    const thinkingType = isV4 ? (reasoningEffort === 'none' ? 'disabled' : 'enabled') : null;
+    const thinkingEnabled = thinkingType === 'enabled';
+
+    return {
+        ...(temperature != null && !thinkingEnabled ? { temperature } : {}),
+        ...(topP != null && !thinkingEnabled ? { top_p: topP } : {}),
+        ...(maxTokens ? { max_tokens: maxTokens } : {}),
+        ...(thinkingType ? { thinking: { type: thinkingType } } : {}),
+        ...(reasoningEffort && reasoningEffort !== 'auto' && !(isV4 && reasoningEffort === 'none') ? { reasoning_effort: reasoningEffort } : {}),
+    };
+}
+
 // ===== 内联搜索执行（避免 Edge Runtime 自引用 fetch 问题）=====
 async function executeSearch(query, searchConfig, proxyUrl) {
     const provider = searchConfig.provider || 'tavily';
@@ -83,12 +123,8 @@ export async function POST(request) {
             'Authorization': `Bearer ${apiKey}`,
         };
 
-        const baseParams = {
-            ...(temperature != null ? { temperature } : {}),
-            ...(topP != null ? { top_p: topP } : {}),
-            ...(maxTokens ? { max_tokens: maxTokens } : {}),
-            ...(reasoningEffort && reasoningEffort !== 'auto' ? { reasoning_effort: reasoningEffort } : {}),
-        };
+        const baseParams = buildBaseParams({ model, maxTokens, temperature, topP, reasoningEffort });
+        const keepReasoningContentForTools = isDeepSeekThinkingMode(apiConfig, baseUrl, model, reasoningEffort);
 
         const safeSystemPrompt = applyContentSafety(systemPrompt);
         const messages = [
@@ -129,8 +165,10 @@ export async function POST(request) {
                     ...assistantMsg,
                     content: assistantMsg.content || '',
                 };
-                // 移除 reasoning_content，防止 Round 2 时推理模型只产出思维链、不产出正文
-                delete cleanedAssistantMsg.reasoning_content;
+                if (!keepReasoningContentForTools) {
+                    // 非 DeepSeek 思考模式维持旧兼容逻辑，避免中转不接受 reasoning_content。
+                    delete cleanedAssistantMsg.reasoning_content;
+                }
                 // 收集搜索结果和来源
                 const extendedMessages = [...messages, cleanedAssistantMsg];
                 const allSources = [];
