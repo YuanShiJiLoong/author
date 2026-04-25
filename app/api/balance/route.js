@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../lib/proxy-fetch';
 import { rotateKey } from '../../lib/keyRotator';
 
+export const runtime = 'nodejs';
+
 // ==================== API 余额查询 ====================
 // 三层瀑布策略：
 // 1. 通用计费接口（NewAPI/OneAPI/大部分中转）
@@ -79,14 +81,16 @@ async function tryUniversalBilling(baseUrl, apiKey, proxyUrl) {
         let currency = 'USD';
 
         if (subRes.ok) {
-            const sub = await subRes.json();
+            const sub = await readJsonSafely(subRes);
+            if (!sub) return null;
             hardLimit = sub.hard_limit_usd ?? sub.system_hard_limit_usd ?? null;
             // 有些中转直接返回 soft_limit_usd 作为余额
             if (hardLimit === null) hardLimit = sub.soft_limit_usd ?? null;
         }
 
         if (usageRes.ok) {
-            const usage = await usageRes.json();
+            const usage = await readJsonSafely(usageRes);
+            if (!usage) return null;
             // total_usage 通常以美分为单位
             usedAmount = usage.total_usage != null ? usage.total_usage / 100 : null;
         }
@@ -148,7 +152,8 @@ async function tryDeepSeek(baseUrl, apiKey, proxyUrl) {
             headers: { 'Authorization': `Bearer ${apiKey}` },
         }, 8000, proxyUrl);
         if (!res.ok) return null;
-        const data = await res.json();
+        const data = await readJsonSafely(res);
+        if (!data) return null;
         if (!data.balance_infos && !data.is_available) return null;
 
         const info = data.balance_infos?.[0] || {};
@@ -176,7 +181,8 @@ async function trySiliconFlow(baseUrl, apiKey, proxyUrl) {
             headers: { 'Authorization': `Bearer ${apiKey}` },
         }, 8000, proxyUrl);
         if (!res.ok) return null;
-        const data = await res.json();
+        const data = await readJsonSafely(res);
+        if (!data) return null;
         const d = data.data || data;
         if (d.balance == null && d.totalBalance == null) return null;
 
@@ -203,7 +209,8 @@ async function tryOpenRouter(baseUrl, apiKey, proxyUrl) {
             headers: { 'Authorization': `Bearer ${apiKey}` },
         }, 8000, proxyUrl);
         if (!res.ok) return null;
-        const data = await res.json();
+        const data = await readJsonSafely(res);
+        if (!data) return null;
         const d = data.data || data;
         if (d.total_credits == null && d.balance == null) return null;
 
@@ -232,7 +239,8 @@ async function tryMoonshot(baseUrl, apiKey, proxyUrl) {
             headers: { 'Authorization': `Bearer ${apiKey}` },
         }, 8000, proxyUrl);
         if (!res.ok) return null;
-        const data = await res.json();
+        const data = await readJsonSafely(res);
+        if (!data) return null;
         const d = data.data || data;
         if (d.available_balance == null && d.balance == null && d.cash_balance == null) return null;
 
@@ -257,6 +265,16 @@ async function tryMoonshot(baseUrl, apiKey, proxyUrl) {
 
 function round(n) {
     return Math.round(n * 100) / 100;
+}
+
+async function readJsonSafely(res) {
+    const text = await res.text();
+    if (!text) return null;
+    try {
+        return JSON.parse(text);
+    } catch {
+        return null;
+    }
 }
 
 async function fetchWithTimeout(url, options, timeoutMs = 8000, proxyUrl) {

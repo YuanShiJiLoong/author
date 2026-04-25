@@ -97,6 +97,23 @@ function getIconByName(name) {
     return ICON_MAP[name] || null;
 }
 
+async function parseBalanceResponse(res) {
+    const text = await res.text();
+    if (!text) return {};
+
+    try {
+        return JSON.parse(text);
+    } catch {
+        const trimmed = text.trim().toLowerCase();
+        const isHtml = trimmed.startsWith('<!doctype') || trimmed.startsWith('<html');
+        return {
+            error: isHtml
+                ? `余额查询接口返回了网页错误页（HTTP ${res.status}），请检查部署路由或服务端日志。`
+                : `余额查询接口返回了非 JSON 响应（HTTP ${res.status}）。`,
+        };
+    }
+}
+
 export default function SettingsPanel() {
     const {
         showSettings: open,
@@ -2045,10 +2062,10 @@ function ApiConfigForm({ data, onChange }) {
             const res = await fetch('/api/balance', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ provider: data.provider, apiKey: data.apiKey, baseUrl: data.baseUrl, proxyUrl: data.proxyUrl }),
+                body: JSON.stringify({ provider: resolvedProviderType, apiKey: data.apiKey, baseUrl: data.baseUrl, proxyUrl: data.proxyUrl }),
             });
-            const result = await res.json();
-            if (res.ok) {
+            const result = await parseBalanceResponse(res);
+            if (res.ok && !result.error) {
                 setBalanceInfo(result);
             } else {
                 setBalanceInfo({ error: result.error || '查询失败' });
