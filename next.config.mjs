@@ -15,6 +15,11 @@ const nextConfig = {
       'dist/**/*'
     ],
   },
+  outputFileTracingIncludes: {
+    '*': [
+      'node_modules/next/dist/compiled/next-server/**/*',
+    ],
+  },
   // 提高请求体大小限制，避免大 PDF/DOC 文件上传时返回 413
   experimental: {
     serverActions: {
