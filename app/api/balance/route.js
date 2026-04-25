@@ -149,7 +149,10 @@ async function tryDeepSeek(baseUrl, apiKey, proxyUrl) {
     try {
         const root = (baseUrl || 'https://api.deepseek.com/v1').replace(/\/v1\/?$/, '');
         const res = await fetchWithTimeout(`${root}/user/balance`, {
-            headers: { 'Authorization': `Bearer ${apiKey}` },
+            headers: {
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+            },
         }, 8000, proxyUrl);
         if (!res.ok) return null;
         const data = await readJsonSafely(res);
