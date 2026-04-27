@@ -21,7 +21,7 @@ import { buildContext, compileSystemPrompt, compileUserPrompt, getContextItems, 
 import { addTokenRecord } from './lib/token-stats';
 import { getProjectSettings, WRITING_MODES, getWritingMode, addSettingsNode, updateSettingsNode, deleteSettingsNode, getSettingsNodes, getActiveWorkId } from './lib/settings';
 import {
-  loadSessionStore, createSession, getActiveSession,
+  loadSessionStore, saveSessionStore, createSession, getActiveSession,
 } from './lib/chat-sessions';
 import { exportProject, importProject } from './lib/project-io';
 import { createSnapshot } from './lib/snapshots';
@@ -73,12 +73,29 @@ export default function Home() {
   const { t } = useI18n();
   const [showHelp, setShowHelp] = useState(false);
   const editorRef = useRef(null);
+  const sessionStoreHydratedRef = useRef(false);
+  const latestSessionStoreRef = useRef(sessionStore);
+  const sessionAutosaveTimerRef = useRef(null);
   const flushPendingEditorSave = useCallback(async () => {
     if (!editorRef.current?.flushPendingSave) {
       return { changed: false };
     }
     return await editorRef.current.flushPendingSave();
   }, []);
+
+  const flushSessionStoreSave = useCallback(async () => {
+    const currentStore = latestSessionStoreRef.current;
+    if (!currentStore || !Array.isArray(currentStore.sessions)) return;
+    await saveSessionStore(currentStore);
+  }, []);
+
+  const scheduleSessionStoreSave = useCallback((delay = 500) => {
+    if (sessionAutosaveTimerRef.current) return;
+    sessionAutosaveTimerRef.current = window.setTimeout(async () => {
+      sessionAutosaveTimerRef.current = null;
+      await flushSessionStoreSave();
+    }, delay);
+  }, [flushSessionStoreSave]);
 
   useEffect(() => {
     setPendingEditorSaveFlusher(flushPendingEditorSave);
@@ -242,9 +259,40 @@ export default function Home() {
         store = createSession(store);
       }
       setSessionStore(store);
+      sessionStoreHydratedRef.current = true;
     };
     initData();
   }, []);
+
+  useEffect(() => {
+    latestSessionStoreRef.current = sessionStore;
+    if (!sessionStoreHydratedRef.current) return;
+    scheduleSessionStoreSave(chatStreaming ? 1000 : 300);
+  }, [sessionStore, chatStreaming, scheduleSessionStoreSave]);
+
+  useEffect(() => {
+    const flushNow = () => {
+      if (!sessionStoreHydratedRef.current) return;
+      if (sessionAutosaveTimerRef.current) {
+        window.clearTimeout(sessionAutosaveTimerRef.current);
+        sessionAutosaveTimerRef.current = null;
+      }
+      flushSessionStoreSave();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushNow();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', flushNow);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', flushNow);
+      if (sessionAutosaveTimerRef.current) {
+        window.clearTimeout(sessionAutosaveTimerRef.current);
+        sessionAutosaveTimerRef.current = null;
+      }
+    };
+  }, [flushSessionStoreSave]);
 
   // 切换作品时重新加载章节
   const prevWorkIdRef = useRef(activeWorkId);

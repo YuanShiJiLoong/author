@@ -29,6 +29,58 @@ function extractTextForEmbedding(node) {
     return text.trim();
 }
 
+function wouldCreateParentCycle(nodes, nodeId, newParentId) {
+    if (!nodeId || !newParentId) return false;
+    let currentId = newParentId;
+    const visited = new Set();
+    while (currentId) {
+        if (currentId === nodeId) return true;
+        if (visited.has(currentId)) return true;
+        visited.add(currentId);
+        const parent = nodes.find(n => n.id === currentId);
+        currentId = parent?.parentId || null;
+    }
+    return false;
+}
+
+function repairParentCycles(nodes, workId) {
+    const nodeById = new Map(nodes.map(node => [node.id, node]));
+    const rootByCategory = new Map();
+    for (const node of nodes) {
+        if (node.parentId === workId && node.category && (node.type === 'folder' || node.type === 'special')) {
+            rootByCategory.set(node.category, node.id);
+        }
+    }
+
+    let changed = false;
+    const getFallbackParentId = (node) => {
+        if (node.type === 'work') return null;
+        if (node.category && rootByCategory.get(node.category) && rootByCategory.get(node.category) !== node.id) {
+            return rootByCategory.get(node.category);
+        }
+        return workId;
+    };
+
+    for (const node of nodes) {
+        let parentId = node.parentId;
+        const visited = new Set([node.id]);
+        while (parentId) {
+            if (visited.has(parentId)) {
+                node.parentId = getFallbackParentId(node);
+                node.updatedAt = new Date().toISOString();
+                changed = true;
+                break;
+            }
+            visited.add(parentId);
+            const parent = nodeById.get(parentId);
+            if (!parent) break;
+            parentId = parent.parentId;
+        }
+    }
+
+    return changed;
+}
+
 // ==================== 写作模式定义 ====================
 
 export const WRITING_MODES = {
@@ -929,7 +981,9 @@ export async function getSettingsNodes(workId) {
             biPatched = true;
         }
 
-        if (repaired || patched || biPatched || rootFolderPatched) {
+        const cycleRepaired = repairParentCycles(nodes, wid);
+
+        if (repaired || patched || biPatched || rootFolderPatched || cycleRepaired) {
             await persistSet(getNodesKey(wid), nodes);
         }
         return nodes;
@@ -1110,6 +1164,9 @@ export async function updateSettingsNode(id, updates, currentNodes, workId) {
         delete updates.category;
         delete updates.parentId;
     }
+    if (updates.parentId !== undefined && wouldCreateParentCycle(nodes, id, updates.parentId)) {
+        throw new Error('不能把分类移动到自身或它的子分类下');
+    }
 
     // 先立即保存内容（不等 embedding），确保数据不丢失
     nodes[idx] = { ...nodes[idx], ...updates, updatedAt: new Date().toISOString() };
@@ -1152,9 +1209,12 @@ export async function deleteSettingsNode(id) {
         if (parent && parent.type === 'work' && WORK_SUB_CATEGORIES.some(c => id.endsWith('-' + c.suffix))) return false;
     }
     const toDelete = new Set();
-    const collect = (parentId) => {
+    const collect = (parentId, visiting = new Set()) => {
+        if (visiting.has(parentId)) return;
+        visiting.add(parentId);
         toDelete.add(parentId);
-        nodes.filter(n => n.parentId === parentId).forEach(n => collect(n.id));
+        nodes.filter(n => n.parentId === parentId).forEach(n => collect(n.id, visiting));
+        visiting.delete(parentId);
     };
     collect(id);
     // 清除被删除节点的所有待执行 embedding 定时器，
@@ -1175,6 +1235,9 @@ export async function moveSettingsNode(id, newParentId) {
     const nodes = await getSettingsNodes();
     const idx = nodes.findIndex(n => n.id === id);
     if (idx === -1) return null;
+    if (wouldCreateParentCycle(nodes, id, newParentId)) {
+        throw new Error('不能把分类移动到自身或它的子分类下');
+    }
     const siblings = nodes.filter(n => n.parentId === newParentId && n.id !== id);
     nodes[idx] = {
         ...nodes[idx],

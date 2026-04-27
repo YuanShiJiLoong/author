@@ -2,6 +2,7 @@
 
 import { useEditor, EditorContent } from '@tiptap/react';
 import { TextSelection } from '@tiptap/pm/state';
+import { DOMParser as PmDOMParser } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import CharacterCount from '@tiptap/extension-character-count';
@@ -187,6 +188,46 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
         editorProps: {
             attributes: {
                 class: 'tiptap',
+            },
+            // 修复：从对话中复制 MD 格式粘贴时连续空行产生大量空段落导致排版空白过大
+            handlePaste: (view, event) => {
+                const html = event.clipboardData?.getData('text/html');
+                const text = event.clipboardData?.getData('text/plain');
+                if (!text && !html) return false;
+
+                if (html) {
+                    // HTML 粘贴：清理连续空段落 <p><br></p><p><br></p>... → 只保留一个
+                    const cleaned = html
+                        .replace(/(<p[^>]*>\s*(?:<br\s*\/?>)?\s*<\/p>\s*){2,}/gi, '<p><br></p>')
+                        .replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>');
+                    if (cleaned !== html) {
+                        event.preventDefault();
+                        const container = document.createElement('div');
+                        container.innerHTML = cleaned;
+                        const slice = PmDOMParser.fromSchema(view.state.schema)
+                            .parseSlice(container, { preserveWhitespace: false });
+                        view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView());
+                        return true;
+                    }
+                    return false; // HTML 无需清理，走默认流程
+                }
+
+                // 纯文本 Markdown 粘贴：3+ 连续换行 → 2个（一个段落分隔）
+                const cleaned = text.replace(/\n{3,}/g, '\n\n').replace(/(\r\n){3,}/g, '\r\n\r\n');
+                if (cleaned === text) return false; // 无变化，走默认
+
+                // 用 editor 的 markdown parser 解析清理后的文本
+                if (editor?.storage?.markdown?.parser) {
+                    event.preventDefault();
+                    const htmlContent = editor.storage.markdown.parser.parse(cleaned, { inline: false });
+                    const container = document.createElement('div');
+                    container.innerHTML = htmlContent;
+                    const slice = PmDOMParser.fromSchema(view.state.schema)
+                        .parseSlice(container, { preserveWhitespace: true });
+                    view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView());
+                    return true;
+                }
+                return false;
             },
         },
         onUpdate: ({ editor }) => {

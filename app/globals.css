@@ -1310,6 +1310,16 @@ body.resizing .main-content {
 }
 
 
+/* 折叠连续空段落：空段落紧跟空段落时隐藏多余间距，修复 MD 粘贴后大片空白 */
+.tiptap p:empty + p:empty,
+.tiptap p:has(> br:only-child) + p:has(> br:only-child) {
+  margin-bottom: 0;
+  font-size: 0;
+  line-height: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 /* 含公式/特殊元素的段落取消首行缩进 */
 .tiptap p:has(.math-inline),
 .tiptap p:has(.math-block) {

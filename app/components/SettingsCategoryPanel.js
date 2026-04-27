@@ -152,15 +152,20 @@ export default function SettingsCategoryPanel({ category }) {
         return node.name?.toLowerCase().includes(q) || node.id?.toLowerCase().includes(q);
     }, [searchQuery]);
 
-    const hasDescendantMatch = useCallback((parentId) => {
+    const hasDescendantMatch = useCallback((parentId, visited = new Set()) => {
+        if (visited.has(parentId)) return false;
+        visited.add(parentId);
         const children = nodes.filter(n => n.parentId === parentId);
         return children.some(c =>
             (c.type === 'item' && matchesSearch(c)) ||
-            (c.type === 'folder' && (matchesSearch(c) || hasDescendantMatch(c.id)))
+            (c.type === 'folder' && (matchesSearch(c) || hasDescendantMatch(c.id, visited)))
         );
     }, [nodes, matchesSearch]);
 
-    const renderNode = (node, depth = 0) => {
+    const renderNode = (node, depth = 0, visited = new Set()) => {
+        if (visited.has(node.id)) return null;
+        const nextVisited = new Set(visited);
+        nextVisited.add(node.id);
         const isFolder = node.type === 'folder';
         const isItem = node.type === 'item';
         const isSpecial = node.type === 'special';
@@ -199,7 +204,7 @@ export default function SettingsCategoryPanel({ category }) {
                     </div>
                     {!isCollapsed && children.length > 0 && (
                         <div className="scp-children">
-                            {children.map(child => renderNode(child, depth + 1))}
+                            {children.map(child => renderNode(child, depth + 1, nextVisited))}
                         </div>
                     )}
                 </div>

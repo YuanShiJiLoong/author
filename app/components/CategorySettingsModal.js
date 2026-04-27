@@ -65,6 +65,20 @@ function getCatMeta(category) {
     return CAT_META[category] || CAT_META.custom;
 }
 
+function wouldCreateParentCycle(nodes, nodeId, newParentId) {
+    if (!nodeId || !newParentId) return false;
+    let currentId = newParentId;
+    const visited = new Set();
+    while (currentId) {
+        if (currentId === nodeId) return true;
+        if (visited.has(currentId)) return true;
+        visited.add(currentId);
+        const parent = nodes.find(n => n.id === currentId);
+        currentId = parent?.parentId || null;
+    }
+    return false;
+}
+
 // ==================== 剧情曲线图 ====================
 const DEFAULT_PLOT_POINTS = [
     { label: '序幕', tension: 0.2, note: '' },
@@ -751,14 +765,17 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
         }
         // 递归统计 item 数量
         const iMap = new Map();
-        const count = (parentId) => {
+        const count = (parentId, visiting = new Set()) => {
             if (iMap.has(parentId)) return iMap.get(parentId);
+            if (visiting.has(parentId)) return 0;
+            visiting.add(parentId);
             const ch = cMap.get(parentId) || [];
             let total = 0;
             for (const c of ch) {
                 if (c.type === 'item') total++;
-                else total += count(c.id);
+                else total += count(c.id, visiting);
             }
+            visiting.delete(parentId);
             iMap.set(parentId, total);
             return total;
         };
@@ -808,6 +825,17 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
         return itemCountMap.get(parentId) || 0;
     }, [itemCountMap]);
 
+    const getDropParentId = useCallback((targetNode, position) => {
+        if (position === 'inside' && targetNode.type === 'folder') return targetNode.id;
+        return targetNode.parentId || null;
+    }, []);
+
+    const isInvalidDrop = useCallback((sourceId, targetNode, position) => {
+        if (!sourceId || !targetNode || !position) return true;
+        if (sourceId === targetNode.id) return true;
+        return wouldCreateParentCycle(nodes, sourceId, getDropParentId(targetNode, position));
+    }, [nodes, getDropParentId]);
+
     // ---- 拖拽处理 ----
     const handleDragStart = (e, node) => {
         setDragId(node.id);
@@ -829,25 +857,39 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
     const handleDragOver = (e, node) => {
         e.preventDefault();
         if (!dragId || dragId === node.id) return;
-        e.dataTransfer.dropEffect = 'move';
         const rect = e.currentTarget.getBoundingClientRect();
         const y = e.clientY - rect.top;
         const h = rect.height;
+        let nextPosition;
         // 文件夹：上1/4=before, 中间=inside, 下1/4=after
         // 条目：上半=before, 下半=after
         if (node.type === 'folder') {
-            if (y < h * 0.25) setDropPosition('before');
-            else if (y > h * 0.75) setDropPosition('after');
-            else setDropPosition('inside');
+            if (y < h * 0.25) nextPosition = 'before';
+            else if (y > h * 0.75) nextPosition = 'after';
+            else nextPosition = 'inside';
         } else {
-            setDropPosition(y < h / 2 ? 'before' : 'after');
+            nextPosition = y < h / 2 ? 'before' : 'after';
         }
+        if (isInvalidDrop(dragId, node, nextPosition)) {
+            e.dataTransfer.dropEffect = 'none';
+            setDropTargetId(null);
+            setDropPosition(null);
+            return;
+        }
+        e.dataTransfer.dropEffect = 'move';
+        setDropPosition(nextPosition);
         setDropTargetId(node.id);
     };
 
     const handleDrop = (e, targetNode) => {
         e.preventDefault();
         if (!dragId || dragId === targetNode.id || !onReorder) return;
+        if (isInvalidDrop(dragId, targetNode, dropPosition)) {
+            setDragId(null);
+            setDropTargetId(null);
+            setDropPosition(null);
+            return;
+        }
         onReorder(dragId, targetNode.id, dropPosition);
         setDragId(null);
         setDropTargetId(null);
@@ -911,7 +953,10 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
         );
     };
 
-    const renderNode = (node, depth = 0) => {
+    const renderNode = (node, depth = 0, visited = new Set()) => {
+        if (visited.has(node.id)) return null;
+        const nextVisited = new Set(visited);
+        nextVisited.add(node.id);
         if (!matchesSearch(node) && node.type === 'item') return null;
         const isFolder = node.type === 'folder';
         const isSelected = selectedId === node.id;
@@ -923,9 +968,11 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
 
         if (isFolder) {
             if (searchQuery) {
-                const hasDescendantMatch = (pid) => {
-                    const ch = nodes.filter(n => n.parentId === pid);
-                    return ch.some(c => (c.type === 'item' && matchesSearch(c)) || (c.type === 'folder' && hasDescendantMatch(c.id)));
+                const hasDescendantMatch = (pid, seen = new Set()) => {
+                    if (seen.has(pid)) return false;
+                    seen.add(pid);
+                    const ch = getChildren(pid);
+                    return ch.some(c => (c.type === 'item' && matchesSearch(c)) || (c.type === 'folder' && hasDescendantMatch(c.id, seen)));
                 };
                 if (!hasDescendantMatch(node.id)) return null;
             }
@@ -983,7 +1030,7 @@ function ItemList({ nodes, rootFolder, category, selectedId, onSelect, onAddFold
                         <span className="cstree-count" style={{ ...S.treeCount, ...(isHovered ? { display: 'none' } : {}) }}>{totalItems}</span>
                         {renderActions(node, isHovered, () => onAddItem(node.id))}
                     </div>
-                    {!isCollapsed && children.map(child => renderNode(child, depth + 1))}
+                    {!isCollapsed && children.map(child => renderNode(child, depth + 1, nextVisited))}
                 </div>
             );
         }
@@ -1739,6 +1786,10 @@ export default function CategorySettingsModal() {
                                     newParentId = target.parentId;
                                     const siblings = nodes.filter(n => n.parentId === target.parentId && n.id !== draggedId)
                                         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                                    if (wouldCreateParentCycle(nodes, draggedId, newParentId)) {
+                                        alert('不能把分类移动到自身或它的子分类下。');
+                                        return;
+                                    }
                                     const targetIdx = siblings.findIndex(n => n.id === targetId);
                                     const insertIdx = position === 'before' ? targetIdx : targetIdx + 1;
                                     // 重新编号
@@ -1752,6 +1803,10 @@ export default function CategorySettingsModal() {
                                     });
                                     setNodes(updatedNodes);
                                     await saveSettingsNodes(updatedNodes);
+                                    return;
+                                }
+                                if (wouldCreateParentCycle(nodes, draggedId, newParentId)) {
+                                    alert('不能把分类移动到自身或它的子分类下。');
                                     return;
                                 }
                                 const updatedNodes = nodes.map(n => {

@@ -1,6 +1,7 @@
 import { persistGet, persistSet } from './persistence';
 import { getChapters, saveChapters } from './storage';
 import { getSettingsNodes, saveSettingsNodes, getActiveWorkId } from './settings';
+import { loadSessionStore, saveSessionStore } from './chat-sessions';
 import { get, set } from 'idb-keyval';
 import { useAppStore } from '../store/useAppStore';
 
@@ -12,6 +13,40 @@ async function flushPendingEditorBeforeSnapshot() {
     if (typeof flushPendingEditorSave === 'function') {
         await flushPendingEditorSave();
     }
+}
+
+function isValidSessionStore(store) {
+    return store && typeof store === 'object' && Array.isArray(store.sessions);
+}
+
+async function getChatSessionsForSnapshot() {
+    const inMemoryStore = useAppStore.getState().sessionStore;
+    if (isValidSessionStore(inMemoryStore)) {
+        await saveSessionStore(inMemoryStore);
+        return inMemoryStore;
+    }
+    const persistedStore = await loadSessionStore();
+    return isValidSessionStore(persistedStore)
+        ? persistedStore
+        : { activeSessionId: null, sessions: [] };
+}
+
+function createCloudSnapshotPayload(snapshot) {
+    return {
+        id: snapshot.id,
+        timestamp: snapshot.timestamp,
+        label: snapshot.label,
+        type: snapshot.type,
+        stats: {
+            chapterCount: snapshot.stats?.chapterCount || 0,
+            totalWords: snapshot.stats?.totalWords || 0,
+            settingCount: snapshot.stats?.settingCount || 0,
+        },
+        data: {
+            chapters: snapshot.data?.chapters || [],
+            settingsNodes: snapshot.data?.settingsNodes || [],
+        },
+    };
 }
 
 /**
@@ -42,6 +77,10 @@ export async function createSnapshot(label, type = 'auto', options = {}) {
         await flushPendingEditorBeforeSnapshot();
         const chapters = await getChapters(getActiveWorkId());
         const settingsNodes = await getSettingsNodes();
+        const chatSessions = await getChatSessionsForSnapshot();
+        const chatMessageCount = chatSessions.sessions.reduce((sum, session) => (
+            sum + (Array.isArray(session.messages) ? session.messages.length : 0)
+        ), 0);
 
         const snapshot = {
             id: `snap-${Date.now()}`,
@@ -52,10 +91,13 @@ export async function createSnapshot(label, type = 'auto', options = {}) {
                 chapterCount: chapters.length,
                 totalWords: chapters.reduce((acc, ch) => acc + (ch.wordCount || 0), 0),
                 settingCount: settingsNodes.length,
+                chatSessionCount: chatSessions.sessions.length,
+                chatMessageCount,
             },
             data: {
                 chapters,
                 settingsNodes,
+                chatSessions,
             }
         };
 
@@ -77,14 +119,7 @@ export async function createSnapshot(label, type = 'auto', options = {}) {
         // 仅将最新一次快照同步到云端（轻量元数据 + 数据）
         if (syncLatestToCloud) {
             try {
-                await persistSet(CLOUD_SNAPSHOT_KEY, {
-                    id: snapshot.id,
-                    timestamp: snapshot.timestamp,
-                    label: snapshot.label,
-                    type: snapshot.type,
-                    stats: snapshot.stats,
-                    data: snapshot.data,
-                });
+                await persistSet(CLOUD_SNAPSHOT_KEY, createCloudSnapshotPayload(snapshot));
             } catch {
                 // 云同步失败不影响本地
             }
@@ -111,9 +146,15 @@ export async function restoreSnapshot(snapshotId) {
         // 发起静默的当前状态备份，以防后悔
         await createSnapshot('恢复前的备份', 'auto');
 
+        const data = target.data || {};
+
         // 覆盖现有数据
-        await saveChapters(target.data.chapters || [], getActiveWorkId());
-        await saveSettingsNodes(target.data.settingsNodes || []);
+        await saveChapters(data.chapters || [], getActiveWorkId());
+        await saveSettingsNodes(data.settingsNodes || []);
+        if (isValidSessionStore(data.chatSessions)) {
+            await saveSessionStore(data.chatSessions);
+            useAppStore.getState().setSessionStore(data.chatSessions);
+        }
 
         return true;
     } catch (e) {
