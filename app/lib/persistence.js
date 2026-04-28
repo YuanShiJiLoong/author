@@ -8,6 +8,7 @@
 // 多用户隔离：首次访问自动生成 userId 并存入 cookie
 
 import { get, set, del } from 'idb-keyval';
+import { isSyncableKey } from './sync-key-policy';
 
 // ==================== 用户ID管理 ====================
 
@@ -137,7 +138,7 @@ export async function persistGet(key) {
     // 1. 本地优先读取（快速）
     let localData;
     try {
-        if (await checkServerAvailable()) {
+        if (isSyncableKey(key) && await checkServerAvailable()) {
             localData = await serverGet(key);
             if (localData === null || localData === undefined) {
                 // 服务端没有，尝试从浏览器获取
@@ -173,7 +174,7 @@ export async function persistSet(key, value) {
     await browserSet(key, value);
 
     // 2. 异步写服务端（不阻塞 UI）
-    if (await checkServerAvailable()) {
+    if (isSyncableKey(key) && await checkServerAvailable()) {
         serverSet(key, value).catch(err => {
             console.warn('[persist] Server write failed, data saved in browser only:', err.message);
         });
@@ -197,7 +198,7 @@ export async function persistDel(key) {
 
     await browserDel(key);
 
-    if (await checkServerAvailable()) {
+    if (isSyncableKey(key) && await checkServerAvailable()) {
         serverDel(key).catch(() => { });
     }
 
@@ -227,18 +228,6 @@ const LOCALSTORAGE_KEYS = new Set([
     'author-delete-never-remind',
     'author-delete-skip-today',
 ]);
-
-// 判断某个 key 是否应该同步到云端
-function isSyncableKey(key) {
-    if (key === 'author-project-settings') return true; // 全局设置需要同步
-    // 本地特有的配置或缓存状态不应该同步到云端（尤其是 API Keys！）
-    if (LOCALSTORAGE_KEYS.has(key)) return false;
-    // 对话会话仅本地保存，不同步到云端（体积大 + 隐私敏感）
-    if (key === 'author-chat-sessions') return false;
-    // 备份类数据不要同步到云端
-    if (key.includes('backup')) return false;
-    return true;
-}
 
 async function browserGet(key) {
     if (LOCALSTORAGE_KEYS.has(key)) {

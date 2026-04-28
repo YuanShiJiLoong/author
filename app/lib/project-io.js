@@ -1,17 +1,16 @@
 /**
- * 项目导出/导入 — 通过持久化层完整打包项目数据
- * 支持：按作品章节、设定集节点、API 配置、聊天会话、章节摘要
+ * 项目导出/导入 — 打包可跨设备迁移的作品数据。
+ * 隐私优先：新导出的项目不包含 API 配置、AI 会话、token 统计或 AI 摘要。
  */
 
-import { persistGet, persistSet } from './persistence';
+import { persistSet } from './persistence';
 import { getAllWorks, getSettingsNodes, getActiveWorkId } from './settings';
 import { getChapters } from './storage';
-import { loadSessionStore } from './chat-sessions';
 
 const PROJECT_FILE_VERSION = 2;
 
-// localStorage 中直接读写的轻量配置 keys
-const LOCAL_ONLY_KEYS = {
+// 旧版导入兼容：这些 key 可能存在于历史项目存档中。
+const IMPORT_COMPAT_LOCAL_KEYS = {
     settings:    'author-project-settings',
     activeWork:  'author-active-work',
     apiConfig:   'author-api-config',
@@ -22,8 +21,29 @@ const LOCAL_ONLY_KEYS = {
     visual:      'author-visual',
 };
 
-// 章节摘要前缀
-const SUMMARY_PREFIX = 'author-chapter-summary-';
+const RAW_LOCAL_IMPORT_FIELDS = new Set(['activeWork', 'theme', 'lang', 'visual']);
+
+const EXCLUDED_LOCAL_ONLY_EXPORT_KEYS = [
+    'author-api-config',
+    'author-api-profiles',
+    'author-ai-prompt-templates-v1',
+    'author-ai-session-*',
+    'author-ai-sessions',
+    'author-chat-sessions',
+    'author-project-settings.customPrompt',
+    'author-snapshot-latest',
+    'author-token-stats',
+    'author-chapter-summary-*',
+];
+
+function sanitizeProjectSettingsForExport(settings) {
+    if (!settings || typeof settings !== 'object') return null;
+    const safe = { ...settings };
+    delete safe.apiConfig;
+    delete safe.chatApiConfig;
+    delete safe.customPrompt;
+    return safe;
+}
 
 /**
  * 导出整个项目为 JSON 文件并下载
@@ -35,17 +55,21 @@ export async function exportProject() {
         _version: PROJECT_FILE_VERSION,
         _exportedAt: new Date().toISOString(),
         _app: 'Author',
+        _privacy: {
+            localOnlyExcluded: EXCLUDED_LOCAL_ONLY_EXPORT_KEYS,
+        },
     };
 
-    // 1. 收集 localStorage 中的轻量配置
-    for (const [key, storageKey] of Object.entries(LOCAL_ONLY_KEYS)) {
-        try {
-            const raw = localStorage.getItem(storageKey);
-            data[key] = raw ? JSON.parse(raw) : null;
-        } catch {
-            data[key] = null;
-        }
+    // 1. 收集可迁移的轻量配置。API/AI/统计类本地数据不导出。
+    try {
+        const rawSettings = localStorage.getItem('author-project-settings');
+        data.settings = sanitizeProjectSettingsForExport(
+            rawSettings ? JSON.parse(rawSettings) : null,
+        );
+    } catch {
+        data.settings = null;
     }
+    data.activeWork = localStorage.getItem('author-active-work') || getActiveWorkId() || null;
 
     // 2. 收集作品索引 + 按作品收集章节和设定集节点
     const works = await getAllWorks();
@@ -67,24 +91,6 @@ export async function exportProject() {
     }
     data.perWorkChapters = perWorkChapters;
     data.perWorkSettings = perWorkSettings;
-
-    // 3. 收集聊天会话（从 IndexedDB，仅本地存档用）
-    try {
-        data.chatSessions = await loadSessionStore();
-    } catch {
-        data.chatSessions = null;
-    }
-
-    // 4. 收集章节摘要（仍在 localStorage 中）
-    const summaries = {};
-    for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k?.startsWith(SUMMARY_PREFIX)) {
-            const chapterId = k.slice(SUMMARY_PREFIX.length);
-            summaries[chapterId] = localStorage.getItem(k);
-        }
-    }
-    data.chapterSummaries = summaries;
 
     // 生成文件名
     const now = new Date();
@@ -118,9 +124,12 @@ export async function importProject(file) {
         const isV2 = data._version >= 2;
 
         // 1. 恢复 localStorage 轻量配置
-        for (const [key, storageKey] of Object.entries(LOCAL_ONLY_KEYS)) {
+        for (const [key, storageKey] of Object.entries(IMPORT_COMPAT_LOCAL_KEYS)) {
             if (data[key] !== undefined && data[key] !== null) {
-                localStorage.setItem(storageKey, JSON.stringify(data[key]));
+                const value = RAW_LOCAL_IMPORT_FIELDS.has(key)
+                    ? String(data[key])
+                    : JSON.stringify(data[key]);
+                localStorage.setItem(storageKey, value);
             }
         }
 

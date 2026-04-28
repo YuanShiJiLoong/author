@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
 import { getCurrentUser } from './auth';
+import { isSyncableKey } from './sync-key-policy';
 
 // ==================== 配置 ====================
 
@@ -51,6 +52,7 @@ function notifySyncStatus(status) {
 export async function firestoreGet(key) {
     const user = getCurrentUser();
     if (!isFirebaseConfigured || !db || !user) return undefined;
+    if (!isSyncableKey(key)) return undefined;
 
     try {
         const ref = doc(db, 'users', user.uid, COLLECTION_NAME, key);
@@ -74,6 +76,7 @@ export async function firestoreGet(key) {
 export function firestoreEnqueue(key, value) {
     const user = getCurrentUser();
     if (!isFirebaseConfigured || !db || !user) return;
+    if (!isSyncableKey(key)) return;
 
     _pendingWrites.set(key, { value, timestamp: Date.now() });
     _lastDataChange = Date.now();
@@ -135,13 +138,14 @@ function resetIdleTimer() {
 export async function firestoreDel(key) {
     const user = getCurrentUser();
     if (!isFirebaseConfigured || !db || !user) return;
+    if (!isSyncableKey(key)) return;
 
     // 不再立即删除，而是加入延迟队列中，跟普通的写入保持同一步调
     _pendingWrites.set(key, { value: '_AUTHOR_DELETE_' });
 
     // 每次发生写操作，都会重置空闲定时器
     if (!_isSyncing && !_syncTimer) {
-        startSyncTimer();
+        ensureSyncTimer();
     }
     resetIdleTimer();
 }
@@ -203,6 +207,7 @@ export async function flushSync(options = {}) {
             const batch = writeBatch(db);
 
             for (const [key, { value }] of chunk) {
+                if (!isSyncableKey(key)) continue;
                 const ref = doc(db, 'users', user.uid, COLLECTION_NAME, key);
                 
                 if (value === '_AUTHOR_DELETE_') {
@@ -293,6 +298,7 @@ export async function pullAllFromCloud(localGet, localSet) {
         let merged = 0;
         for (const docSnap of snapshot.docs) {
             const key = docSnap.id;
+            if (!isSyncableKey(key)) continue;
             const cloudData = docSnap.data();
             const localData = await localGet(key);
 
@@ -405,6 +411,7 @@ export async function forcePullFromCloud(localSet) {
         let pulledCount = 0;
         for (const docSnap of snapshot.docs) {
             const key = docSnap.id;
+            if (!isSyncableKey(key)) continue;
             const cloudData = docSnap.data();
             
             // 无条件覆盖本地
