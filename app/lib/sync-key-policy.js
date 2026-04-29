@@ -29,6 +29,7 @@ const LOCAL_ONLY_EXACT_KEYS = new Set([
     'author-lang',
     'author-lore-last-work-id',
     'author-onboarding-done',
+    'author-pinned-categories',
     'author-pull-skip-today',
     'author-project-settings',
     'author-recent-works',
