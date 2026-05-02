@@ -25,6 +25,7 @@ import {
 } from './lib/chat-sessions';
 import { exportProject, importProject } from './lib/project-io';
 import { createSnapshot } from './lib/snapshots';
+import { initDiagnostics, recordDiagnosticEvent } from './lib/diagnostics';
 // 动态导入编辑器和设定集面板及侧边栏（避免 SSR 问题）
 const Sidebar = dynamic(() => import('./components/Sidebar'), { ssr: false });
 const Editor = dynamic(() => import('./components/Editor'), {
@@ -96,6 +97,11 @@ export default function Home() {
       await flushSessionStoreSave();
     }, delay);
   }, [flushSessionStoreSave]);
+
+  useEffect(() => {
+    initDiagnostics();
+    recordDiagnosticEvent('app.mount', 'Home mounted', {}, 'info');
+  }, []);
 
   useEffect(() => {
     setPendingEditorSaveFlusher(flushPendingEditorSave);

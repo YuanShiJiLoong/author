@@ -30,5 +30,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     cancelClose: () => {
         ipcRenderer.send('cancel-close');
-    }
+    },
+    // ---- 诊断日志 ----
+    writeDiagnosticLog: (entry) => ipcRenderer.invoke('write-diagnostic-log', entry),
+    getDiagnosticBundle: () => ipcRenderer.invoke('get-diagnostic-bundle'),
+    openDiagnosticLogFile: () => ipcRenderer.invoke('open-diagnostic-log-file'),
 });

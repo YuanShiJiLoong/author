@@ -1,12 +1,34 @@
 'use client'; // 必须是客户端组件
 
 import { useEffect } from 'react';
-import { AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
+import { AlertTriangle, Download, RefreshCw, Trash2 } from 'lucide-react';
+import { downloadDiagnosticReport, initDiagnostics, recordDiagnosticEvent } from './lib/diagnostics';
 
 export default function Error({ error, reset }) {
     useEffect(() => {
+        initDiagnostics();
+        recordDiagnosticEvent('react.error-boundary', error?.message || 'React error boundary', {
+            error: {
+                name: error?.name,
+                message: error?.message,
+                stack: error?.stack,
+                digest: error?.digest,
+            },
+        }, 'error');
         console.error('全局捕获的客户端渲染错误:', error);
     }, [error]);
+
+    const handleExportLog = () => {
+        downloadDiagnosticReport({
+            source: 'error-boundary',
+            error: {
+                name: error?.name,
+                message: error?.message,
+                stack: error?.stack,
+                digest: error?.digest,
+            },
+        });
+    };
 
     const handleClearData = () => {
         if (window.confirm('警告：这将会清除浏览器本地所有的缓存数据（包括未导出的作品）、设定和状态！\n通常只有在持续白屏且刷新无法恢复时才使用此操作。\n\n确定要清空并重置吗？')) {
@@ -68,6 +90,26 @@ export default function Error({ error, reset }) {
                         onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                     >
                         <RefreshCw size={16} /> 刷新页面
+                    </button>
+
+                    <button
+                        onClick={handleExportLog}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 24px',
+                            background: 'transparent', color: 'var(--accent, #3b82f6)', border: '1.5px solid rgba(59, 130, 246, 0.35)',
+                            borderRadius: '12px', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                            transition: 'all 0.2s', outline: 'none'
+                        }}
+                        onMouseEnter={e => {
+                            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.06)';
+                            e.currentTarget.style.borderColor = 'var(--accent, #3b82f6)';
+                        }}
+                        onMouseLeave={e => {
+                            e.currentTarget.style.background = 'transparent';
+                            e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.35)';
+                        }}
+                    >
+                        <Download size={16} /> 导出诊断日志
                     </button>
 
                     <button

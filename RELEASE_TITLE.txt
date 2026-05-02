@@ -1,1 +1,1 @@
-修复粘贴排版 & 聊天记录快照 | Paste formatting fix & chat session snapshots
+完善崩溃诊断日志导出 | Improved crash diagnostics export

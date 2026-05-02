@@ -38,6 +38,34 @@ function log(msg) {
     try { fs.appendFileSync(logFile, line); } catch (e) { }
 }
 
+function sanitizeLogText(value) {
+    return String(value ?? '')
+        .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
+        .replace(/\b(sk|rk|pk|ak)-[A-Za-z0-9_\-]{16,}\b/g, '$1-[REDACTED]')
+        .replace(/\bAIza[0-9A-Za-z_\-]{20,}\b/g, 'AIza[REDACTED]')
+        .replace(/("?(?:api[_-]?key|authorization|token|password|secret)"?\s*[:=]\s*)"[^"]+"/gi, '$1"[REDACTED]"')
+        .replace(/((?:api[_-]?key|authorization|token|password|secret)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]');
+}
+
+function readLogTail(filePath, maxBytes = 2 * 1024 * 1024) {
+    try {
+        if (!fs.existsSync(filePath)) return { content: '', truncated: false };
+        const stat = fs.statSync(filePath);
+        const start = Math.max(0, stat.size - maxBytes);
+        const fd = fs.openSync(filePath, 'r');
+        const buffer = Buffer.alloc(stat.size - start);
+        fs.readSync(fd, buffer, 0, buffer.length, start);
+        fs.closeSync(fd);
+        return {
+            content: buffer.toString('utf8'),
+            truncated: start > 0,
+            size: stat.size,
+        };
+    } catch (err) {
+        return { content: '', truncated: false, error: err.message };
+    }
+}
+
 // 防止多开
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -57,6 +85,99 @@ let loadRetries = 0;
 const MAX_LOAD_RETRIES = 10;
 let serverReady = false; // 追踪服务器是否真正就绪
 let serverCrashed = false; // 追踪子进程是否已崩溃
+let latestCrashReportPath = null;
+
+function buildMainDiagnosticBundle() {
+    const mainLog = readLogTail(logFile);
+    return {
+        logFile,
+        appVersion: app.getVersion(),
+        isPackaged: app.isPackaged,
+        platform: `${process.platform} ${process.arch}`,
+        electron: process.versions.electron,
+        node: process.versions.node,
+        chrome: process.versions.chrome,
+        serverReady,
+        serverCrashed,
+        actualPort,
+        latestCrashReportPath,
+        mainLog: {
+            ...mainLog,
+            content: sanitizeLogText(mainLog.content || ''),
+        },
+    };
+}
+
+function writeCrashReport(eventName, details = {}) {
+    try {
+        const reportDir = path.join(app.getPath('userData'), 'crash-reports');
+        fs.mkdirSync(reportDir, { recursive: true });
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const reportPath = path.join(reportDir, `author-crash-${stamp}.json`);
+        const report = {
+            type: 'author-crash-report',
+            version: 1,
+            generatedAt: new Date().toISOString(),
+            event: eventName,
+            details: sanitizeLogText(JSON.stringify(details || {})),
+            diagnostics: buildMainDiagnosticBundle(),
+        };
+        fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8');
+        latestCrashReportPath = reportPath;
+        log(`[CrashReport] Saved: ${reportPath}`);
+        return reportPath;
+    } catch (err) {
+        log(`[CrashReport] Failed: ${err.message}`);
+        return null;
+    }
+}
+
+function showLogFileInFolder(filePath = logFile) {
+    try {
+        shell.showItemInFolder(filePath);
+    } catch {
+        shell.openPath(path.dirname(filePath)).catch(() => { });
+    }
+}
+
+process.on('uncaughtException', (err) => {
+    log(`[MainProcess] uncaughtException: ${err.message}`);
+    if (err.stack) log(`[MainProcess] stack: ${err.stack}`);
+    const reportPath = writeCrashReport('main-uncaughtException', { message: err.message, stack: err.stack });
+    dialog.showErrorBox('Author 主进程异常', `已自动保存诊断报告:\n${reportPath || logFile}`);
+});
+
+process.on('unhandledRejection', (reason) => {
+    const message = reason?.message || String(reason);
+    log(`[MainProcess] unhandledRejection: ${message}`);
+    if (reason?.stack) log(`[MainProcess] stack: ${reason.stack}`);
+    writeCrashReport('main-unhandledRejection', { message, stack: reason?.stack });
+});
+
+ipcMain.handle('write-diagnostic-log', async (event, entry) => {
+    const level = sanitizeLogText(entry?.level || 'info');
+    const name = sanitizeLogText(entry?.event || 'renderer');
+    const message = sanitizeLogText(entry?.message || '');
+    let metadata = '';
+    try {
+        metadata = JSON.stringify(entry?.metadata || {});
+    } catch { }
+    log(`[Renderer:${level}] ${name} ${message}${metadata ? ' ' + sanitizeLogText(metadata) : ''}`);
+    return { success: true };
+});
+
+ipcMain.handle('get-diagnostic-bundle', async () => {
+    return buildMainDiagnosticBundle();
+});
+
+ipcMain.handle('open-diagnostic-log-file', async () => {
+    try {
+        showLogFileInFolder(latestCrashReportPath || logFile);
+        return { success: true, logFile };
+    } catch (err) {
+        return { success: false, error: err.message, logFile };
+    }
+});
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -139,17 +260,22 @@ function createWindow() {
     mainWindow.webContents.on('render-process-gone', (event, details) => {
         log(`[Crash] Renderer process gone. Reason: ${details.reason}, Code: ${details.exitCode}`);
         if (details.reason !== 'clean-exit') {
+            const crashReportPath = writeCrashReport('render-process-gone', details);
             const options = {
                 type: 'error',
                 title: '系统崩溃拦截',
                 message: '渲染进程由于致命错误（如内存不足或驱动异常）突然终止。',
-                detail: `崩溃原因: ${details.reason}\n错误码: ${details.exitCode}\n\n系统被迫中断。如果您刚才正在编辑，文字会安全保留在本地存储中不会丢失。\n您可以随时安全地重启应用。`,
-                buttons: ['立即重启', '结束应用'],
-                defaultId: 0
+                detail: `崩溃原因: ${details.reason}\n错误码: ${details.exitCode}\n\n已自动保存诊断报告:\n${crashReportPath || logFile}\n\n系统被迫中断。如果您刚才正在编辑，文字会安全保留在本地存储中不会丢失。`,
+                buttons: ['立即重启', '打开日志目录', '结束应用'],
+                defaultId: 0,
+                cancelId: 2,
             };
             const btnIdx = dialog.showMessageBoxSync(mainWindow, options);
             if (btnIdx === 0) {
                 app.relaunch();
+                app.quit();
+            } else if (btnIdx === 1) {
+                showLogFileInFolder(crashReportPath || logFile);
                 app.quit();
             } else {
                 app.quit();
@@ -164,12 +290,17 @@ function createWindow() {
             type: 'warning',
             title: '进程失去响应',
             message: '由于高负荷运算或资源挤占，程序目前暂时无法响应。',
-            detail: '您可以耐心等待系统恢复，或者选择强制重启程序。',
-            buttons: ['继续等待', '强制重启'],
-            defaultId: 0
+            detail: '您可以耐心等待系统恢复，也可以先导出诊断报告再反馈。',
+            buttons: ['继续等待', '打开日志目录', '强制重启'],
+            defaultId: 0,
+            cancelId: 0,
         };
         const btnIdx = dialog.showMessageBoxSync(mainWindow, options);
         if (btnIdx === 1) {
+            const reportPath = writeCrashReport('renderer-unresponsive', { url: mainWindow.webContents.getURL() });
+            showLogFileInFolder(reportPath || logFile);
+        } else if (btnIdx === 2) {
+            writeCrashReport('renderer-force-restart', { url: mainWindow.webContents.getURL() });
             app.relaunch();
             app.quit();
         }

@@ -1,35 +1,33 @@
-## v1.2.20 — 修复粘贴排版 & 聊天记录快照 | Paste formatting fix & chat session snapshots
+## v1.2.21 — 完善崩溃诊断日志导出 | Improved crash diagnostics export
 
 ### 🇨🇳 中文
 
-#### 📋 编辑器粘贴排版修复
-- **修复从对话中复制 Markdown 粘贴后出现大片空白的问题**：从 AI 聊天或其他对话窗口复制含 Markdown 格式的文本粘贴到编辑器时，连续空行会被解析为多个空段落，导致段落间产生过大的间距
-- **新增粘贴内容清理**：HTML 粘贴时自动合并连续空段落；纯文本粘贴时压缩多余空行后再进行 Markdown 解析
-- **CSS 安全兜底**：即使已有内容中存在连续空段落，也会被自动折叠为零高度，不再产生视觉空白
+#### 🧰 诊断日志与崩溃报告
+- **新增诊断日志导出**：在「帮助 → 关于」新增「导出诊断日志」按钮，可下载 `author-diagnostic-*.json`，便于用户反馈白屏、卡死、异常退出前后的线索
+- **错误页支持导出日志**：当 React 错误边界仍能渲染时，错误页会显示「导出诊断日志」按钮，用户不再只能截图错误信息
+- **客户端崩溃自动落盘**：Windows 桌面端渲染进程崩溃或无响应时，主进程会自动写入 `%APPDATA%\Author\crash-reports\author-crash-*.json`
+- **崩溃弹窗可直达日志目录**：渲染进程崩溃弹窗新增「打开日志目录」，即使应用已经无法进入主界面，也能找到诊断报告
+- **主进程异常兜底**：Electron 主进程的 `uncaughtException` 和 `unhandledRejection` 会写入 crash report，减少“直接退出但没有线索”的情况
 
-#### 💬 AI 聊天记录持久化与快照
-- **聊天会话纳入快照系统**：创建快照时会同步保存当前所有 AI 聊天会话和消息，恢复快照时一并还原聊天记录
-- **聊天会话自动持久化**：聊天数据变更后自动防抖保存，页面隐藏或关闭前立即刷盘，避免聊天记录丢失
-- **快照云同步精简**：优化上传到云端的快照数据结构，仅包含必要字段
-
-#### 🗂️ 设置分类管理优化
-- **防止拖拽循环依赖**：拖拽移动设置项时，检测目标位置是否会形成父子循环引用，阻止无效拖拽操作
-- **修复子节点计数中的潜在无限循环**：递归统计子节点数量时增加环路检测保护
+#### 🔎 更完整的排查线索
+- **记录前端异常链路**：采集 `window.error`、`unhandledrejection`、`console.warn/error`、React 错误边界等关键错误信息
+- **记录最近操作面包屑**：保留最近点击、拖拽、快捷键、页面生命周期变化等操作摘要，方便定位“用户做了什么之后崩溃”
+- **桌面端日志桥接**：重要前端错误会同步写入 `%APPDATA%\Author\author-debug.log`，导出的诊断包也会包含主进程日志尾部
+- **敏感信息脱敏**：诊断日志会对 API Key、Bearer Token、Authorization、password/secret/token 等字段做脱敏处理
 
 ---
 
 ### 🇬🇧 English
 
-#### 📋 Editor Paste Formatting Fix
-- **Fixed large blank gaps when pasting Markdown from conversations**: Copying Markdown-formatted text from AI chat or other dialogue windows and pasting it into the editor would parse consecutive blank lines as multiple empty paragraphs, creating excessive spacing
-- **Added paste content cleanup**: HTML pastes now auto-merge consecutive empty paragraphs; plain-text pastes compress extra blank lines before Markdown parsing
-- **CSS safety net**: Consecutive empty paragraphs already in content are collapsed to zero height, preventing visual gaps
+#### 🧰 Diagnostic Logs & Crash Reports
+- **Added diagnostic export**: A new "Export Diagnostic Logs" button is available under Help → About, downloading an `author-diagnostic-*.json` file for white-screen, freeze, and crash reports
+- **Error page log export**: When the React error boundary can still render, the error page now exposes an "Export Diagnostic Logs" button instead of relying on screenshots alone
+- **Automatic crash reports on desktop**: The Windows desktop client now writes `%APPDATA%\Author\crash-reports\author-crash-*.json` when the renderer crashes or becomes unresponsive
+- **Crash dialog opens the log folder**: Renderer crash dialogs now include an "Open Log Folder" action, so users can find the report even when the app can no longer enter the main UI
+- **Main-process fallback**: Electron main-process `uncaughtException` and `unhandledRejection` events now write crash reports, reducing cases where the app exits without useful clues
 
-#### 💬 AI Chat Session Persistence & Snapshots
-- **Chat sessions included in snapshots**: Creating a snapshot now saves all AI chat sessions and messages; restoring a snapshot also restores the chat history
-- **Auto-persist chat sessions**: Chat data is automatically saved with debounce after changes, and immediately flushed when the page is hidden or before unload, preventing data loss
-- **Streamlined cloud snapshot data**: Optimized the snapshot payload uploaded to the cloud to include only essential fields
-
-#### 🗂️ Settings Category Management Improvements
-- **Prevented drag-drop circular dependencies**: Dragging settings items now checks if the target position would create a parent-child cycle, blocking invalid drops
-- **Fixed potential infinite loop in child counting**: Added cycle detection to the recursive child-count function
+#### 🔎 More Complete Debugging Context
+- **Captured frontend error chain**: Records `window.error`, `unhandledrejection`, `console.warn/error`, and React error-boundary failures
+- **Recent interaction breadcrumbs**: Keeps summaries of recent clicks, drag-and-drop actions, shortcuts, and page lifecycle changes to help identify what happened before a crash
+- **Desktop log bridge**: Important frontend failures are mirrored into `%APPDATA%\Author\author-debug.log`, and diagnostic exports include the tail of the main-process log
+- **Sensitive data redaction**: Diagnostic logs redact API keys, Bearer tokens, Authorization values, password/secret/token fields, and similar sensitive values
