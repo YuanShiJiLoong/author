@@ -48,6 +48,7 @@
         "importError": "导入失败: ",
         "importEmpty": "未能从文件中解析出任何设定条目",
         "importTextSuccess": "成功导入 {count} 个设定条目",
+        "syncGuide": "云同步指南",
         "categories": {
             "character": "人物",
             "location": "地点",
@@ -199,6 +200,7 @@
         "actionsApplied": "已应用",
         "actionsDelete": "删除",
         "inputPlaceholder": "输入消息…（Enter 发送，Shift+Enter 换行）",
+        "expandInput": "全屏输入",
         "searchArchive": "搜索生成内容…",
         "emptyArchiveIcon": "",
         "emptyArchiveTitle": "暂无生成记录",

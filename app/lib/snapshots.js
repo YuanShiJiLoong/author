@@ -2,11 +2,15 @@ import { persistGet, persistSet } from './persistence';
 import { getChapters, saveChapters } from './storage';
 import { getSettingsNodes, saveSettingsNodes, getActiveWorkId } from './settings';
 import { loadSessionStore, saveSessionStore } from './chat-sessions';
-import { get, set } from 'idb-keyval';
+import { del, get, set } from 'idb-keyval';
 import { useAppStore } from '../store/useAppStore';
 
-const SNAPSHOTS_KEY = 'author-snapshots';
+const LEGACY_SNAPSHOTS_KEY = 'author-snapshots';
+const SNAPSHOT_INDEX_KEY = 'author-snapshots-index-v2';
+const SNAPSHOT_DATA_PREFIX = 'author-snapshot-data-v2:';
 const CLOUD_SNAPSHOT_KEY = 'author-snapshot-latest'; // 云端仅保留最新一次
+const MAX_AUTO_SNAPSHOTS = 50;
+const PREVIEW_CHAPTER_LIMIT = 10;
 
 async function flushPendingEditorBeforeSnapshot() {
     const flushPendingEditorSave = useAppStore.getState().flushPendingEditorSave;
@@ -49,14 +53,103 @@ function createCloudSnapshotPayload(snapshot) {
     };
 }
 
+function getSnapshotDataKey(snapshotId) {
+    return `${SNAPSHOT_DATA_PREFIX}${snapshotId}`;
+}
+
+function createChapterPreview(chapters = []) {
+    if (!Array.isArray(chapters)) return [];
+    return chapters.slice(0, PREVIEW_CHAPTER_LIMIT).map(ch => ({
+        id: ch?.id,
+        title: ch?.title || '',
+    }));
+}
+
+function createSnapshotIndexEntry(snapshot) {
+    return {
+        id: snapshot.id,
+        timestamp: snapshot.timestamp,
+        label: snapshot.label,
+        type: snapshot.type,
+        stats: snapshot.stats || {},
+        data: {
+            chapters: createChapterPreview(snapshot.data?.chapters),
+        },
+        storageVersion: 2,
+    };
+}
+
+function applySnapshotRetention(snapshots) {
+    const kept = [];
+    const removed = [];
+    let autoCount = 0;
+
+    for (const snapshot of snapshots) {
+        if (snapshot?.type === 'auto') {
+            autoCount += 1;
+            if (autoCount > MAX_AUTO_SNAPSHOTS) {
+                removed.push(snapshot.id);
+                continue;
+            }
+        }
+        kept.push(snapshot);
+    }
+
+    return { kept, removed };
+}
+
+async function migrateLegacySnapshots() {
+    const legacySnapshots = await get(LEGACY_SNAPSHOTS_KEY);
+    if (!Array.isArray(legacySnapshots)) return [];
+
+    const { kept } = applySnapshotRetention(legacySnapshots);
+    const index = kept.map(createSnapshotIndexEntry);
+
+    try {
+        for (const snapshot of kept) {
+            await set(getSnapshotDataKey(snapshot.id), snapshot);
+        }
+        await set(SNAPSHOT_INDEX_KEY, index);
+        await del(LEGACY_SNAPSHOTS_KEY);
+        console.info(`[snapshots] Migrated ${index.length} snapshots to split storage.`);
+    } catch (e) {
+        console.warn('[snapshots] Legacy snapshot migration failed; keeping legacy storage:', e);
+        return legacySnapshots.map(createSnapshotIndexEntry);
+    }
+
+    return index;
+}
+
+async function getSnapshotIndex() {
+    const index = await get(SNAPSHOT_INDEX_KEY);
+    if (Array.isArray(index)) return index;
+    return migrateLegacySnapshots();
+}
+
+async function saveSnapshotIndex(index) {
+    await set(SNAPSHOT_INDEX_KEY, index);
+}
+
+async function getSnapshotById(snapshotId) {
+    const splitSnapshot = await get(getSnapshotDataKey(snapshotId));
+    if (splitSnapshot) return splitSnapshot;
+
+    const legacySnapshots = await get(LEGACY_SNAPSHOTS_KEY);
+    if (Array.isArray(legacySnapshots)) {
+        return legacySnapshots.find(s => s?.id === snapshotId) || null;
+    }
+
+    return null;
+}
+
 /**
  * 获取所有快照（从本地 IndexedDB 读取，不走云同步）
  * @returns {Promise<Array>} 快照列表（按时间倒序）
  */
 export async function getSnapshots() {
     try {
-        // 优先从 IndexedDB 读取（本地存储，不同步到云端）
-        const snapshots = await get(SNAPSHOTS_KEY);
+        // 读取轻量索引，完整快照按需读取，避免每次都克隆整份历史数据。
+        const snapshots = await getSnapshotIndex();
         return Array.isArray(snapshots) ? snapshots : [];
     } catch (e) {
         console.error('Failed to get snapshots:', e);
@@ -101,20 +194,17 @@ export async function createSnapshot(label, type = 'auto', options = {}) {
             }
         };
 
-        const existing = await getSnapshots();
-        existing.unshift(snapshot); // 最新在前
+        const existingIndex = await getSnapshotIndex();
+        const nextIndex = [
+            createSnapshotIndexEntry(snapshot),
+            ...existingIndex.filter(s => s?.id !== snapshot.id),
+        ];
+        const { kept, removed } = applySnapshotRetention(nextIndex);
 
-        // 限制自动快照数量（例如最多保留 50 个自动快照，超出的按时间删除）
-        const maxAutoSnapshots = 50;
-        let finalSnapshots = existing;
-        const autoSnapshots = existing.filter(s => s.type === 'auto');
-        if (autoSnapshots.length > maxAutoSnapshots) {
-            const toRemove = autoSnapshots.slice(maxAutoSnapshots).map(s => s.id);
-            finalSnapshots = existing.filter(s => !toRemove.includes(s.id));
-        }
-
-        // 保存到本地 IndexedDB（不走 persistSet，避免同步到云端）
-        await set(SNAPSHOTS_KEY, finalSnapshots);
+        // 完整快照按 ID 分开保存，新增快照不再重写整个历史数组。
+        await set(getSnapshotDataKey(snapshot.id), snapshot);
+        await saveSnapshotIndex(kept);
+        await Promise.all(removed.map(id => del(getSnapshotDataKey(id)).catch(() => { })));
 
         // 仅将最新一次快照同步到云端（轻量元数据 + 数据）
         if (syncLatestToCloud) {
@@ -139,8 +229,7 @@ export async function createSnapshot(label, type = 'auto', options = {}) {
  */
 export async function restoreSnapshot(snapshotId) {
     try {
-        const snapshots = await getSnapshots();
-        const target = snapshots.find(s => s.id === snapshotId);
+        const target = await getSnapshotById(snapshotId);
         if (!target) throw new Error('Snapshot not found');
 
         // 发起静默的当前状态备份，以防后悔
@@ -167,8 +256,9 @@ export async function restoreSnapshot(snapshotId) {
  * 删除指定快照
  */
 export async function deleteSnapshot(snapshotId) {
-    const snapshots = await getSnapshots();
+    const snapshots = await getSnapshotIndex();
     const remaining = snapshots.filter(s => s.id !== snapshotId);
-    await set(SNAPSHOTS_KEY, remaining);
+    await saveSnapshotIndex(remaining);
+    await del(getSnapshotDataKey(snapshotId)).catch(() => { });
     return remaining;
 }

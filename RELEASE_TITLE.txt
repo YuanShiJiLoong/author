@@ -1,1 +1,1 @@
-完善崩溃诊断日志导出 | Improved crash diagnostics export
+提升快照可靠性与崩溃诊断安全性 | Improved snapshot reliability and crash diagnostics safety

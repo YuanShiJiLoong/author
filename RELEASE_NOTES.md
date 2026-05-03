@@ -1,33 +1,35 @@
-## v1.2.21 — 完善崩溃诊断日志导出 | Improved crash diagnostics export
+## v1.2.22 — 提升快照可靠性与崩溃诊断安全性 | Improved snapshot reliability and crash diagnostics safety
 
 ### 🇨🇳 中文
 
-#### 🧰 诊断日志与崩溃报告
-- **新增诊断日志导出**：在「帮助 → 关于」新增「导出诊断日志」按钮，可下载 `author-diagnostic-*.json`，便于用户反馈白屏、卡死、异常退出前后的线索
-- **错误页支持导出日志**：当 React 错误边界仍能渲染时，错误页会显示「导出诊断日志」按钮，用户不再只能截图错误信息
-- **客户端崩溃自动落盘**：Windows 桌面端渲染进程崩溃或无响应时，主进程会自动写入 `%APPDATA%\Author\crash-reports\author-crash-*.json`
-- **崩溃弹窗可直达日志目录**：渲染进程崩溃弹窗新增「打开日志目录」，即使应用已经无法进入主界面，也能找到诊断报告
-- **主进程异常兜底**：Electron 主进程的 `uncaughtException` 和 `unhandledRejection` 会写入 crash report，减少“直接退出但没有线索”的情况
+#### 🕒 快照可靠性修复
+- **降低自动快照写入内存峰值**：快照仍保留完整章节、设定集和 AI 对话数据，但存储方式改为“轻量索引 + 单份完整快照分开保存”，新增快照时不再反复重写整份历史快照数组
+- **兼容旧版快照数据**：已有 `author-snapshots` 会在读取时迁移到新的分片存储结构，保留历史快照列表与回滚能力
+- **减少快照写入失败导致的恢复落后**：修复大型项目或长时间使用后，自动快照可能因 IndexedDB 单次写入过大而失败的问题
 
-#### 🔎 更完整的排查线索
-- **记录前端异常链路**：采集 `window.error`、`unhandledrejection`、`console.warn/error`、React 错误边界等关键错误信息
-- **记录最近操作面包屑**：保留最近点击、拖拽、快捷键、页面生命周期变化等操作摘要，方便定位“用户做了什么之后崩溃”
-- **桌面端日志桥接**：重要前端错误会同步写入 `%APPDATA%\Author\author-debug.log`，导出的诊断包也会包含主进程日志尾部
-- **敏感信息脱敏**：诊断日志会对 API Key、Bearer Token、Authorization、password/secret/token 等字段做脱敏处理
+#### 🧰 崩溃诊断增强
+- **崩溃报告包含最近操作链**：桌面端会在主进程中保留最近的页面生命周期、点击、拖拽、drop、快捷键和错误摘要；即使渲染进程直接崩溃，crash report 也能带上崩溃前线索
+- **避免主日志被普通操作刷屏**：普通操作只进入主进程内存环形缓冲，warn/error 仍会写入主日志，兼顾诊断完整性与日志体积
+- **增强脱敏与截断**：诊断日志继续脱敏 API Key、Bearer Token、Authorization、password/secret/token 等字段，并增加公网 IP 脱敏和超长日志截断
+
+#### 🔒 发布与 Docker 安全
+- **补强 Docker 构建上下文排除规则**：排除日志、压缩包、crash report 和诊断导出文件，防止临时排查材料误进入 Docker 构建上下文
+- **补齐缺失翻译**：补充 AI 输入展开和云同步指南相关多语言文案，减少无意义的缺失翻译日志噪声
 
 ---
 
 ### 🇬🇧 English
 
-#### 🧰 Diagnostic Logs & Crash Reports
-- **Added diagnostic export**: A new "Export Diagnostic Logs" button is available under Help → About, downloading an `author-diagnostic-*.json` file for white-screen, freeze, and crash reports
-- **Error page log export**: When the React error boundary can still render, the error page now exposes an "Export Diagnostic Logs" button instead of relying on screenshots alone
-- **Automatic crash reports on desktop**: The Windows desktop client now writes `%APPDATA%\Author\crash-reports\author-crash-*.json` when the renderer crashes or becomes unresponsive
-- **Crash dialog opens the log folder**: Renderer crash dialogs now include an "Open Log Folder" action, so users can find the report even when the app can no longer enter the main UI
-- **Main-process fallback**: Electron main-process `uncaughtException` and `unhandledRejection` events now write crash reports, reducing cases where the app exits without useful clues
+#### 🕒 Snapshot Reliability Fixes
+- **Reduced peak memory usage for auto snapshots**: Snapshots still preserve full chapter, settings, and AI chat data, but storage now uses a lightweight index plus one complete record per snapshot instead of rewriting the entire snapshot history array
+- **Backward-compatible migration**: Existing `author-snapshots` data is migrated on read to the new split-storage layout while keeping the snapshot list and rollback flow intact
+- **Fewer stale restores after failed snapshots**: Fixes cases where large projects or long sessions could fail an IndexedDB snapshot write because a single write became too large
 
-#### 🔎 More Complete Debugging Context
-- **Captured frontend error chain**: Records `window.error`, `unhandledrejection`, `console.warn/error`, and React error-boundary failures
-- **Recent interaction breadcrumbs**: Keeps summaries of recent clicks, drag-and-drop actions, shortcuts, and page lifecycle changes to help identify what happened before a crash
-- **Desktop log bridge**: Important frontend failures are mirrored into `%APPDATA%\Author\author-debug.log`, and diagnostic exports include the tail of the main-process log
-- **Sensitive data redaction**: Diagnostic logs redact API keys, Bearer tokens, Authorization values, password/secret/token fields, and similar sensitive values
+#### 🧰 Crash Diagnostics Improvements
+- **Crash reports now include recent interaction breadcrumbs**: The desktop main process keeps recent page lifecycle events, clicks, drag/drop actions, shortcuts, and error summaries so crash reports can still show what happened before a hard renderer crash
+- **Avoided noisy main logs**: Regular interaction breadcrumbs stay in a bounded in-memory buffer, while warnings and errors continue to be written to the main log
+- **Stronger redaction and truncation**: Diagnostic logs continue to redact API keys, Bearer tokens, Authorization values, password/secret/token fields, and now also redact public IP addresses and truncate overly long log entries
+
+#### 🔒 Release & Docker Safety
+- **Hardened Docker build context exclusions**: Logs, archives, crash reports, and diagnostic export files are now excluded from Docker build contexts to prevent temporary troubleshooting material from being copied accidentally
+- **Filled missing translations**: Added missing labels for expanded AI input and cloud sync guide text to reduce noisy missing-translation warnings

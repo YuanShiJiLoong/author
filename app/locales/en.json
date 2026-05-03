@@ -48,6 +48,7 @@
     "importError": "Import failed: ",
     "importEmpty": "Could not parse any settings entries from the file",
     "importTextSuccess": "Successfully imported {count} settings entries",
+    "syncGuide": "Cloud Sync Guide",
     "categories": {
       "character": "Character",
       "location": "Location",
@@ -199,6 +200,7 @@
     "actionsApplied": "Applied",
     "actionsDelete": "Delete",
     "inputPlaceholder": "Type message... (Enter to send, Shift+Enter for newline)",
+    "expandInput": "Expand input",
     "searchArchive": "Search generations...",
     "emptyArchiveIcon": "",
     "emptyArchiveTitle": "No generations yet",

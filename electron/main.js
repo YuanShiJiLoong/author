@@ -30,21 +30,53 @@ const fs = require('fs');
     }
 })();
 
-// 日志文件 - 写到操作系统的 UserData 目录（避免 C 盘权限问题被静默拦截）
-const logFile = path.join(app.getPath('userData'), 'author-debug.log');
-function log(msg) {
-    const line = `[${new Date().toISOString()}] ${msg}\n`;
-    console.log(msg);
-    try { fs.appendFileSync(logFile, line); } catch (e) { }
+const MAX_LOG_MESSAGE_LENGTH = 12000;
+const MAX_RENDERER_BREADCRUMBS = 120;
+const PUBLIC_IPV4_RE = /\b(?!(?:127|10|0|169\.254|192\.168)\.)(?!(?:172\.(?:1[6-9]|2\d|3[0-1]))\.)(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
+
+function truncateLogText(value, maxLength = MAX_LOG_MESSAGE_LENGTH) {
+    const text = String(value ?? '');
+    return text.length > maxLength ? `${text.slice(0, maxLength)}…[truncated ${text.length - maxLength} chars]` : text;
 }
 
-function sanitizeLogText(value) {
-    return String(value ?? '')
+function sanitizeLogText(value, maxLength = null) {
+    const text = String(value ?? '')
         .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
         .replace(/\b(sk|rk|pk|ak)-[A-Za-z0-9_\-]{16,}\b/g, '$1-[REDACTED]')
         .replace(/\bAIza[0-9A-Za-z_\-]{20,}\b/g, 'AIza[REDACTED]')
         .replace(/("?(?:api[_-]?key|authorization|token|password|secret)"?\s*[:=]\s*)"[^"]+"/gi, '$1"[REDACTED]"')
-        .replace(/((?:api[_-]?key|authorization|token|password|secret)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]');
+        .replace(/((?:api[_-]?key|authorization|token|password|secret)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]')
+        .replace(PUBLIC_IPV4_RE, '[REDACTED_IP]');
+    return maxLength ? truncateLogText(text, maxLength) : text;
+}
+
+function sanitizeDiagnosticValue(value, depth = 0) {
+    if (depth > 4) return '[MaxDepth]';
+    if (value === null || value === undefined) return value;
+    if (typeof value === 'string') return sanitizeLogText(value, 1000);
+    if (typeof value === 'number' || typeof value === 'boolean') return value;
+    if (Array.isArray(value)) return value.slice(0, 40).map(item => sanitizeDiagnosticValue(item, depth + 1));
+    if (typeof value === 'object') {
+        const out = {};
+        for (const [key, item] of Object.entries(value).slice(0, 60)) {
+            if (/api[_-]?key|authorization|token|password|secret/i.test(key)) {
+                out[key] = '[REDACTED]';
+            } else {
+                out[sanitizeLogText(key, 120)] = sanitizeDiagnosticValue(item, depth + 1);
+            }
+        }
+        return out;
+    }
+    return sanitizeLogText(String(value), 1000);
+}
+
+// 日志文件 - 写到操作系统的 UserData 目录（避免 C 盘权限问题被静默拦截）
+const logFile = path.join(app.getPath('userData'), 'author-debug.log');
+function log(msg) {
+    const safeMessage = sanitizeLogText(msg, MAX_LOG_MESSAGE_LENGTH);
+    const line = `[${new Date().toISOString()}] ${safeMessage}\n`;
+    console.log(safeMessage);
+    try { fs.appendFileSync(logFile, line); } catch (e) { }
 }
 
 function readLogTail(filePath, maxBytes = 2 * 1024 * 1024) {
@@ -86,6 +118,29 @@ const MAX_LOAD_RETRIES = 10;
 let serverReady = false; // 追踪服务器是否真正就绪
 let serverCrashed = false; // 追踪子进程是否已崩溃
 let latestCrashReportPath = null;
+let rendererBreadcrumbs = [];
+
+function rememberRendererDiagnostic(entry, senderUrl) {
+    const safeEntry = {
+        ts: sanitizeLogText(entry?.ts || new Date().toISOString(), 80),
+        level: sanitizeLogText(entry?.level || 'info', 40),
+        event: sanitizeLogText(entry?.event || 'renderer', 120),
+        message: sanitizeLogText(entry?.message || '', 1000),
+        path: sanitizeLogText(entry?.path || '', 240),
+        senderUrl: sanitizeLogText(senderUrl || '', 300),
+        metadata: sanitizeDiagnosticValue(entry?.metadata || {}),
+    };
+    rendererBreadcrumbs.push(safeEntry);
+    rendererBreadcrumbs = rendererBreadcrumbs.slice(-MAX_RENDERER_BREADCRUMBS);
+    return safeEntry;
+}
+
+function shouldLogRendererDiagnostic(entry) {
+    const level = String(entry?.level || '');
+    const eventName = String(entry?.event || '');
+    return ['error', 'warn'].includes(level)
+        || /error|rejection|crash/i.test(eventName);
+}
 
 function buildMainDiagnosticBundle() {
     const mainLog = readLogTail(logFile);
@@ -101,6 +156,7 @@ function buildMainDiagnosticBundle() {
         serverCrashed,
         actualPort,
         latestCrashReportPath,
+        rendererBreadcrumbs: rendererBreadcrumbs.slice(-MAX_RENDERER_BREADCRUMBS),
         mainLog: {
             ...mainLog,
             content: sanitizeLogText(mainLog.content || ''),
@@ -155,14 +211,14 @@ process.on('unhandledRejection', (reason) => {
 });
 
 ipcMain.handle('write-diagnostic-log', async (event, entry) => {
-    const level = sanitizeLogText(entry?.level || 'info');
-    const name = sanitizeLogText(entry?.event || 'renderer');
-    const message = sanitizeLogText(entry?.message || '');
-    let metadata = '';
-    try {
-        metadata = JSON.stringify(entry?.metadata || {});
-    } catch { }
-    log(`[Renderer:${level}] ${name} ${message}${metadata ? ' ' + sanitizeLogText(metadata) : ''}`);
+    const safeEntry = rememberRendererDiagnostic(entry, event.senderFrame?.url);
+    if (shouldLogRendererDiagnostic(safeEntry)) {
+        let metadata = '';
+        try {
+            metadata = JSON.stringify(safeEntry.metadata || {});
+        } catch { }
+        log(`[Renderer:${safeEntry.level}] ${safeEntry.event} ${safeEntry.message}${metadata ? ' ' + sanitizeLogText(metadata, 4000) : ''}`);
+    }
     return { success: true };
 });
 

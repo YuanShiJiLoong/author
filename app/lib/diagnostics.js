@@ -4,6 +4,16 @@ const STORAGE_KEY = 'author-diagnostic-log-v1';
 const MAX_ENTRIES = 1200;
 const MAX_TEXT_LENGTH = 4000;
 const MAX_METADATA_LENGTH = 12000;
+const PUBLIC_IPV4_RE = /\b(?!(?:127|10|0|169\.254|192\.168)\.)(?!(?:172\.(?:1[6-9]|2\d|3[0-1]))\.)(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
+const MIRRORED_BREADCRUMB_EVENTS = new Set([
+    'app.diagnostics.ready',
+    'page.lifecycle',
+    'page.visibility',
+    'ui.click',
+    'ui.dragstart',
+    'ui.drop',
+    'ui.keydown',
+]);
 
 let installed = false;
 let originalConsole = null;
@@ -24,7 +34,8 @@ function sanitizeText(value) {
         .replace(/\b(sk|rk|pk|ak)-[A-Za-z0-9_\-]{16,}\b/g, '$1-[REDACTED]')
         .replace(/\bAIza[0-9A-Za-z_\-]{20,}\b/g, 'AIza[REDACTED]')
         .replace(/("?(?:api[_-]?key|authorization|token|password|secret)"?\s*[:=]\s*)"[^"]+"/gi, '$1"[REDACTED]"')
-        .replace(/((?:api[_-]?key|authorization|token|password|secret)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]'));
+        .replace(/((?:api[_-]?key|authorization|token|password|secret)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]')
+        .replace(PUBLIC_IPV4_RE, '[REDACTED_IP]'));
 }
 
 function serializeError(error) {
@@ -130,7 +141,11 @@ function getEnvironmentSnapshot() {
 
 function mirrorToElectron(entry) {
     if (typeof window === 'undefined' || !window.electronAPI?.writeDiagnosticLog) return;
-    const shouldMirror = ['error', 'warn'].includes(entry.level) || entry.event?.includes('error') || entry.event?.includes('rejection') || entry.event?.includes('crash');
+    const shouldMirror = MIRRORED_BREADCRUMB_EVENTS.has(entry.event)
+        || ['error', 'warn'].includes(entry.level)
+        || entry.event?.includes('error')
+        || entry.event?.includes('rejection')
+        || entry.event?.includes('crash');
     if (!shouldMirror) return;
     window.electronAPI.writeDiagnosticLog(entry).catch(() => { });
 }

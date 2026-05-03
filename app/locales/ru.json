@@ -48,6 +48,7 @@
         "importError": "Ошибка импорта: ",
         "importEmpty": "Не удалось извлечь записи из файла",
         "importTextSuccess": "Успешно импортировано {count} записей",
+        "syncGuide": "Руководство по Cloud Sync",
         "categories": {
             "character": "Персонаж",
             "location": "Локация",
@@ -199,6 +200,7 @@
         "actionsApplied": "Применено",
         "actionsDelete": "Удалить",
         "inputPlaceholder": "Введите сообщение... (Enter для отправки, Shift+Enter для новой строки)",
+        "expandInput": "Развернуть ввод",
         "searchArchive": "Поиск по генерациям...",
         "emptyArchiveIcon": "",
         "emptyArchiveTitle": "Пока нет генераций",

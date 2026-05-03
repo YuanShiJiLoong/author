@@ -7,6 +7,14 @@ dist
 .env
 .env.local
 .env.*.local
+*.log
+*.7z
+*.zip
+*.rar
+crash-reports
+crash-reports*
+author-crash-*.json
+author-diagnostic-*.json
 electron
 afterPack.js
 .vscode
