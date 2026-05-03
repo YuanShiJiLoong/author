@@ -43,6 +43,7 @@ I watched the versatility of these models being gutted. I don't want us to live 
 - **Continue / Rewrite / Polish / Expand** — one-click generation
 - **Immersive Writing Engine (Ghost Text)** streaming preview — see AI output in real-time like Cursor, with accept/reject
 - **Free chat mode** — discuss plot, characters, and settings with AI
+- **Configurable chat send shortcut** — choose Enter to send or Ctrl/⌘ + Enter to send, for both compact and expanded chat input
 - **Global AI Memory (Context Engine)** — AI automatically reads your character profiles, worldbuilding, and previous chapters to maintain story consistency
 
 ### 📚 Worldbuilding Manager
@@ -79,10 +80,13 @@ Just install and start writing. All features work out of the box.
 
 ### 🐛 Troubleshooting / Debug Logs
 
-If you encounter a white screen or the app fails to start, you can check the local debug logs located at:
-- **Windows**: `C:\Users\<YourUsername>\AppData\Roaming\Author\author-debug.log`
-
-*(You can quickly open this folder by pressing `Win + R` and typing `%APPDATA%\Author`)*
+If you encounter a white screen, crash, or startup failure:
+- In the app, open **Help → About → Export Diagnostic Logs** to download `author-diagnostic-*.json`.
+- On the desktop client, **Help → About → Open Log Folder** opens the local log location.
+- **Desktop main log**: `%APPDATA%\author-app\author-debug.log` (`C:\Users\<YourUsername>\AppData\Roaming\author-app\author-debug.log`).
+- **Desktop crash reports**: `%APPDATA%\author-app\crash-reports\author-crash-*.json`.
+- Browser, source-code, and Vercel deployments do not have the desktop log folder; use the in-app diagnostic export instead.
+- Diagnostic files redact API Keys, tokens, Authorization headers, secrets, and public IPs.
 
 ---
 

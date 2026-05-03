@@ -335,9 +335,17 @@ export default function AiSidebar({ onInsertText }) {
         chatStreaming, setChatStreaming,
         generationArchive,
         contextItems, contextSelection, setContextSelection,
+        chatSendShortcutMode,
         showToast
     } = useAppStore();
     const { t } = useI18n();
+    const chatInputMode = chatSendShortcutMode === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
+    const chatInputPlaceholder = chatInputMode === 'ctrlEnter'
+        ? t('aiSidebar.inputPlaceholderCtrlEnter')
+        : t('aiSidebar.inputPlaceholder');
+    const chatInputSendHint = chatInputMode === 'ctrlEnter'
+        ? t('aiSidebar.sendHintCtrlEnter')
+        : t('aiSidebar.sendHintEnter');
 
     const onClose = useCallback(() => setAiSidebarOpen(false), [setAiSidebarOpen]);
     const onOpenSettings = useCallback(() => { setAiSidebarOpen(false); setShowSettings('settings'); }, [setAiSidebarOpen, setShowSettings]);
@@ -894,6 +902,12 @@ export default function AiSidebar({ onInsertText }) {
         onChatMessage?.(text, selectedHistory);
         setInputText('');
     }, [inputText, chatStreaming, chatHistory, checkedHistory, onChatMessage]);
+
+    const shouldSendOnKeyDown = useCallback((event) => {
+        if (event.key !== 'Enter' || event.nativeEvent?.isComposing || event.isComposing) return false;
+        if (chatInputMode === 'ctrlEnter') return event.ctrlKey || event.metaKey;
+        return !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+    }, [chatInputMode]);
 
     // 重新发送某条用户消息
     const handleResend = useCallback((msgId) => {
@@ -1610,11 +1624,11 @@ export default function AiSidebar({ onInsertText }) {
                                         ref={inputRef}
                                         className="chat-input"
                                         style={{ paddingRight: 32 }}
-                                        placeholder={t('aiSidebar.inputPlaceholder')}
+                                        placeholder={chatInputPlaceholder}
                                         value={inputText}
                                         onChange={e => setInputText(e.target.value)}
                                         onKeyDown={e => {
-                                            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                                            if (shouldSendOnKeyDown(e)) {
                                                 e.preventDefault();
                                                 handleSend();
                                             }
@@ -2064,11 +2078,11 @@ export default function AiSidebar({ onInsertText }) {
                             <textarea
                                 className="chat-input"
                                 style={{ flex: 1, resize: 'none', fontSize: 14, padding: 12 }}
-                                placeholder={t('aiSidebar.inputPlaceholder')}
+                                placeholder={chatInputPlaceholder}
                                 value={inputText}
                                 onChange={e => setInputText(e.target.value)}
                                 onKeyDown={e => {
-                                    if (e.key === 'Enter' && e.ctrlKey && inputText.trim()) {
+                                    if (shouldSendOnKeyDown(e) && inputText.trim()) {
                                         e.preventDefault();
                                         handleSend();
                                         setInputExpanded(false);
@@ -2077,9 +2091,9 @@ export default function AiSidebar({ onInsertText }) {
                                 autoFocus
                             />
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Ctrl + Enter 单键发送 (Command + Enter)</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{chatInputSendHint}</div>
                                 <div style={{ display: 'flex', gap: 8 }}>
-                                    <button className="btn" onClick={() => setInputExpanded(false)}>取消</button>
+                                    <button className="btn" onClick={() => setInputExpanded(false)}>{t('common.cancel')}</button>
                                     <button
                                         className="btn primary"
                                         disabled={!inputText.trim()}
@@ -2087,7 +2101,7 @@ export default function AiSidebar({ onInsertText }) {
                                             handleSend();
                                             setInputExpanded(false);
                                         }}
-                                    >发送请求</button>
+                                    >{t('aiSidebar.sendRequest')}</button>
                                 </div>
                             </div>
                         </div>

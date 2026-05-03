@@ -11,7 +11,7 @@ import {
     Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers,
     Bookmark, Crown, Flame, Lightbulb, Music, Palette, Sword, Target,
     Moon, Sun, Cloud, CloudOff, TreePine, Mountain, Waves, Building, Car,
-    Plus
+    Keyboard, Plus
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import {
@@ -1349,8 +1349,16 @@ export const PROVIDERS = [
 ];
 
 function PreferencesForm() {
-    const { language, setLanguage, visualTheme, setVisualTheme, sidebarPushMode, setSidebarPushMode, aiSidebarPushMode, setAiSidebarPushMode, setShowSyncGuideModal } = useAppStore();
+    const {
+        language, setLanguage,
+        visualTheme, setVisualTheme,
+        sidebarPushMode, setSidebarPushMode,
+        aiSidebarPushMode, setAiSidebarPushMode,
+        chatSendShortcutMode, setChatSendShortcutMode,
+        setShowSyncGuideModal,
+    } = useAppStore();
     const { t } = useI18n();
+    const normalizedChatSendShortcutMode = chatSendShortcutMode === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
 
     // ---- Firebase 账户 ----
     const [authUser, setAuthUser] = useState(null);
@@ -1465,6 +1473,18 @@ function PreferencesForm() {
         borderRadius: 'var(--radius-md)',
         background: active ? 'var(--accent-light)' : 'var(--bg-primary)',
         cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s',
+        boxShadow: active ? '0 2px 8px var(--accent-glow)' : 'var(--shadow-sm)',
+    });
+
+    const shortcutBtnStyle = (active) => ({
+        flex: 1,
+        padding: '12px 14px',
+        border: active ? '2px solid var(--accent)' : '1px solid var(--border-light)',
+        borderRadius: 'var(--radius-md)',
+        background: active ? 'var(--accent-light)' : 'var(--bg-primary)',
+        cursor: 'pointer',
+        textAlign: 'left',
+        transition: 'all 0.15s',
         boxShadow: active ? '0 2px 8px var(--accent-glow)' : 'var(--shadow-sm)',
     });
 
@@ -1785,6 +1805,36 @@ function PreferencesForm() {
                             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('preferences.layoutPushDesc')}</div>
                         </button>
                     </div>
+                </div>
+            </div>
+
+            {/* AI 对话发送快捷键 */}
+            <div style={{ marginBottom: 24 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                    <Keyboard size={14} /> {t('preferences.chatSendShortcutLabel')}
+                </label>
+                <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                        style={shortcutBtnStyle(normalizedChatSendShortcutMode === 'enter')}
+                        onClick={() => setChatSendShortcutMode('enter')}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: normalizedChatSendShortcutMode === 'enter' ? 600 : 400, color: normalizedChatSendShortcutMode === 'enter' ? 'var(--accent)' : 'var(--text-primary)', marginBottom: 4 }}>
+                            <CircleDot size={13} /> {t('preferences.chatSendEnter')}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.45 }}>{t('preferences.chatSendEnterDesc')}</div>
+                    </button>
+                    <button
+                        style={shortcutBtnStyle(normalizedChatSendShortcutMode === 'ctrlEnter')}
+                        onClick={() => setChatSendShortcutMode('ctrlEnter')}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: normalizedChatSendShortcutMode === 'ctrlEnter' ? 600 : 400, color: normalizedChatSendShortcutMode === 'ctrlEnter' ? 'var(--accent)' : 'var(--text-primary)', marginBottom: 4 }}>
+                            <CircleDot size={13} /> {t('preferences.chatSendCtrlEnter')}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.45 }}>{t('preferences.chatSendCtrlEnterDesc')}</div>
+                    </button>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
+                    {t('preferences.chatSendShortcutHint')}
                 </div>
             </div>
 

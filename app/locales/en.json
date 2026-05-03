@@ -200,7 +200,12 @@
     "actionsApplied": "Applied",
     "actionsDelete": "Delete",
     "inputPlaceholder": "Type message... (Enter to send, Shift+Enter for newline)",
+    "inputPlaceholderCtrlEnter": "Type message... (Enter for newline, Ctrl/⌘+Enter to send)",
     "expandInput": "Expand input",
+    "expandInputTitle": "Expanded input",
+    "sendHintEnter": "Enter to send, Shift + Enter for newline",
+    "sendHintCtrlEnter": "Enter for newline, Ctrl / ⌘ + Enter to send",
+    "sendRequest": "Send",
     "searchArchive": "Search generations...",
     "emptyArchiveIcon": "",
     "emptyArchiveTitle": "No generations yet",
@@ -568,7 +573,13 @@
     "layoutOverlay": "Overlay",
     "layoutPush": "Push",
     "layoutOverlayDesc": "Sidebar floats over the editor",
-    "layoutPushDesc": "Sidebar pushes the editor aside"
+    "layoutPushDesc": "Sidebar pushes the editor aside",
+    "chatSendShortcutLabel": "AI chat send shortcut",
+    "chatSendEnter": "Enter sends",
+    "chatSendEnterDesc": "Enter sends the message; Shift + Enter inserts a newline",
+    "chatSendCtrlEnter": "Ctrl / ⌘ + Enter sends",
+    "chatSendCtrlEnterDesc": "Enter inserts a newline; Ctrl / ⌘ + Enter sends the message",
+    "chatSendShortcutHint": "This applies to both the compact AI chat box and the expanded input."
   },
   "bookInfo": {
     "intro": "This information helps AI understand your work's direction and style. Even filling in just one or two fields will significantly improve AI quality.",

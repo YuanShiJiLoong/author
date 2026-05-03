@@ -200,7 +200,12 @@
         "actionsApplied": "已应用",
         "actionsDelete": "删除",
         "inputPlaceholder": "输入消息…（Enter 发送，Shift+Enter 换行）",
+        "inputPlaceholderCtrlEnter": "输入消息…（Enter 换行，Ctrl/⌘+Enter 发送）",
         "expandInput": "全屏输入",
+        "expandInputTitle": "全屏输入",
+        "sendHintEnter": "Enter 发送，Shift + Enter 换行",
+        "sendHintCtrlEnter": "Enter 换行，Ctrl / ⌘ + Enter 发送",
+        "sendRequest": "发送请求",
         "searchArchive": "搜索生成内容…",
         "emptyArchiveIcon": "",
         "emptyArchiveTitle": "暂无生成记录",
@@ -568,7 +573,13 @@
         "layoutOverlay": "覆盖",
         "layoutPush": "挤开",
         "layoutOverlayDesc": "侧栏浮在编辑区上方",
-        "layoutPushDesc": "侧栏挤开编辑区"
+        "layoutPushDesc": "侧栏挤开编辑区",
+        "chatSendShortcutLabel": "AI 对话发送快捷键",
+        "chatSendEnter": "Enter 发送",
+        "chatSendEnterDesc": "Enter 发送消息，Shift + Enter 换行",
+        "chatSendCtrlEnter": "Ctrl / ⌘ + Enter 发送",
+        "chatSendCtrlEnterDesc": "Enter 直接换行，Ctrl / ⌘ + Enter 发送消息",
+        "chatSendShortcutHint": "此设置同时作用于 AI 对话小输入框和全屏输入框。"
     },
     "bookInfo": {
         "intro": "这些信息帮助AI理解你的作品定位和风格，即使只填一两项也会大幅提升AI质量。",

@@ -44,13 +44,21 @@ const store = create((set, get) => ({
         if (typeof window !== 'undefined') localStorage.setItem('author-ai-sidebar-push', String(push));
         return { aiSidebarPushMode: push };
     }),
+    chatSendShortcutMode: typeof window !== 'undefined' ? localStorage.getItem('author-chat-send-shortcut') || 'enter' : 'enter',
+    setChatSendShortcutMode: (mode) => set(() => {
+        const normalized = mode === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
+        if (typeof window !== 'undefined') localStorage.setItem('author-chat-send-shortcut', normalized);
+        return { chatSendShortcutMode: normalized };
+    }),
     _hydrateSidebarModes: () => {
         if (typeof window === 'undefined') return;
         const sp = localStorage.getItem('author-sidebar-push');
         const ap = localStorage.getItem('author-ai-sidebar-push');
+        const chatSendShortcut = localStorage.getItem('author-chat-send-shortcut');
         const updates = {};
         if (sp !== null) updates.sidebarPushMode = sp === 'true';
         if (ap !== null) updates.aiSidebarPushMode = ap === 'true';
+        if (chatSendShortcut !== null) updates.chatSendShortcutMode = chatSendShortcut === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
         if (Object.keys(updates).length) set(updates);
     },
 

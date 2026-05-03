@@ -43,6 +43,7 @@
 - **续写 / 改写 / 润色 / 扩写**，一键生成
 - **沉浸式写作引擎（Ghost Text）** 流式预览 — 像 Cursor 一样实时显示 AI 生成内容，支持接受/拒绝
 - **自由对话模式** — 与 AI 讨论剧情、角色、设定
+- **AI 对话发送快捷键** — 可选择 Enter 发送，或 Ctrl/⌘ + Enter 发送，同时作用于小输入框和全屏输入面板
 - **AI 全局记忆（Context Engine）** — AI 自动感知你的角色设定、世界观、前文，保持剧情连贯
 - **API 格式切换** — 阿里云百炼和 MiniMax 同时支持 OpenAI 和 Anthropic 两种 API 格式
 
@@ -81,10 +82,13 @@
 
 ### 🐛 常见问题排查 / Debug 日志
 
-如果您在打开软件时遇到持续白屏，或程序无法正常启动，请查看系统为您生成的本地 Debug 日志文件：
-- **Windows 路径**：`C:\Users\<您的用户名>\AppData\Roaming\Author\author-debug.log`
-
-*(按 `Win + R` 键，输入 `%APPDATA%\Author` 回车即可快速打开该文件夹查看日志)*
+如果遇到白屏、卡死、崩溃或程序无法正常启动：
+- 应用内打开 **帮助 → 关于 → 导出诊断日志**，会下载 `author-diagnostic-*.json`
+- 桌面客户端可在 **帮助 → 关于 → 打开日志目录** 直接查看本地日志位置
+- **桌面主日志**：`%APPDATA%\author-app\author-debug.log`（完整路径示例：`C:\Users\<您的用户名>\AppData\Roaming\author-app\author-debug.log`）
+- **桌面崩溃报告**：`%APPDATA%\author-app\crash-reports\author-crash-*.json`
+- 浏览器 / 源码 / Vercel 部署没有桌面日志目录，请使用应用内「导出诊断日志」
+- 诊断文件会自动脱敏 API Key、Token、Authorization、Secret、公网 IP 等敏感信息
 
 ---
 

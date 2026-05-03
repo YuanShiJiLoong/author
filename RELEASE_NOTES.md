@@ -33,3 +33,33 @@
 #### 🔒 Release & Docker Safety
 - **Hardened Docker build context exclusions**: Logs, archives, crash reports, and diagnostic export files are now excluded from Docker build contexts to prevent temporary troubleshooting material from being copied accidentally
 - **Filled missing translations**: Added missing labels for expanded AI input and cloud sync guide text to reduce noisy missing-translation warnings
+
+---
+
+## v1.2.22 追加更新 — AI 对话发送快捷键与诊断入口 | Follow-up: AI chat shortcuts and diagnostic access
+
+### 🇨🇳 中文
+
+#### 💬 AI 对话体验
+- **新增发送快捷键设置**：可在「设定集 → 偏好设置」选择 Enter 发送，或 Ctrl/⌘ + Enter 发送
+- **统一小窗与全屏输入行为**：AI 对话小输入框和全屏输入面板共享同一发送/换行规则，减少长 Prompt 编辑时误发送
+- **补齐多语言文案**：新增中文、英文、俄文界面文案，确保设置项和输入提示一致
+
+#### 🧰 诊断日志说明
+- **帮助页新增日志位置入口**：桌面端「帮助 → 关于」新增“打开日志目录”，可直接定位本地日志
+- **校正桌面日志路径说明**：文档统一为 `%APPDATA%\author-app\author-debug.log` 和 `%APPDATA%\author-app\crash-reports\author-crash-*.json`
+- **更新 README 多语言说明**：补充诊断日志查看、导出、崩溃报告位置，以及浏览器 / 源码 / Vercel 部署与桌面端的差异
+
+---
+
+### 🇬🇧 English
+
+#### 💬 AI Chat Experience
+- **Added configurable chat send shortcuts**: Choose Enter to send, or Ctrl/⌘ + Enter to send from Settings → Preferences
+- **Unified compact and expanded input behavior**: The compact AI chat input and expanded prompt editor now share the same send/newline rules to reduce accidental sends while writing long prompts
+- **Completed locale text**: Added Chinese, English, and Russian labels for the new setting and input hints
+
+#### 🧰 Diagnostic Log Guidance
+- **Added a desktop log location entry point**: The desktop Help → About panel now includes “Open Log Folder” for quick access to local logs
+- **Corrected desktop log path documentation**: Docs now use `%APPDATA%\author-app\author-debug.log` and `%APPDATA%\author-app\crash-reports\author-crash-*.json`
+- **Updated multilingual README guidance**: Added how to view/export diagnostics, where crash reports live, and how browser/source/Vercel deployments differ from the desktop client

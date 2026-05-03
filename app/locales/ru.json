@@ -200,7 +200,12 @@
         "actionsApplied": "Применено",
         "actionsDelete": "Удалить",
         "inputPlaceholder": "Введите сообщение... (Enter для отправки, Shift+Enter для новой строки)",
+        "inputPlaceholderCtrlEnter": "Введите сообщение... (Enter для новой строки, Ctrl/⌘+Enter для отправки)",
         "expandInput": "Развернуть ввод",
+        "expandInputTitle": "Развернутый ввод",
+        "sendHintEnter": "Enter — отправить, Shift + Enter — новая строка",
+        "sendHintCtrlEnter": "Enter — новая строка, Ctrl / ⌘ + Enter — отправить",
+        "sendRequest": "Отправить",
         "searchArchive": "Поиск по генерациям...",
         "emptyArchiveIcon": "",
         "emptyArchiveTitle": "Пока нет генераций",
@@ -556,7 +561,13 @@
         "layoutOverlay": "Наложение",
         "layoutPush": "Сдвиг",
         "layoutOverlayDesc": "Панель поверх редактора",
-        "layoutPushDesc": "Панель сдвигает редактор"
+        "layoutPushDesc": "Панель сдвигает редактор",
+        "chatSendShortcutLabel": "Горячая клавиша отправки в AI-чате",
+        "chatSendEnter": "Enter отправляет",
+        "chatSendEnterDesc": "Enter отправляет сообщение, Shift + Enter добавляет новую строку",
+        "chatSendCtrlEnter": "Ctrl / ⌘ + Enter отправляет",
+        "chatSendCtrlEnterDesc": "Enter добавляет новую строку, Ctrl / ⌘ + Enter отправляет сообщение",
+        "chatSendShortcutHint": "Настройка применяется к компактному и развернутому полю AI-чата."
     },
     "bookInfo": {
         "intro": "Эта информация помогает ИИ понять направление и стиль вашего произведения. Даже заполнение одного-двух полей значительно улучшит качество ИИ.",
