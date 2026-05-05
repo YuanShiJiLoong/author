@@ -1312,6 +1312,27 @@ export default function SettingsPanel() {
 
 const DEEPSEEK_DEPRECATED_MODELS = new Set(['deepseek-chat', 'deepseek-reasoner']);
 
+function mergeFetchedAndSavedModels(fetchedModels, savedModels) {
+    const seen = new Set();
+    const merged = [];
+
+    (fetchedModels || []).forEach(model => {
+        const id = (typeof model === 'string' ? model : model?.id || model?.name || model?.displayName || '').trim();
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        merged.push(typeof model === 'string' ? { id } : { ...model, id });
+    });
+
+    (savedModels || []).forEach(modelId => {
+        const id = String(modelId || '').trim();
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        merged.push({ id, isUnavailable: true });
+    });
+
+    return merged;
+}
+
 export const PROVIDERS = [
     // === 国内供应商 ===
     { key: 'zhipu', label: '智谱AI (GLM)', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-flash', 'glm-4-plus', 'glm-4-long', 'glm-4'] },
@@ -2389,14 +2410,32 @@ function ApiConfigForm({ data, onChange }) {
                     </div>
 
                     {/* ===== 获取模型弹窗 ===== */}
-                    {showModelModal && Array.isArray(fetchedModels) && (
+                    {showModelModal && Array.isArray(fetchedModels) && (() => {
+                        const savedModelsForModal = data.providerConfigs?.[data.provider]?.models || [];
+                        const fetchedModelIds = new Set((fetchedModels || [])
+                            .map(m => (typeof m === 'string' ? m : m?.id || m?.name || m?.displayName || '').trim())
+                            .filter(Boolean));
+                        const mergedModels = mergeFetchedAndSavedModels(fetchedModels, savedModelsForModal);
+                        const unavailableCount = mergedModels.filter(m => m.isUnavailable).length;
+                        const removeUnavailableModels = () => {
+                            const configs = { ...(data.providerConfigs || {}) };
+                            const currentConfig = configs[data.provider] || {};
+                            configs[data.provider] = {
+                                ...currentConfig,
+                                models: (currentConfig.models || []).filter(modelId => fetchedModelIds.has(modelId)),
+                            };
+                            onChange({ ...data, providerConfigs: configs });
+                        };
+                        return (
                         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }} onClick={e => { if (e.target === e.currentTarget) setShowModelModal(false); }}>
                             <div style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg, 14px)', boxShadow: '0 16px 48px rgba(0,0,0,0.25)', width: 480, maxWidth: '90vw', maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'modelPickerFadeInDown 0.2s ease' }}>
                                 {/* 弹窗头 */}
                                 <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                     <div>
                                         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>可用模型列表</div>
-                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{currentProvider.label} · 共 {fetchedModels.length} 个模型，勾选加入快切列表</div>
+                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                            {currentProvider.label} · 共 {mergedModels.length} 个模型，勾选加入快切列表{unavailableCount > 0 ? ` · ${unavailableCount} 个已保存但未返回` : ''}
+                                        </div>
                                     </div>
                                     <button style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 8px', lineHeight: 1 }} onClick={() => setShowModelModal(false)}><X size={16} /></button>
                                 </div>
@@ -2415,7 +2454,7 @@ function ApiConfigForm({ data, onChange }) {
                                 </div>
                                 {/* 模型列表 */}
                                 <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px 12px' }}>
-                                    {fetchedModels
+                                    {mergedModels
                                         .filter(m => !modelSearch || m.id.toLowerCase().includes(modelSearch.toLowerCase()))
                                         .map(m => {
                                             const savedModels = data.providerConfigs?.[data.provider]?.models || [];
@@ -2445,7 +2484,8 @@ function ApiConfigForm({ data, onChange }) {
                                                             onChange({ ...data, providerConfigs: configs });
                                                         }}>{isInList ? '✓' : ''}</button>
                                                         {/* 模型名 */}
-                                                        <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { update('model', m.id); }} title={`使用 ${m.id}`}>{m.id}</span>
+                                                        <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { update('model', m.id); }} title={m.isUnavailable ? `${m.id}（已保存，但未在本次拉取结果中）` : `使用 ${m.id}`}>{m.id}</span>
+                                                        {m.isUnavailable && <span style={{ fontSize: 9, color: 'var(--warning, #b45309)', background: 'color-mix(in srgb, var(--warning, #b45309) 12%, transparent)', padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>未返回</span>}
                                                         {isDeprecatedDeepSeekModel && <span style={{ fontSize: 9, color: 'var(--warning, #b45309)', background: 'color-mix(in srgb, var(--warning, #b45309) 12%, transparent)', padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>2026-07-24 停用</span>}
                                                         {/* 模型参数指示 */}
                                                         {hasParams && !isEditing && <span style={{ fontSize: 9, color: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 10%, transparent)', padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>自定义参数</span>}
@@ -2522,13 +2562,21 @@ function ApiConfigForm({ data, onChange }) {
                                         })}
                                 </div>
                                 {/* 底部 */}
-                                <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>已勾选 {(data.providerConfigs?.[data.provider]?.models || []).length} 个模型</span>
-                                    <button style={{ padding: '6px 20px', borderRadius: 'var(--radius-sm, 6px)', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }} onClick={() => setShowModelModal(false)}>完成</button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        {unavailableCount > 0 && (
+                                            <button style={{ padding: '6px 12px', borderRadius: 'var(--radius-sm, 6px)', border: '1px solid var(--warning, #b45309)', background: 'transparent', color: 'var(--warning, #b45309)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }} onClick={removeUnavailableModels}>
+                                                清理未返回模型 ({unavailableCount})
+                                            </button>
+                                        )}
+                                        <button style={{ padding: '6px 20px', borderRadius: 'var(--radius-sm, 6px)', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }} onClick={() => setShowModelModal(false)}>完成</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    )}
+                        );
+                    })()}
 
                     {/* 连接测试 */}
                     <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
@@ -2837,13 +2885,31 @@ function ApiConfigForm({ data, onChange }) {
                         </div>
 
                         {/* ===== 嵌入模型弹窗（与主模型一致，带勾选框） ===== */}
-                        {showEmbedModelModal && Array.isArray(fetchedEmbedModels) && (
+                        {showEmbedModelModal && Array.isArray(fetchedEmbedModels) && (() => {
+                            const savedEmbedModelsForModal = data.embedProviderConfigs?.[data.embedProvider]?.models || [];
+                            const fetchedEmbedModelIds = new Set((fetchedEmbedModels || [])
+                                .map(m => (typeof m === 'string' ? m : m?.id || m?.name || m?.displayName || '').trim())
+                                .filter(Boolean));
+                            const mergedEmbedModels = mergeFetchedAndSavedModels(fetchedEmbedModels, savedEmbedModelsForModal);
+                            const unavailableEmbedCount = mergedEmbedModels.filter(m => m.isUnavailable).length;
+                            const removeUnavailableEmbedModels = () => {
+                                const configs = { ...(data.embedProviderConfigs || {}) };
+                                const currentConfig = configs[data.embedProvider] || {};
+                                configs[data.embedProvider] = {
+                                    ...currentConfig,
+                                    models: (currentConfig.models || []).filter(modelId => fetchedEmbedModelIds.has(modelId)),
+                                };
+                                onChange({ ...data, embedProviderConfigs: configs });
+                            };
+                            return (
                             <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }} onClick={e => { if (e.target === e.currentTarget) setShowEmbedModelModal(false); }}>
                                 <div style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg, 14px)', boxShadow: '0 16px 48px rgba(0,0,0,0.25)', width: 480, maxWidth: '90vw', maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'modelPickerFadeInDown 0.2s ease' }}>
                                     <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <div>
                                             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>可用嵌入模型列表</div>
-                                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{currentEmbedProvider.label} · 共 {fetchedEmbedModels.length} 个模型，勾选加入快切列表</div>
+                                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                                {currentEmbedProvider.label} · 共 {mergedEmbedModels.length} 个模型，勾选加入快切列表{unavailableEmbedCount > 0 ? ` · ${unavailableEmbedCount} 个已保存但未返回` : ''}
+                                            </div>
                                         </div>
                                         <button style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 8px', lineHeight: 1 }} onClick={() => setShowEmbedModelModal(false)}><X size={16} /></button>
                                     </div>
@@ -2860,7 +2926,7 @@ function ApiConfigForm({ data, onChange }) {
                                         />
                                     </div>
                                     <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px 12px' }}>
-                                        {fetchedEmbedModels
+                                        {mergedEmbedModels
                                             .filter(m => !embedModelSearch || m.id.toLowerCase().includes(embedModelSearch.toLowerCase()))
                                             .map(m => {
                                                 const savedModels = data.embedProviderConfigs?.[data.embedProvider]?.models || [];
@@ -2885,19 +2951,28 @@ function ApiConfigForm({ data, onChange }) {
                                                             onChange({ ...data, embedProviderConfigs: configs });
                                                         }}>{isInList ? '✓' : ''}</button>
                                                         {/* 模型名 */}
-                                                        <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { update('embedModel', m.id); }} title={`使用 ${m.id}`}>{m.id}</span>
+                                                        <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: isActive ? 'var(--accent)' : 'var(--text-primary)', fontWeight: isActive ? 600 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => { update('embedModel', m.id); }} title={m.isUnavailable ? `${m.id}（已保存，但未在本次拉取结果中）` : `使用 ${m.id}`}>{m.id}</span>
+                                                        {m.isUnavailable && <span style={{ fontSize: 9, color: 'var(--warning, #b45309)', background: 'color-mix(in srgb, var(--warning, #b45309) 12%, transparent)', padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>未返回</span>}
                                                         {isActive && <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>当前</span>}
                                                     </div>
                                                 );
                                             })}
                                     </div>
-                                    <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                                         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>已勾选 {(data.embedProviderConfigs?.[data.embedProvider]?.models || []).length} 个模型</span>
-                                        <button style={{ padding: '6px 20px', borderRadius: 'var(--radius-sm, 6px)', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }} onClick={() => setShowEmbedModelModal(false)}>完成</button>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            {unavailableEmbedCount > 0 && (
+                                                <button style={{ padding: '6px 12px', borderRadius: 'var(--radius-sm, 6px)', border: '1px solid var(--warning, #b45309)', background: 'transparent', color: 'var(--warning, #b45309)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }} onClick={removeUnavailableEmbedModels}>
+                                                    清理未返回模型 ({unavailableEmbedCount})
+                                                </button>
+                                            )}
+                                            <button style={{ padding: '6px 20px', borderRadius: 'var(--radius-sm, 6px)', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }} onClick={() => setShowEmbedModelModal(false)}>完成</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        )}
+                            );
+                        })()}
 
                         {/* 重建向量 */}
                         <div style={{ marginTop: 8 }}>

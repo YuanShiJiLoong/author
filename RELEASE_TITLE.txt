@@ -1,1 +1,1 @@
-新增 AI 对话发送快捷键与诊断日志入口 | Added AI chat send shortcuts and diagnostic log access
+新增正文备注批注与失效模型清理 | Added inline remarks and stale model cleanup

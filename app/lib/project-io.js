@@ -538,8 +538,8 @@ function textToHtml(lines) {
 /**
  * 将章节 HTML 内容转换为纯文本
  */
-function htmlToText(html) {
-    return (html || '')
+function htmlToText(html, options = {}) {
+    return prepareHtmlForExport(html, options)
         .replace(/<\/p>/gi, '\n\n')
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<[^>]*>/g, '')
@@ -548,6 +548,165 @@ function htmlToText(html) {
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .trim();
+}
+
+function normalizeExportOptions(options = {}) {
+    return {
+        includeRemarks: options?.variant === 'annotated' || options?.includeRemarks === true,
+    };
+}
+
+function exportBaseName(fileName, options = {}) {
+    const base = fileName || '导出作品';
+    return normalizeExportOptions(options).includeRemarks ? `${base}-批注版` : base;
+}
+
+function decodeHtmlEntities(text = '') {
+    if (typeof document !== 'undefined') {
+        const textarea = document.createElement('textarea');
+        textarea.innerHTML = text;
+        return textarea.value;
+    }
+    return String(text)
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+}
+
+function escapeHtml(text = '') {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getHtmlAttribute(attrs, name) {
+    const match = attrs.match(new RegExp(`${name}=["']([^"']*)["']`, 'i'));
+    return match ? decodeHtmlEntities(match[1]) : '';
+}
+
+function prepareHtmlForExport(html, options = {}) {
+    const { includeRemarks } = normalizeExportOptions(options);
+    const source = html || '';
+    if (!source.includes('data-remark-id')) return source;
+
+    if (typeof DOMParser !== 'undefined') {
+        const doc = new DOMParser().parseFromString(`<!doctype html><body>${source}</body>`, 'text/html');
+        doc.body.querySelectorAll('span[data-remark-id]').forEach(node => {
+            const parent = node.parentNode;
+            if (!parent) return;
+
+            const remarkText = (node.getAttribute('data-remark-text') || '').trim();
+            if (includeRemarks && remarkText) {
+                const note = doc.createElement('span');
+                note.setAttribute('data-export-remark', 'true');
+                note.textContent = `〔批注：${remarkText}〕`;
+                parent.insertBefore(note, node.nextSibling);
+            }
+
+            while (node.firstChild) {
+                parent.insertBefore(node.firstChild, node);
+            }
+            parent.removeChild(node);
+        });
+        return doc.body.innerHTML;
+    }
+
+    const remarkRegex = /<span\b([^>]*\bdata-remark-id=["'][^"']+["'][^>]*)>([\s\S]*?)<\/span>/gi;
+    return source.replace(remarkRegex, (_match, attrs, inner) => {
+        const remarkText = getHtmlAttribute(attrs, 'data-remark-text').trim();
+        const note = includeRemarks && remarkText ? `〔批注：${escapeHtml(remarkText)}〕` : '';
+        return `${inner}${note}`;
+    });
+}
+
+function collectTextWithBreaks(node) {
+    if (!node) return '';
+    if (node.nodeType === Node.TEXT_NODE) {
+        return (node.nodeValue || '').replace(/\u00a0/g, ' ');
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    if (node.tagName?.toLowerCase() === 'br') return '\n';
+    return Array.from(node.childNodes || []).map(collectTextWithBreaks).join('');
+}
+
+function pushDocxSegment(segments, segment) {
+    if (!segment?.text) return;
+    const text = segment.text.replace(/\u00a0/g, ' ');
+    if (!text) return;
+
+    const last = segments[segments.length - 1];
+    if (segment.type === 'text' && last?.type === 'text') {
+        last.text += text;
+    } else {
+        segments.push({ ...segment, text });
+    }
+}
+
+function trimDocxSegments(segments) {
+    const next = segments
+        .map(segment => ({ ...segment }))
+        .filter(segment => segment.text !== '');
+    if (next.length === 0) return next;
+
+    next[0].text = next[0].text.replace(/^[\s\u3000]+/, '');
+    next[next.length - 1].text = next[next.length - 1].text.replace(/[\s\u3000]+$/, '');
+    return next.filter(segment => segment.text !== '');
+}
+
+function htmlToDocxParagraphSegments(html) {
+    const source = html || '';
+    if (!source.trim()) return [];
+
+    if (typeof DOMParser === 'undefined' || typeof Node === 'undefined') {
+        return htmlToText(source)
+            .split(/\n\n+/)
+            .map(text => [{ type: 'text', text }]);
+    }
+
+    const doc = new DOMParser().parseFromString(`<!doctype html><body>${source}</body>`, 'text/html');
+    const paragraphs = Array.from(doc.body.querySelectorAll('p'));
+    const blocks = paragraphs.length > 0 ? paragraphs : [doc.body];
+
+    const walk = (node, segments) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+            pushDocxSegment(segments, { type: 'text', text: node.nodeValue || '' });
+            return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+        const tag = node.tagName?.toLowerCase();
+        if (tag === 'br') {
+            pushDocxSegment(segments, { type: 'text', text: '\n' });
+            return;
+        }
+
+        if (tag === 'span' && node.hasAttribute('data-remark-id')) {
+            const anchorText = collectTextWithBreaks(node);
+            const remarkText = (node.getAttribute('data-remark-text') || '').trim();
+            if (anchorText) {
+                pushDocxSegment(segments, {
+                    type: remarkText ? 'remark' : 'text',
+                    text: anchorText,
+                    remarkText,
+                });
+            }
+            return;
+        }
+
+        Array.from(node.childNodes || []).forEach(child => walk(child, segments));
+    };
+
+    return blocks.map(block => {
+        const segments = [];
+        walk(block, segments);
+        return trimDocxSegments(segments);
+    });
 }
 
 // ==================== 导出功能 ====================
@@ -612,11 +771,11 @@ export async function downloadBlob(blob, fileName, mimeType) {
 /**
  * 导出章节为 TXT 文件
  */
-export async function exportWorkAsTxt(chapters, fileName) {
+export async function exportWorkAsTxt(chapters, fileName, options = {}) {
     if (!chapters || chapters.length === 0) return;
     const text = chapters.map(ch => {
         const title = ch.title || '';
-        const content = htmlToText(ch.content);
+        const content = htmlToText(ch.content, options);
         // 每段前添加两个全角空格作为段落缩进
         const indented = content.split(/\n\n+/).map(p => {
             const trimmed = p.trim();
@@ -626,17 +785,17 @@ export async function exportWorkAsTxt(chapters, fileName) {
         return `${title}\n\n${indented}`;
     }).join('\n\n\n');
 
-    await downloadFile(text, `${fileName || '导出作品'}.txt`);
+    await downloadFile(text, `${exportBaseName(fileName, options)}.txt`);
 }
 
 /**
  * 导出章节为 Markdown 文件
  */
-export async function exportWorkAsMarkdown(chapters, fileName) {
+export async function exportWorkAsMarkdown(chapters, fileName, options = {}) {
     if (!chapters || chapters.length === 0) return;
     const md = chapters.map(ch => {
         const title = ch.title || '未命名章节';
-        const content = htmlToText(ch.content);
+        const content = htmlToText(ch.content, options);
         // 每段前添加两个全角空格作为段落缩进
         const indented = content.split(/\n\n+/).map(p => {
             const trimmed = p.trim();
@@ -646,41 +805,80 @@ export async function exportWorkAsMarkdown(chapters, fileName) {
         return `# ${title}\n\n${indented}`;
     }).join('\n\n---\n\n');
 
-    await downloadFile(md, `${fileName || '导出作品'}.md`, 'text/markdown');
+    await downloadFile(md, `${exportBaseName(fileName, options)}.md`, 'text/markdown');
 }
 
 /**
  * 导出章节为 DOCX 文件
  */
-export async function exportWorkAsDocx(chapters, fileName) {
+export async function exportWorkAsDocx(chapters, fileName, options = {}) {
     if (!chapters || chapters.length === 0) return;
+    const { includeRemarks } = normalizeExportOptions(options);
     const docx = await import('docx');
-    const { Document, Paragraph, TextRun, HeadingLevel, Packer, AlignmentType } = docx;
+    const {
+        Document,
+        Paragraph,
+        TextRun,
+        HeadingLevel,
+        Packer,
+        AlignmentType,
+        CommentRangeStart,
+        CommentRangeEnd,
+        CommentReference,
+    } = docx;
+    const comments = [];
+    let commentId = 0;
 
-    // 从 HTML 中提取段落（按 <p> 标签拆分）
-    function htmlToParagraphs(html) {
-        if (!html) return [];
-        // 提取所有 <p>...</p> 的内容
-        const pRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
-        const paragraphs = [];
-        let match;
-        while ((match = pRegex.exec(html)) !== null) {
-            let text = match[1]
-                .replace(/<br\s*\/?>/gi, '\n')
-                .replace(/<[^>]*>/g, '')
-                .replace(/&nbsp;/g, ' ')
-                .replace(/&amp;/g, '&')
-                .replace(/&lt;/g, '<')
-                .replace(/&gt;/g, '>')
-                .trim();
-            paragraphs.push(text);
+    const pushTextRuns = (runs, text) => {
+        const lines = String(text || '').split('\n');
+        lines.forEach((line, li) => {
+            if (li > 0) runs.push(new TextRun({ break: 1 }));
+            if (line) runs.push(new TextRun({ text: line, size: 24, font: '宋体' }));
+        });
+    };
+
+    const createComment = (remarkText) => {
+        const id = commentId++;
+        comments.push({
+            id,
+            author: 'Author',
+            initials: 'AU',
+            date: new Date(),
+            children: [
+                new Paragraph({
+                    children: [
+                        new TextRun({ text: remarkText, size: 22, font: '宋体' }),
+                    ],
+                }),
+            ],
+        });
+        return id;
+    };
+
+    const segmentsToRuns = (segments) => {
+        const runs = [];
+        for (const segment of segments) {
+            if (includeRemarks && segment.type === 'remark' && segment.remarkText) {
+                const id = createComment(segment.remarkText);
+                runs.push(new CommentRangeStart(id));
+                pushTextRuns(runs, segment.text);
+                runs.push(new CommentRangeEnd(id));
+                runs.push(new TextRun({ children: [new CommentReference(id)] }));
+            } else {
+                pushTextRuns(runs, segment.text);
+            }
         }
-        // 如果没有 <p> 标签，fallback 为纯文本
-        if (paragraphs.length === 0) {
-            const fallback = htmlToText(html);
-            return fallback.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
+        return runs;
+    };
+
+    const htmlToDocxParagraphs = (html) => {
+        if (includeRemarks) {
+            return htmlToDocxParagraphSegments(html);
         }
-        return paragraphs;
+        return htmlToText(html, options)
+            .split(/\n\n+/)
+            .map(text => [{ type: 'text', text: text.trim() }])
+            .filter(segments => segments.some(segment => segment.text));
     }
 
     const children = [];
@@ -697,19 +895,13 @@ export async function exportWorkAsDocx(chapters, fileName) {
             spacing: { after: 200 },
         }));
         // 章节内容
-        const paras = htmlToParagraphs(ch.content);
-        for (const para of paras) {
-            if (!para) {
+        const paras = htmlToDocxParagraphs(ch.content);
+        for (const paraSegments of paras) {
+            const runs = segmentsToRuns(paraSegments);
+            if (runs.length === 0) {
                 children.push(new Paragraph({ text: '' }));
                 continue;
             }
-            // 处理段内换行（<br> 转的 \n）
-            const lines = para.split('\n');
-            const runs = [];
-            lines.forEach((line, li) => {
-                if (li > 0) runs.push(new TextRun({ break: 1 }));
-                runs.push(new TextRun({ text: line, size: 24, font: '宋体' }));
-            });
             children.push(new Paragraph({
                 children: runs,
                 spacing: { after: 120, line: 360 },
@@ -719,7 +911,7 @@ export async function exportWorkAsDocx(chapters, fileName) {
         }
     });
 
-    const doc = new Document({
+    const docOptions = {
         styles: {
             default: {
                 document: {
@@ -729,20 +921,26 @@ export async function exportWorkAsDocx(chapters, fileName) {
             },
         },
         sections: [{ children }],
-    });
+    };
+
+    if (includeRemarks && comments.length > 0) {
+        docOptions.comments = { children: comments };
+    }
+
+    const doc = new Document(docOptions);
 
     const buffer = await Packer.toBlob(doc);
-    await downloadBlob(buffer, `${fileName || '导出作品'}.docx`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    await downloadBlob(buffer, `${exportBaseName(fileName, options)}.docx`, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
 }
 
 /**
  * 导出章节为 EPUB 文件
  */
-export async function exportWorkAsEpub(chapters, fileName) {
+export async function exportWorkAsEpub(chapters, fileName, options = {}) {
     if (!chapters || chapters.length === 0) return;
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
-    const bookTitle = fileName || '导出作品';
+    const bookTitle = exportBaseName(fileName, options);
 
     // mimetype（必须是第一个文件，不压缩）
     zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
@@ -763,18 +961,18 @@ export async function exportWorkAsEpub(chapters, fileName) {
         const id = `chapter${idx + 1}`;
         const filename = `${id}.xhtml`;
         const title = ch.title || `章节 ${idx + 1}`;
-        const content = htmlToText(ch.content);
+        const content = htmlToText(ch.content, options);
         const paragraphsHtml = content.split(/\n\n+/)
             .filter(p => p.trim())
-            .map(p => `    <p style="text-indent:2em;line-height:1.8;margin:0.5em 0">${p.trim().replace(/\n/g, '<br/>')}</p>`)
+            .map(p => `    <p style="text-indent:2em;line-height:1.8;margin:0.5em 0">${escapeHtml(p.trim()).replace(/\n/g, '<br/>')}</p>`)
             .join('\n');
 
         const xhtml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>${title}</title></head>
+<head><title>${escapeHtml(title)}</title></head>
 <body>
-  <h1>${title}</h1>
+  <h1>${escapeHtml(title)}</h1>
 ${paragraphsHtml}
 </body>
 </html>`;
@@ -789,7 +987,7 @@ ${paragraphsHtml}
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="uid">urn:uuid:${crypto.randomUUID()}</dc:identifier>
-    <dc:title>${bookTitle}</dc:title>
+    <dc:title>${escapeHtml(bookTitle)}</dc:title>
     <dc:language>zh</dc:language>
     <meta property="dcterms:modified">${new Date().toISOString().replace(/\.\d+Z$/, 'Z')}</meta>
   </metadata>
@@ -805,7 +1003,7 @@ ${spineItems.join('\n')}
 
     // nav.xhtml（目录）
     const navItems = chapters.map((ch, idx) =>
-        `      <li><a href="chapter${idx + 1}.xhtml">${ch.title || `章节 ${idx + 1}`}</a></li>`
+        `      <li><a href="chapter${idx + 1}.xhtml">${escapeHtml(ch.title || `章节 ${idx + 1}`)}</a></li>`
     ).join('\n');
 
     const nav = `<?xml version="1.0" encoding="UTF-8"?>
@@ -831,23 +1029,24 @@ ${navItems}
 /**
  * 导出章节为 PDF — 利用浏览器打印功能
  */
-export function exportWorkAsPdf(chapters, fileName) {
+export function exportWorkAsPdf(chapters, fileName, options = {}) {
     if (!chapters || chapters.length === 0) return;
 
     const content = chapters.map(ch => {
         const title = ch.title || '未命名章节';
-        const text = htmlToText(ch.content);
+        const text = htmlToText(ch.content, options);
         const paragraphs = text.split(/\n\n+/)
             .filter(p => p.trim())
-            .map(p => `<p style="text-indent:2em;line-height:1.8;margin:0.5em 0">${p.trim().replace(/\n/g, '<br>')}</p>`)
+            .map(p => `<p style="text-indent:2em;line-height:1.8;margin:0.5em 0">${escapeHtml(p.trim()).replace(/\n/g, '<br>')}</p>`)
             .join('');
-        return `<h1 style="page-break-before:auto;margin:1em 0 0.5em;font-size:1.4em">${title}</h1>${paragraphs}`;
+        return `<h1 style="page-break-before:auto;margin:1em 0 0.5em;font-size:1.4em">${escapeHtml(title)}</h1>${paragraphs}`;
     }).join('');
 
+    const title = exportBaseName(fileName, options);
     const html = `<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
-<title>${fileName || '导出作品'}</title>
+<title>${escapeHtml(title)}</title>
 <style>
   body { font-family: "SimSun", "Songti SC", serif; font-size: 14px; padding: 20px; }
   h1 { font-family: "SimHei", "Heiti SC", sans-serif; }

@@ -1,65 +1,49 @@
-## v1.2.22 — 提升快照可靠性与崩溃诊断安全性 | Improved snapshot reliability and crash diagnostics safety
+## v1.2.23 — 正文备注批注与失效模型清理 | Inline remarks and stale model cleanup
 
 ### 🇨🇳 中文
 
-#### 🕒 快照可靠性修复
-- **降低自动快照写入内存峰值**：快照仍保留完整章节、设定集和 AI 对话数据，但存储方式改为“轻量索引 + 单份完整快照分开保存”，新增快照时不再反复重写整份历史快照数组
-- **兼容旧版快照数据**：已有 `author-snapshots` 会在读取时迁移到新的分片存储结构，保留历史快照列表与回滚能力
-- **减少快照写入失败导致的恢复落后**：修复大型项目或长时间使用后，自动快照可能因 IndexedDB 单次写入过大而失败的问题
+#### 📝 正文备注 / 批注
+- **新增正文备注格式**：选中一句话或一段文字后，可从工具栏或选区气泡菜单添加备注；正文会显示虚线标记，并在宽屏纸页右侧显示侧注卡片
+- **备注不混入正文**：备注内容以独立标记保存，正文统计、正文导出和普通阅读不会被备注文字污染
+- **支持编辑与删除备注**：再次选中已有备注可修改；在编辑备注时留空即可删除该备注
 
-#### 🧰 崩溃诊断增强
-- **崩溃报告包含最近操作链**：桌面端会在主进程中保留最近的页面生命周期、点击、拖拽、drop、快捷键和错误摘要；即使渲染进程直接崩溃，crash report 也能带上崩溃前线索
-- **避免主日志被普通操作刷屏**：普通操作只进入主进程内存环形缓冲，warn/error 仍会写入主日志，兼顾诊断完整性与日志体积
-- **增强脱敏与截断**：诊断日志继续脱敏 API Key、Bearer Token、Authorization、password/secret/token 等字段，并增加公网 IP 脱敏和超长日志截断
+#### 📤 导出正文 / 批注版
+- **导出更多新增内容版本选择**：可选择“正文”或“批注版”
+- **正文版自动剥离备注**：TXT、Markdown、DOCX、EPUB、PDF 的正文版都不会带出备注内容
+- **DOCX 批注版使用 Word 原生批注**：导出的 DOCX 会写入 `comments.xml` 和批注锚点，Word / WPS / Google Docs 可识别为右侧批注气泡
+- **其他格式保留可读批注**：TXT、Markdown、EPUB、PDF 的批注版会以内联 `〔批注：...〕` 方式保留备注内容
 
-#### 🔒 发布与 Docker 安全
-- **补强 Docker 构建上下文排除规则**：排除日志、压缩包、crash report 和诊断导出文件，防止临时排查材料误进入 Docker 构建上下文
-- **补齐缺失翻译**：补充 AI 输入展开和云同步指南相关多语言文案，减少无意义的缺失翻译日志噪声
+#### 🤖 模型列表管理
+- **已保存但未返回的模型不再“消失”**：从 API 拉取模型列表时，已加入快切或当前使用的模型会继续显示
+- **新增“未返回”标识和清理按钮**：供应商不再返回的模型会标记为“未返回”，可在模型选择弹窗中一键清理
+- **覆盖主模型与 Embedding 模型**：对话模型和独立向量模型选择器都支持该清理逻辑
+- **DeepSeek 旧模型提示保留**：`deepseek-chat` / `deepseek-reasoner` 继续显示 2026-07-24 停用提醒
+
+#### 📚 文档同步
+- **更新帮助页**：补充备注 / 批注、导出正文/批注版、未返回模型清理说明
+- **同步多语言 README**：中、英、俄、阿 README 均补充备注批注、DOCX 原生批注导出和模型清理能力
 
 ---
 
 ### 🇬🇧 English
 
-#### 🕒 Snapshot Reliability Fixes
-- **Reduced peak memory usage for auto snapshots**: Snapshots still preserve full chapter, settings, and AI chat data, but storage now uses a lightweight index plus one complete record per snapshot instead of rewriting the entire snapshot history array
-- **Backward-compatible migration**: Existing `author-snapshots` data is migrated on read to the new split-storage layout while keeping the snapshot list and rollback flow intact
-- **Fewer stale restores after failed snapshots**: Fixes cases where large projects or long sessions could fail an IndexedDB snapshot write because a single write became too large
+#### 📝 Inline Remarks / Comments
+- **Added an inline remark format**: Select a sentence or text range and add a remark from the toolbar or selection bubble menu; the body text shows a dashed marker and wide layouts render side notes outside the page
+- **Remarks do not pollute body text**: Remark content is stored as separate markup, so word counts, body-only exports, and normal reading stay clean
+- **Edit and remove remarks**: Select an existing remark to edit it; leave the prompt empty to remove that remark
 
-#### 🧰 Crash Diagnostics Improvements
-- **Crash reports now include recent interaction breadcrumbs**: The desktop main process keeps recent page lifecycle events, clicks, drag/drop actions, shortcuts, and error summaries so crash reports can still show what happened before a hard renderer crash
-- **Avoided noisy main logs**: Regular interaction breadcrumbs stay in a bounded in-memory buffer, while warnings and errors continue to be written to the main log
-- **Stronger redaction and truncation**: Diagnostic logs continue to redact API keys, Bearer tokens, Authorization values, password/secret/token fields, and now also redact public IP addresses and truncate overly long log entries
+#### 📤 Body-only and Annotated Exports
+- **Export More now supports content variants**: Choose either “Body” or “Annotated”
+- **Body exports strip remarks automatically**: TXT, Markdown, DOCX, EPUB, and PDF body exports do not include remark content
+- **DOCX annotated exports use native Word comments**: Generated DOCX files include `comments.xml` and comment anchors, so Word / WPS / Google Docs can render them as real side comments
+- **Other formats keep readable annotations**: TXT, Markdown, EPUB, and PDF annotated exports preserve remarks inline as `〔批注：...〕`
 
-#### 🔒 Release & Docker Safety
-- **Hardened Docker build context exclusions**: Logs, archives, crash reports, and diagnostic export files are now excluded from Docker build contexts to prevent temporary troubleshooting material from being copied accidentally
-- **Filled missing translations**: Added missing labels for expanded AI input and cloud sync guide text to reduce noisy missing-translation warnings
+#### 🤖 Model List Management
+- **Saved models no longer disappear when providers stop returning them**: Models already in quick switch lists or currently selected remain visible after fetching the provider model list
+- **Added “Not returned” badges and cleanup actions**: Stale provider models are marked and can be removed from the model picker
+- **Covers chat and embedding models**: The cleanup logic applies to both primary AI models and dedicated embedding models
+- **DeepSeek deprecation hints remain visible**: `deepseek-chat` and `deepseek-reasoner` continue to show the 2026-07-24 retirement notice
 
----
-
-## v1.2.22 追加更新 — AI 对话发送快捷键与诊断入口 | Follow-up: AI chat shortcuts and diagnostic access
-
-### 🇨🇳 中文
-
-#### 💬 AI 对话体验
-- **新增发送快捷键设置**：可在「设定集 → 偏好设置」选择 Enter 发送，或 Ctrl/⌘ + Enter 发送
-- **统一小窗与全屏输入行为**：AI 对话小输入框和全屏输入面板共享同一发送/换行规则，减少长 Prompt 编辑时误发送
-- **补齐多语言文案**：新增中文、英文、俄文界面文案，确保设置项和输入提示一致
-
-#### 🧰 诊断日志说明
-- **帮助页新增日志位置入口**：桌面端「帮助 → 关于」新增“打开日志目录”，可直接定位本地日志
-- **校正桌面日志路径说明**：文档统一为 `%APPDATA%\author-app\author-debug.log` 和 `%APPDATA%\author-app\crash-reports\author-crash-*.json`
-- **更新 README 多语言说明**：补充诊断日志查看、导出、崩溃报告位置，以及浏览器 / 源码 / Vercel 部署与桌面端的差异
-
----
-
-### 🇬🇧 English
-
-#### 💬 AI Chat Experience
-- **Added configurable chat send shortcuts**: Choose Enter to send, or Ctrl/⌘ + Enter to send from Settings → Preferences
-- **Unified compact and expanded input behavior**: The compact AI chat input and expanded prompt editor now share the same send/newline rules to reduce accidental sends while writing long prompts
-- **Completed locale text**: Added Chinese, English, and Russian labels for the new setting and input hints
-
-#### 🧰 Diagnostic Log Guidance
-- **Added a desktop log location entry point**: The desktop Help → About panel now includes “Open Log Folder” for quick access to local logs
-- **Corrected desktop log path documentation**: Docs now use `%APPDATA%\author-app\author-debug.log` and `%APPDATA%\author-app\crash-reports\author-crash-*.json`
-- **Updated multilingual README guidance**: Added how to view/export diagnostics, where crash reports live, and how browser/source/Vercel deployments differ from the desktop client
+#### 📚 Documentation
+- **Updated the Help panel**: Added guidance for remarks/comments, body vs annotated exports, and stale model cleanup
+- **Updated multilingual READMEs**: Chinese, English, Russian, and Arabic READMEs now mention remarks, native DOCX comments, and model cleanup

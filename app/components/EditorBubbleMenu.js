@@ -5,8 +5,9 @@ import { createPortal } from 'react-dom';
 import {
     Bold, Italic, Underline as UnderlineIcon, Strikethrough,
     Heading1, Heading2, Heading3,
-    Highlighter, RemoveFormatting, Sparkles
+    Highlighter, RemoveFormatting, Sparkles, MessageSquareText
 } from 'lucide-react';
+import { promptForRemark } from './RemarkMark';
 
 /**
  * 气泡菜单 — 选中文字时在选区上方浮现的格式工具栏
@@ -130,6 +131,9 @@ export default function EditorBubbleMenu({ editor }) {
                 </button>
                 <button className={btnClass(editor.isActive('highlight'))} onClick={execCmd(() => editor.chain().focus().toggleHighlight().run())} title="高亮">
                     <Highlighter size={15} />
+                </button>
+                <button className={btnClass(editor.isActive('remark'))} onClick={execCmd(() => promptForRemark(editor))} title="备注 / 批注">
+                    <MessageSquareText size={15} />
                 </button>
             </div>
 

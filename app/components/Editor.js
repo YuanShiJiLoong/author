@@ -19,10 +19,11 @@ import { MathInline, MathBlock, openMathEditor } from './MathExtension';
 import { PageBreakExtension } from './PageBreakExtension';
 import { SearchHighlightExtension } from './SearchHighlightExtension';
 import GhostMark from './GhostMark';
+import RemarkMark, { promptForRemark } from './RemarkMark';
 import EditorBubbleMenu from './EditorBubbleMenu';
 import { createSlashExtension, SlashCommandMenu } from './SlashCommands';
 import { useEffect, useCallback, useRef, useState, useMemo, useId, forwardRef, useImperativeHandle } from 'react';
-import { ChevronUp, ChevronDown, Undo2, Redo2, Wand2 } from 'lucide-react';
+import { ChevronUp, ChevronDown, Undo2, Redo2, Wand2, MessageSquareText } from 'lucide-react';
 import { ragRecommend } from '../lib/context-engine';
 import { useAppStore } from '../store/useAppStore';
 import ModelPicker from './ModelPicker';
@@ -50,6 +51,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
     const lastCompletedSaveKeyRef = useRef(null);
     const isLoadingContentRef = useRef(false);
     const contentRef = useRef(null);
+    const workspaceRef = useRef(null);
 
     // 页数状态
     const [pageCount, setPageCount] = useState(1);
@@ -180,6 +182,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
             MathBlock,
             PageBreakExtension,
             GhostMark,
+            RemarkMark,
             slashExtension,
             SearchHighlightExtension,
         ],
@@ -401,7 +404,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
                     }
                 }}
             >
-                <div className="document-workspace" style={{ minHeight: totalWorkspaceHeight }}>
+                <div ref={workspaceRef} className="document-workspace" style={{ minHeight: totalWorkspaceHeight }}>
 
                     {/* SVG clip definition — 每页一个矩形，文字只在页面内可见 */}
                     <svg width="0" height="0" style={{ position: 'absolute' }}>
@@ -478,6 +481,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
                             )}
                         </div>
                     </div>
+                    <RemarkLayer editor={editor} workspaceRef={workspaceRef} contentRef={contentRef} />
                 </div>
             </div>
             <FindBar editor={editor} visible={findBarVisible} onClose={() => setFindBarVisible(false)} />
@@ -488,6 +492,127 @@ const Editor = forwardRef(function Editor({ content, chapterId, onUpdate, editab
 });
 
 export default Editor;
+
+// ==================== 备注侧边层 ====================
+function RemarkLayer({ editor, workspaceRef, contentRef }) {
+    const [items, setItems] = useState([]);
+
+    const refresh = useCallback(() => {
+        const workspace = workspaceRef.current;
+        const root = contentRef.current;
+        if (!workspace || !root) {
+            setItems([]);
+            return;
+        }
+
+        const workspaceRect = workspace.getBoundingClientRect();
+        const pageWidth = workspace.clientWidth;
+        const noteLeft = pageWidth + 22;
+        const remarksById = new Map();
+
+        root.querySelectorAll('.remark-mark[data-remark-id]').forEach(el => {
+            const id = el.getAttribute('data-remark-id');
+            const text = (el.getAttribute('data-remark-text') || '').trim();
+            if (!id || !text) return;
+
+            const rects = Array.from(el.getClientRects()).filter(rect => rect.width > 0 && rect.height > 0);
+            if (rects.length === 0) return;
+
+            const rect = rects[rects.length - 1];
+            const candidate = {
+                id,
+                text,
+                anchorX: rect.right - workspaceRect.left,
+                anchorY: rect.top - workspaceRect.top + rect.height / 2,
+            };
+            const current = remarksById.get(id);
+            if (!current || candidate.anchorY > current.anchorY || (candidate.anchorY === current.anchorY && candidate.anchorX > current.anchorX)) {
+                remarksById.set(id, candidate);
+            }
+        });
+
+        let previousBottom = -Infinity;
+        const nextItems = Array.from(remarksById.values())
+            .sort((a, b) => a.anchorY - b.anchorY)
+            .map((item, index) => {
+                const estimatedHeight = Math.min(120, 42 + Math.ceil(item.text.length / 18) * 18);
+                const noteTop = Math.max(8, item.anchorY - 18, previousBottom + 8);
+                previousBottom = noteTop + estimatedHeight;
+                const lineLeft = Math.min(item.anchorX + 6, pageWidth + 8);
+                const lineWidth = Math.max(16, noteLeft - lineLeft - 6);
+                return {
+                    ...item,
+                    index: index + 1,
+                    noteTop,
+                    noteLeft,
+                    lineLeft,
+                    lineTop: item.anchorY,
+                    lineWidth,
+                };
+            });
+
+        setItems(nextItems);
+    }, [contentRef, workspaceRef]);
+
+    useEffect(() => {
+        if (!editor) return;
+
+        let frame = null;
+        const schedule = () => {
+            if (frame) cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => {
+                frame = null;
+                refresh();
+            });
+        };
+
+        schedule();
+        editor.on('update', schedule);
+        editor.on('transaction', schedule);
+        window.addEventListener('resize', schedule);
+
+        const observer = new ResizeObserver(schedule);
+        if (workspaceRef.current) observer.observe(workspaceRef.current);
+        if (contentRef.current) observer.observe(contentRef.current);
+
+        return () => {
+            if (frame) cancelAnimationFrame(frame);
+            editor.off('update', schedule);
+            editor.off('transaction', schedule);
+            window.removeEventListener('resize', schedule);
+            observer.disconnect();
+        };
+    }, [contentRef, editor, refresh, workspaceRef]);
+
+    if (items.length === 0) return null;
+
+    return (
+        <div className="remark-layer" aria-hidden="true">
+            {items.map(item => (
+                <div key={item.id} className="remark-layer-item">
+                    <div
+                        className="remark-line"
+                        style={{
+                            left: item.lineLeft,
+                            top: item.lineTop,
+                            width: item.lineWidth,
+                        }}
+                    />
+                    <div
+                        className="remark-note"
+                        style={{
+                            left: item.noteLeft,
+                            top: item.noteTop,
+                        }}
+                    >
+                        <span className="remark-note-index">{item.index}</span>
+                        <span className="remark-note-text">{item.text}</span>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
 
 // ==================== 搜索栏 ====================
 function FindBar({ editor, visible, onClose }) {
@@ -1845,6 +1970,9 @@ function EditorToolbar({ editor, margins, setMargins }) {
                 <button className={`toolbar-btn ${editor.isActive('strike') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleStrike().run()} title="删除线" style={{ textDecoration: 'line-through' }}>S</button>
                 <button className={`toolbar-btn ${editor.isActive('superscript') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleSuperscript().run()} title="上标" style={{ fontSize: 11 }}>X²</button>
                 <button className={`toolbar-btn ${editor.isActive('subscript') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleSubscript().run()} title="下标" style={{ fontSize: 11 }}>X₂</button>
+                <button className={`toolbar-btn ${editor.isActive('remark') ? 'active' : ''}`} onClick={() => promptForRemark(editor)} title="备注 / 批注">
+                    <MessageSquareText size={16} />
+                </button>
             </div>
 
             <div className="toolbar-divider" />

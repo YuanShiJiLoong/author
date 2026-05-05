@@ -1213,10 +1213,10 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                 <ExportModal
                     chapters={chapters}
                     onClose={() => setShowExportModal(false)}
-                    onExport={(selectedChapters, format) => {
+                    onExport={(selectedChapters, format, exportOptions) => {
                         const fns = { txt: exportWorkAsTxt, md: exportWorkAsMarkdown, docx: exportWorkAsDocx, epub: exportWorkAsEpub, pdf: exportWorkAsPdf };
                         const fn = fns[format];
-                        if (fn) fn(selectedChapters);
+                        if (fn) fn(selectedChapters, undefined, exportOptions);
                         setShowExportModal(false);
                         showToast(t('sidebar.exportedAll'), 'success');
                     }}
@@ -1551,9 +1551,38 @@ function ChapterConflictModal({ conflicts, onClose, onConfirm, t }) {
     );
 }
 
+function prepareRemarkHtmlForPreview(html, options = {}) {
+    const source = html || '';
+    if (!source.includes('data-remark-id')) return source;
+    const includeRemarks = options?.includeRemarks === true || options?.variant === 'annotated';
+
+    if (typeof DOMParser !== 'undefined') {
+        const doc = new DOMParser().parseFromString(`<!doctype html><body>${source}</body>`, 'text/html');
+        doc.body.querySelectorAll('span[data-remark-id]').forEach(node => {
+            const parent = node.parentNode;
+            if (!parent) return;
+            const remarkText = (node.getAttribute('data-remark-text') || '').trim();
+            if (includeRemarks && remarkText) {
+                const note = doc.createElement('span');
+                note.textContent = `〔批注：${remarkText}〕`;
+                parent.insertBefore(note, node.nextSibling);
+            }
+            while (node.firstChild) parent.insertBefore(node.firstChild, node);
+            parent.removeChild(node);
+        });
+        return doc.body.innerHTML;
+    }
+
+    return source.replace(/<span\b([^>]*\bdata-remark-id=["'][^"']+["'][^>]*)>([\s\S]*?)<\/span>/gi, (_match, attrs, inner) => {
+        const remarkText = (attrs.match(/data-remark-text=["']([^"']*)["']/i)?.[1] || '').trim();
+        const note = includeRemarks && remarkText ? `〔批注：${remarkText}〕` : '';
+        return `${inner}${note}`;
+    });
+}
+
 // HTML → 纯文本
-function htmlToPlainText(html) {
-    return (html || '')
+function htmlToPlainText(html, options = {}) {
+    return prepareRemarkHtmlForPreview(html, options)
         .replace(/<\/p>/gi, '\n\n')
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<[^>]*>/g, '')
@@ -1568,6 +1597,7 @@ function htmlToPlainText(html) {
 function ExportModal({ chapters, onClose, onExport, t }) {
     const [selected, setSelected] = useState(new Set());
     const [format, setFormat] = useState('txt');
+    const [variant, setVariant] = useState('body');
     const [previewChapter, setPreviewChapter] = useState(null); // 当前预览的章节对象
     const [previewMode, setPreviewMode] = useState(null); // null | 'single' | 'all'
 
@@ -1615,6 +1645,10 @@ function ExportModal({ chapters, onClose, onExport, t }) {
         { value: 'epub', label: 'EPUB' },
         { value: 'pdf', label: 'PDF' },
     ];
+    const variants = [
+        { value: 'body', label: '正文', hint: '不带批注、备注' },
+        { value: 'annotated', label: '批注版', hint: '正文中展开备注' },
+    ];
 
     // 导航到上/下一章预览
     const navigatePreview = (delta) => {
@@ -1643,7 +1677,7 @@ function ExportModal({ chapters, onClose, onExport, t }) {
     // 根据格式渲染单个章节内容块 — 与导出管线保持一致
     const renderChapterBlock = (ch, idx, total) => {
         const title = ch.title || t('sidebar.untitled') || '未命名';
-        const plainText = htmlToPlainText(ch.content);
+        const plainText = htmlToPlainText(ch.content, { includeRemarks: variant === 'annotated' });
         const empty = !ch.content && !plainText;
         const emptyNode = (
             <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, fontStyle: 'italic', padding: '20px 0', textIndent: 0 }}>
@@ -1949,41 +1983,67 @@ function ExportModal({ chapters, onClose, onExport, t }) {
                         padding: '14px 20px',
                         borderTop: '1px solid var(--border-light)',
                         background: 'var(--bg-secondary)',
-                        display: 'flex', alignItems: 'center', gap: 10,
+                        display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10,
                     }}>
-                        <div style={{ display: 'flex', gap: 4, flex: 1, flexWrap: 'wrap' }}>
-                            {formats.map(f => (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', flexShrink: 0 }}>内容</span>
+                            {variants.map(v => (
                                 <button
-                                    key={f.value}
-                                    onClick={() => setFormat(f.value)}
+                                    key={v.value}
+                                    onClick={() => setVariant(v.value)}
+                                    title={v.hint}
                                     style={{
-                                        padding: '5px 12px', fontSize: 12, fontWeight: 500,
-                                        borderRadius: 20, border: '1px solid',
-                                        borderColor: format === f.value ? 'var(--accent)' : 'var(--border-light)',
-                                        background: format === f.value ? 'var(--accent)' : 'transparent',
-                                        color: format === f.value ? '#fff' : 'var(--text-secondary)',
+                                        padding: '5px 12px', fontSize: 12, fontWeight: 600,
+                                        borderRadius: 8, border: '1px solid',
+                                        borderColor: variant === v.value ? 'var(--accent)' : 'var(--border-light)',
+                                        background: variant === v.value ? 'var(--accent-light)' : 'transparent',
+                                        color: variant === v.value ? 'var(--accent)' : 'var(--text-secondary)',
                                         cursor: 'pointer', transition: 'all 0.2s',
                                         whiteSpace: 'nowrap',
                                     }}
                                 >
-                                    {f.label}
+                                    {v.label}
                                 </button>
                             ))}
                         </div>
-                        <button
-                            className="btn btn-primary"
-                            disabled={selected.size === 0}
-                            onClick={() => {
-                                const selectedChapters = chapters.filter(ch => selected.has(ch.id));
-                                onExport(selectedChapters, format);
-                            }}
-                            style={{
-                                flexShrink: 0, padding: '8px 20px', fontSize: 13, fontWeight: 600,
-                                borderRadius: 10, opacity: selected.size === 0 ? 0.5 : 1,
-                            }}
-                        >
-                            {t('sidebar.exportBtn') || '导出'} ({selected.size})
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ display: 'flex', gap: 4, flex: 1, flexWrap: 'wrap' }}>
+                                {formats.map(f => (
+                                    <button
+                                        key={f.value}
+                                        onClick={() => setFormat(f.value)}
+                                        style={{
+                                            padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                                            borderRadius: 20, border: '1px solid',
+                                            borderColor: format === f.value ? 'var(--accent)' : 'var(--border-light)',
+                                            background: format === f.value ? 'var(--accent)' : 'transparent',
+                                            color: format === f.value ? '#fff' : 'var(--text-secondary)',
+                                            cursor: 'pointer', transition: 'all 0.2s',
+                                            whiteSpace: 'nowrap',
+                                        }}
+                                    >
+                                        {f.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                className="btn btn-primary"
+                                disabled={selected.size === 0}
+                                onClick={() => {
+                                    const selectedChapters = chapters.filter(ch => selected.has(ch.id));
+                                    onExport(selectedChapters, format, {
+                                        variant,
+                                        includeRemarks: variant === 'annotated',
+                                    });
+                                }}
+                                style={{
+                                    flexShrink: 0, padding: '8px 20px', fontSize: 13, fontWeight: 600,
+                                    borderRadius: 10, opacity: selected.size === 0 ? 0.5 : 1,
+                                }}
+                            >
+                                {variant === 'annotated' ? '导出批注版' : (t('sidebar.exportBtn') || '导出')} ({selected.size})
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -2026,6 +2086,8 @@ function ExportModal({ chapters, onClose, onExport, t }) {
                                             {(previewChapter.wordCount || 0).toLocaleString()}{t('sidebar.wordUnit') || '字'}
                                             {' · '}
                                             {t('sidebar.previewLabel') || '预览'}
+                                            {' · '}
+                                            {variant === 'annotated' ? '批注版' : '正文'}
                                         </div>
                                     </div>
                                     <button
@@ -2051,6 +2113,8 @@ function ExportModal({ chapters, onClose, onExport, t }) {
                                         {chapters.length} {t('sidebar.exportGroupSuffix') || '章'}
                                         {' · '}
                                         {totalWords.toLocaleString()}{t('sidebar.wordUnit') || '字'}
+                                        {' · '}
+                                        {variant === 'annotated' ? '批注版' : '正文'}
                                     </div>
                                 </div>
                             )}

@@ -33,13 +33,14 @@ I watched the versatility of these models being gutted. I don't want us to live 
 ### 📝 Professional Editor
 - Rich text editor powered by **Tiptap** — bold, italic, headings, lists, code blocks, and more
 - **Word-style pagination** with WYSIWYG layout
+- **Inline remarks / comments** — mark any sentence with a side note; DOCX annotated exports use native Word comments
 - **KaTeX** math formula support
 - Customizable fonts, font size, line height, and colors
 - Real-time word / character / paragraph count
 
 ### 🤖 AI Writing Assistant
 - **Multi-provider support**: ZhipuAI GLM-4 / DeepSeek / OpenAI / Google Gemini / Claude / SiliconFlow / Volcengine / Moonshot + custom endpoints
-- **Smart model fetching** — one-click fetch full model list from API, auto-compatible with various proxy formats (`/models`, `/v1/models`), with timeout protection
+- **Smart model fetching** — one-click fetch full model list from API, keep saved models manageable even if a provider stops returning them
 - **Continue / Rewrite / Polish / Expand** — one-click generation
 - **Immersive Writing Engine (Ghost Text)** streaming preview — see AI output in real-time like Cursor, with accept/reject
 - **Free chat mode** — discuss plot, characters, and settings with AI
@@ -56,7 +57,7 @@ I watched the versatility of these models being gutted. I don't want us to live 
 - **Local-first** — all data stored in browser IndexedDB, never uploaded to servers
 - **Snapshot system** — manual/auto versioning with one-click rollback
 - **Project import/export** — full project JSON backup
-- **Multi-format export** — one-click export current chapter or batch export (TXT / Markdown / DOCX / EPUB / PDF)
+- **Multi-format export** — one-click export current chapter or batch export (TXT / Markdown / DOCX / EPUB / PDF), with body-only or annotated versions
 
 ### 🌐 Internationalization
 - 🇨🇳 简体中文 / 🇺🇸 English / 🇷🇺 Русский
