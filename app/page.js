@@ -52,6 +52,8 @@ const RegisterModal = dynamic(() => import('./components/RegisterModal'), { ssr:
 const SyncGuideModal = dynamic(() => import('./components/SyncGuideModal'), { ssr: false });
 
 const ACTIVE_CHAPTER_KEY_PREFIX = 'author-active-chapter-';
+const CONTEXT_STRATEGY_VERSION_KEY = 'author-context-strategy-version';
+const CONTEXT_STRATEGY_VERSION = 'multi-chapter-v1';
 
 function getWorkScopedId(workId) {
   return workId || getActiveWorkId() || 'work-default';
@@ -103,6 +105,7 @@ export default function Home() {
 
   const { t } = useI18n();
   const [showHelp, setShowHelp] = useState(false);
+  const [memoryGroupsVersion, setMemoryGroupsVersion] = useState(0);
   const editorRef = useRef(null);
   const sessionStoreHydratedRef = useRef(false);
   const latestSessionStoreRef = useRef(sessionStore);
@@ -220,9 +223,16 @@ export default function Home() {
 
   // 监听工具栏高度，设置 CSS 变量供侧边栏定位使用
   useEffect(() => {
+    const updateHeaderHeight = () => {
+      const header = document.querySelector('.top-header-bar');
+      if (!header) return;
+      document.documentElement.style.setProperty('--top-header-h', `${Math.ceil(header.getBoundingClientRect().height)}px`);
+    };
+
     const updateToolbarHeight = () => {
       const toolbar = document.querySelector('.editor-toolbar');
       const main = document.querySelector('.main-content');
+      updateHeaderHeight();
       if (toolbar && main) {
         const h = toolbar.offsetHeight + 'px';
         main.style.setProperty('--toolbar-h', h);
@@ -232,10 +242,13 @@ export default function Home() {
     const observer = new ResizeObserver(updateToolbarHeight);
     const tryObserve = () => {
       const toolbar = document.querySelector('.editor-toolbar');
+      const header = document.querySelector('.top-header-bar');
+      if (header) observer.observe(header);
       if (toolbar) {
         observer.observe(toolbar);
         updateToolbarHeight();
       } else {
+        updateHeaderHeight();
         requestAnimationFrame(tryObserve);
       }
     };
@@ -408,9 +421,29 @@ export default function Home() {
 
   // 章节指纹 —— 当章节改名或拖动排序时会变化，触发上下文列表重建
   const chaptersFingerprint = useMemo(
-    () => (Array.isArray(chapters) ? chapters.map(ch => `${ch.id}:${ch.title}`).join('|') : ''),
+    () => (Array.isArray(chapters) ? chapters.map(ch => {
+      const synopsis = ch.synopsis || ch.chapterSynopsis || ch.summary || '';
+      const synopsisStamp = typeof synopsis === 'string'
+        ? synopsis.length
+        : `${synopsis.summary?.length || 0}:${synopsis.updatedAt || ''}:${synopsis.locked ? 1 : 0}`;
+      return `${ch.id}:${ch.title}:${synopsisStamp}`;
+    }).join('|') : ''),
     [chapters]
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleMemoryGroupsChanged = (event) => {
+      const changedWorkId = event?.detail?.workId;
+      if (!changedWorkId || changedWorkId === getWorkScopedId(activeWorkId)) {
+        setMemoryGroupsVersion(version => version + 1);
+      }
+    };
+    window.addEventListener('author-chapter-memory-groups-changed', handleMemoryGroupsChanged);
+    return () => {
+      window.removeEventListener('author-chapter-memory-groups-changed', handleMemoryGroupsChanged);
+    };
+  }, [activeWorkId]);
 
   // 初始化上下文条目和勾选状态（设定集 + 章节 + 对话历史）
   useEffect(() => {
@@ -446,16 +479,28 @@ export default function Home() {
       // 切换作品时参考条目必须跟随当前作品；同作品刷新时只保留仍存在的勾选项。
       setContextSelection(prev => {
         const retained = new Set([...prev].filter(id => validIds.has(id)));
-        if (workChanged || retained.size === 0) {
-          return new Set(allItems.filter(it => it.enabled).map(it => it.id));
+        const defaultEnabledIds = new Set(allItems.filter(it => it.enabled || it.alwaysInclude).map(it => it.id));
+        const strategyVersion = typeof window !== 'undefined'
+          ? localStorage.getItem(CONTEXT_STRATEGY_VERSION_KEY)
+          : CONTEXT_STRATEGY_VERSION;
+        const shouldResetForStrategy = strategyVersion !== CONTEXT_STRATEGY_VERSION;
+        if (shouldResetForStrategy && typeof window !== 'undefined') {
+          localStorage.setItem(CONTEXT_STRATEGY_VERSION_KEY, CONTEXT_STRATEGY_VERSION);
         }
+        if (workChanged || retained.size === 0) {
+          return defaultEnabledIds;
+        }
+        if (shouldResetForStrategy) {
+          return defaultEnabledIds;
+        }
+        allItems.filter(it => it.alwaysInclude).forEach(it => retained.add(it.id));
         return retained;
       });
     };
 
     loadContext();
     return () => { cancelled = true; };
-  }, [activeWorkId, activeChapterId, settingsVersion, chatHistory.length, chaptersFingerprint]);
+  }, [activeWorkId, activeChapterId, settingsVersion, chatHistory.length, chaptersFingerprint, memoryGroupsVersion]);
 
   // 定时自动存档 (每 15 分钟)
   useEffect(() => {
@@ -588,6 +633,7 @@ export default function Home() {
           completionTokens: usageData.completionTokens || 0,
           totalTokens: usageData.totalTokens || 0,
           cachedTokens: usageData.cachedTokens || 0,
+          cacheMissTokens: usageData.cacheMissTokens || 0,
           durationMs,
           source: 'inline',
           provider: apiConfig?.provider || 'unknown',

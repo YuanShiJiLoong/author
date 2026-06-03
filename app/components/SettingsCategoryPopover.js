@@ -35,6 +35,7 @@ const CAT_COLORS = {
 const CAT_LABELS = {
     bookInfo: '作品信息', character: '人物设定', location: '空间/地点',
     world: '世界观', object: '物品/道具', plot: '大纲', rules: '写作规则',
+    custom: '自定义设定',
 };
 
 // ==================== 样式定义（全部内联，避免 Tailwind 重置） ====================
@@ -144,8 +145,7 @@ export function getPinnedCategories() {
         if (!raw) return DEFAULT_PINNED;
         const parsed = JSON.parse(raw);
         if (!Array.isArray(parsed)) return DEFAULT_PINNED;
-        // 只过滤掉旧的裸 'custom'（已迁移为 custom-xxx），保留 custom-xxx 条目
-        const filtered = parsed.filter(c => c !== 'custom');
+        const filtered = parsed.filter(c => typeof c === 'string' && c.trim());
         if (filtered.length !== parsed.length) {
             savePinnedCategories(filtered);
         }
@@ -156,12 +156,13 @@ export function getPinnedCategories() {
 export function savePinnedCategories(list) {
     if (typeof window === 'undefined') return;
     localStorage.setItem(PINNED_KEY, JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('author-pinned-categories-changed', { detail: list }));
 }
 
 /**
  * 设定分类缩略图弹出面板（3×3 宫格，高级卡片风格）
  */
-export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCategory, onAddCategory }) {
+export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCategory, onAddCategory, onPinnedChange }) {
     const { t } = useI18n();
     const { setOpenCategoryModal, incrementSettingsVersion } = useAppStore();
     const popoverRef = useRef(null);
@@ -178,6 +179,11 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
     const [allNodes, setAllNodes] = useState([]);
     const [renamingCategoryId, setRenamingCategoryId] = useState(null);
     const [renamingCategoryName, setRenamingCategoryName] = useState('');
+
+    const persistPinnedList = useCallback((next) => {
+        savePinnedCategories(next);
+        onPinnedChange?.(next);
+    }, [onPinnedChange]);
 
     // 共享刷新逻辑：从 nodes 重建分类列表（含虚拟内置分类）
     const refreshCategoriesFromNodes = (nodes, workId) => {
@@ -281,19 +287,19 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
             setPinnedList(prev => {
                 if (prev.includes(category)) {
                     const next = prev.filter(c => c !== category);
-                    savePinnedCategories(next);
+                    persistPinnedList(next);
                     return next;
                 }
                 if (prev.length >= 10) return prev; // 最多 10 个
                 const next = [...prev, category];
-                savePinnedCategories(next);
+                persistPinnedList(next);
                 return next;
             });
             return;
         }
         onOpenCategory?.(category);
         onClose?.();
-    }, [editMode, onOpenCategory, onClose]);
+    }, [editMode, onOpenCategory, onClose, persistPinnedList]);
 
     const startRenameCategory = (e, cat) => {
         e.stopPropagation();
@@ -361,10 +367,10 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
         // 从 pinned 列表中移除
         setPinnedList(prev => {
             const next = prev.filter(c => c !== cat.category);
-            savePinnedCategories(next);
+            persistPinnedList(next);
             return next;
         });
-    }, []);
+    }, [persistPinnedList]);
 
     if (!mounted) return null;
 
@@ -620,7 +626,9 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                                 setNewCatName('');
                                                 // 刷新列表
                                                 const refreshed = await getSettingsNodes(workId);
+                                                setAllNodes(refreshed);
                                                 refreshCategoriesFromNodes(refreshed, workId);
+                                                incrementSettingsVersion();
                                             }
                                             if (e.key === 'Escape') { setShowNewInput(false); setNewCatName(''); }
                                         }}
@@ -652,7 +660,9 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
                                                 setShowNewInput(false);
                                                 setNewCatName('');
                                                 const refreshed = await getSettingsNodes(workId);
+                                                setAllNodes(refreshed);
                                                 refreshCategoriesFromNodes(refreshed, workId);
+                                                incrementSettingsVersion();
                                             }}
                                         >确定</button>
                                         <button

@@ -6,16 +6,18 @@ import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 import { createChapter, deleteChapter, updateChapter, saveChapters, getChapters, createVolume, insertChapterAfter, insertChapterInVolume, reorderItems } from '../lib/storage';
 import { exportProject, importProject, importWork, exportWorkAsTxt, exportWorkAsMarkdown, exportWorkAsDocx, exportWorkAsEpub, exportWorkAsPdf } from '../lib/project-io';
-import { WRITING_MODES, getAllWorks, getSettingsNodes, addWork, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting, getActiveWorkId } from '../lib/settings';
+import { WRITING_MODES, getAllWorks, getProjectSettings, getSettingsNodes, addWork, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting, getActiveWorkId } from '../lib/settings';
 import { detectConflicts, mergeChapters } from '../lib/chapter-number';
 import { estimateTokens } from '../lib/context-engine';
-import { Settings, Moon, Sun, History, Save, FolderOpen, FileDown, BookOpen, HelpCircle, Github, PanelLeftClose, ListOrdered, Library, Plus, FileText, FileType, BookMarked, FileOutput, Printer, Book, X, MoreHorizontal, ChevronUp, KeyRound, SlidersHorizontal, Eye, Smartphone, Clapperboard, Cloud, CloudOff, RefreshCw, CloudUpload, CloudDownload } from 'lucide-react';
+import { Settings, Moon, Sun, History, Save, FolderOpen, FileDown, BookOpen, HelpCircle, Github, PanelLeftClose, ListOrdered, Library, Plus, FileText, FileType, BookMarked, FileOutput, Printer, Book, X, MoreHorizontal, ChevronUp, KeyRound, SlidersHorizontal, Eye, Smartphone, Clapperboard, Cloud, CloudOff, RefreshCw, CloudUpload, CloudDownload, Sparkles, Brain, Search, CheckCircle2, GitMerge, Layers3 } from 'lucide-react';
 import Tooltip from './ui/Tooltip';
 import IconButton from './ui/IconButton';
 import SettingsCategoryPanel, { getCategoryIcon, getCategoryColor, getCategoryLabel, getIconByName } from './SettingsCategoryPanel';
 import SettingsCategoryPopover, { getPinnedCategories, savePinnedCategories } from './SettingsCategoryPopover';
 import SyncConfirmModal from './SyncConfirmModal';
 import ExitSyncModal from './ExitSyncModal';
+import { buildChapterSynopsisText, getChapterSynopsis, hasChapterSynopsis, normalizeChapterSynopsis, parseGeneratedSynopsis, stripChapterHtml } from '../lib/chapter-synopsis';
+import { buildChapterMemoryGroupText, buildChapterSourceText, getChapterMemoryGroups, hasChapterMemoryGroup, normalizeChapterMemoryGroup, saveChapterMemoryGroups } from '../lib/chapter-memory-groups';
 
 /** 更多操作下拉菜单（Portal 渲染到 body，彻底避免 overflow 裁剪） */
 function MoreMenuPortal({ anchorRef, t, setShowSettings, setShowMoreMenu, onOpenHelp, setShowGitPopup }) {
@@ -173,6 +175,1460 @@ function SyncMenuPortal({ anchorRef, t, cloudinarySyncStatus, setShowSyncMenu, s
     );
 }
 
+function resolveAiEndpoint(apiConfig) {
+    const provider = apiConfig?.providerType || apiConfig?.provider;
+    if (['gemini-native', 'custom-gemini'].includes(provider)) return '/api/ai/gemini';
+    if (provider === 'openai-responses') return '/api/ai/responses';
+    if (['claude', 'custom-claude'].includes(provider) || apiConfig?.apiFormat === 'anthropic') return '/api/ai/claude';
+    return '/api/ai';
+}
+
+async function readAiTextStream(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+        const data = await response.json();
+        throw new Error(data.error || '请求失败');
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) return '';
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullText = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+
+        for (const event of events) {
+            const trimmed = event.trim();
+            if (!trimmed || trimmed === 'data: [DONE]') continue;
+            if (!trimmed.startsWith('data: ')) continue;
+            try {
+                const json = JSON.parse(trimmed.slice(6));
+                if (json.text) fullText += json.text;
+            } catch {
+                // Ignore malformed stream fragments.
+            }
+        }
+    }
+
+    return fullText.trim();
+}
+
+function buildSynopsisPrompts(chapter) {
+    const chapterText = stripChapterHtml(chapter?.content || '');
+
+    const systemPrompt = [
+        '你是小说章节概要整理助手。你的任务不是压缩字数，而是把单章正文整理成高保真、可复用的后续写作上下文。',
+        '',
+        '要求：',
+        '1. 只依据正文，完整保留本章发生的事实、事件链、决定、冲突、信息增量和结尾状态。',
+        '2. 使用与正文一致的语言；角色名、地名、术语保持原文，不翻译也不改写。',
+        '3. 不限制输出 tokens；不要为了简短牺牲内容精细度、详细程度、事件完整性或剧情颗粒度。',
+        '4. 按章节顺序、时间顺序和因果关系记录；每个重要节点尽量写清触发、行动、冲突、结果、信息增量。',
+        '5. 最高优先级是准确、完整、细致；次要优先级才是简洁。未明确发生的内容不要写成事实。',
+        '6. 不要把内容整理成设定库、人物卡或时间线档案；只做这一章的概要与续写衔接。',
+        '7. 只输出 JSON，不要输出 Markdown、解释、代码块或元评论。',
+        '',
+        'JSON 字段必须包含：',
+        '- summary：高保真概述本章完整进展、主要冲突、信息增量和结尾状态，不限制字数。',
+        '- beats：本章关键情节节点数组，按发生顺序排列，颗粒度要细。',
+        '- endingState：本章最后停在什么画面、决定、冲突、信息或情绪状态上。',
+        '- continuityNotes：下一章续写必须记住的上下文数组，只写本章造成的衔接点，不扩写成设定档案。',
+        '- openThreads：明确出现但尚未回收的伏笔、疑问、承诺、风险或待解决冲突数组。',
+        '- spoilerLevel：固定填写 "chapter"。',
+        '数组字段使用完整短句；没有内容时返回空数组。'
+    ].join('\n');
+
+    const userPrompt = [
+        `章节标题：${chapter?.title || '未命名章节'}`,
+        '',
+        '请根据以下完整正文生成最高细节标准的章节概要 JSON，输出需能作为后续写作上下文继续使用：',
+        '',
+        '<chapter>',
+        chapterText,
+        '</chapter>',
+        '',
+        '输出 JSON 结构：',
+        '{"summary":"","beats":[],"endingState":"","continuityNotes":[],"openThreads":[],"spoilerLevel":"chapter"}'
+    ].join('\n');
+
+    return { systemPrompt, userPrompt };
+}
+
+function buildMemoryGroupPrompts({ name, chapters }) {
+    const systemPrompt = [
+        '你是小说多章节记忆压缩助手。你的任务不是粗略概括，而是把多章内容整理成可长期复用的高保真剧情记忆。',
+        '',
+        '要求：',
+        '1. 严格依据提供内容，完整保留跨章节连续性：事件链、因果、人物关系、状态变化、地点/物品/线索变化、伏笔与待回收问题。',
+        '2. 不限制输出 tokens；不要为了简短牺牲内容精细度、详细程度、事件完整性或剧情颗粒度。',
+        '3. 按章节顺序、时间顺序和因果关系组织；写清每个重要节点的触发、行动、冲突、结果和信息增量。',
+        '4. 使用与原文一致的语言；角色名、地名、术语保持原文。',
+        '5. 只输出 JSON，不要输出 Markdown、解释、代码块或元评论。',
+        '',
+        'JSON 字段必须包含：summary、beats、events、entityDeltas、foreshadowing、timelineRefs、spoilerLevel。spoilerLevel 固定填写 "multi-chapter"。'
+    ].join('\n');
+
+    const content = chapters.map(({ chapter, ordinal }) => buildChapterSourceText(chapter, ordinal)).join('\n\n---\n\n');
+    const userPrompt = [
+        `记忆组名称：${name || '未命名记忆组'}`,
+        '',
+        '请根据以下章节内容生成最高细节标准的多章节概要 JSON：',
+        '',
+        '<chapters>',
+        content,
+        '</chapters>',
+        '',
+        '输出 JSON 结构：',
+        '{"summary":"","beats":[],"events":[],"entityDeltas":[],"foreshadowing":[],"timelineRefs":[],"spoilerLevel":"multi-chapter"}'
+    ].join('\n');
+
+    return { systemPrompt, userPrompt };
+}
+
+function buildMemoryMergePrompts({ name, groups, chapters }) {
+    const systemPrompt = [
+        '你是小说长期记忆压缩助手。你的任务是把多个章节记忆组继续合并为更高层、更稳定的剧情记忆。',
+        '',
+        '要求：',
+        '1. 保留所有影响后续创作的关键事实、事件链、人物状态、关系变化、设定变化、伏笔、未解决冲突。',
+        '2. 可以压缩重复表述，但不能丢失剧情颗粒度、因果关系和连续性。',
+        '3. 将相同人物/地点/物品/线索的变化合并成清晰状态，不要互相覆盖。',
+        '4. 不限制输出 tokens；最高优先级是准确、完整、细致。',
+        '5. 只输出 JSON，不要输出 Markdown、解释、代码块或元评论。',
+        '',
+        'JSON 字段必须包含：summary、beats、events、entityDeltas、foreshadowing、timelineRefs、spoilerLevel。spoilerLevel 固定填写 "merged-group"。'
+    ].join('\n');
+
+    const content = groups.map(group => buildChapterMemoryGroupText(group, chapters)).join('\n\n---\n\n');
+    const userPrompt = [
+        `合并后记忆组名称：${name || '合并记忆组'}`,
+        '',
+        '请将以下多个记忆组进一步合并/压缩为一个可长期复用的多章节概要 JSON：',
+        '',
+        '<memory_groups>',
+        content,
+        '</memory_groups>',
+        '',
+        '输出 JSON 结构：',
+        '{"summary":"","beats":[],"events":[],"entityDeltas":[],"foreshadowing":[],"timelineRefs":[],"spoilerLevel":"merged-group"}'
+    ].join('\n');
+
+    return { systemPrompt, userPrompt };
+}
+
+function formatMemoryTokens(value) {
+    const tokens = Number(value) || 0;
+    if (tokens >= 10000) return `${(tokens / 10000).toFixed(1)}万 tokens`;
+    return `${tokens.toLocaleString()} tokens`;
+}
+
+function MemoryWorkspaceHeader({
+    activeMode,
+    title = '章节记忆',
+    subtitle,
+    icon,
+    showTabs = true,
+    onSwitchToSynopsis,
+    onSwitchToMemory,
+    onClose,
+    onSave,
+    saving,
+    saveDisabled,
+    saveLabel = '保存',
+}) {
+    const headerIcon = icon || <Brain size={22} />;
+    return (
+        <div className="memory-workspace-header">
+            <div className="memory-workspace-title">
+                <span className="memory-workspace-icon">{headerIcon}</span>
+                <div>
+                    <h2>{title}</h2>
+                    <p>{subtitle || '用于续写承接与长期剧情压缩'}</p>
+                </div>
+            </div>
+            <div className="memory-workspace-header-actions">
+                {showTabs && (
+                    <div className="memory-workspace-tabs" aria-label="章节记忆模式">
+                        <button
+                            type="button"
+                            className={`memory-workspace-tab${activeMode === 'synopsis' ? ' active' : ''}`}
+                            onClick={onSwitchToSynopsis}
+                            disabled={activeMode === 'synopsis' || !onSwitchToSynopsis}
+                        >
+                            单章概要
+                        </button>
+                        <button
+                            type="button"
+                            className={`memory-workspace-tab${activeMode === 'memory' ? ' active' : ''}`}
+                            onClick={onSwitchToMemory}
+                            disabled={activeMode === 'memory' || !onSwitchToMemory}
+                        >
+                            多章记忆
+                        </button>
+                    </div>
+                )}
+                <button className="memory-workspace-close" onClick={onClose} aria-label="关闭">
+                    <X size={16} />
+                </button>
+                {onSave && (
+                    <button className="btn btn-primary btn-sm memory-header-save" onClick={onSave} disabled={saving || saveDisabled}>
+                        {saving ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
+                        {saving ? '保存中...' : saveLabel}
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function StructuredMemorySections({ data, mode = 'memory' }) {
+    const sections = mode === 'synopsis'
+        ? [
+            { title: '关键情节', items: data?.beats?.length ? data.beats : (data?.events || []) },
+            { title: '续写注意', items: data?.continuityNotes?.length ? data.continuityNotes : (data?.entityDeltas || []) },
+            { title: '待回收信息', items: data?.openThreads?.length ? data.openThreads : (data?.foreshadowing || []) },
+        ]
+        : [
+            { title: '关键事件', items: data?.events || data?.beats || [] },
+            { title: '人物变化', items: data?.entityDeltas || data?.continuityNotes || [] },
+            { title: '伏笔与未回收问题', items: data?.foreshadowing || data?.openThreads || [] },
+        ];
+
+    return (
+        <div className="memory-structured-grid">
+            {sections.map(section => (
+                <section key={section.title} className="memory-structured-section">
+                    <div className="memory-structured-title">
+                        <span />
+                        {section.title}
+                    </div>
+                    {section.items.length > 0 ? (
+                        <ul>
+                            {section.items.slice(0, 4).map((item, index) => (
+                                <li key={`${section.title}-${index}`}>{item}</li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p>暂无结构化条目</p>
+                    )}
+                </section>
+            ))}
+        </div>
+    );
+}
+
+function ChapterSynopsisModal({
+    chapter,
+    synopsisDraft,
+    synopsisLocked,
+    synopsisData,
+    synopsisGenerating,
+    synopsisSaving,
+    synopsisError,
+    onDraftChange,
+    onSynopsisPatch,
+    onLockedChange,
+    onGenerate,
+    onClear,
+    onSave,
+    onClose,
+}) {
+    const structuredText = buildChapterSynopsisText(synopsisData);
+    const structuredCount = (
+        (synopsisData.beats?.length || 0) +
+        (synopsisData.events?.length || 0) +
+        (synopsisData.continuityNotes?.length || 0) +
+        (synopsisData.openThreads?.length || 0) +
+        (synopsisData.entityDeltas?.length || 0) +
+        (synopsisData.foreshadowing?.length || 0) +
+        (synopsisData.timelineRefs?.length || 0)
+    );
+    const plainText = stripChapterHtml(chapter?.content || '');
+    const chapterTokens = estimateTokens(plainText);
+    const synopsisTokens = estimateTokens(structuredText || synopsisDraft);
+    const hasAdvancedDetails = structuredCount > 0 || !!synopsisData.endingState;
+
+    return createPortal(
+        <div className="modal-overlay" onMouseDown={e => { e.currentTarget._mouseDownTarget = e.target; }} onClick={e => { if (e.currentTarget._mouseDownTarget === e.currentTarget) onClose(); }}>
+            <div className="modal chapter-memory-workspace chapter-synopsis-workspace" onClick={e => e.stopPropagation()}>
+                <MemoryWorkspaceHeader
+                    activeMode="synopsis"
+                    title="章节概要"
+                    subtitle="把当前章节整理成稳定、可复用的前文摘要"
+                    icon={<FileText size={22} />}
+                    showTabs={false}
+                    onClose={onClose}
+                    onSave={onSave}
+                    saving={synopsisSaving}
+                    saveDisabled={synopsisGenerating}
+                />
+
+                <div className="synopsis-workspace-grid">
+                    <aside className="synopsis-meta-panel">
+                        <div className="synopsis-chapter-badge">
+                            <FileText size={17} />
+                            <span>当前章节</span>
+                        </div>
+                        <h3 title={chapter?.title || ''}>{chapter?.title || '未命名章节'}</h3>
+                        <div className="synopsis-meta-list">
+                            <div>
+                                <span>正文估算</span>
+                                <strong>{formatMemoryTokens(chapterTokens)}</strong>
+                            </div>
+                            <div>
+                                <span>概要估算</span>
+                                <strong>{formatMemoryTokens(synopsisTokens)}</strong>
+                            </div>
+                            <div>
+                                <span>概要状态</span>
+                                <strong>{hasChapterSynopsis(synopsisData) || synopsisDraft.trim() ? '已填写' : '未填写'}</strong>
+                            </div>
+                            {hasAdvancedDetails && (
+                                <div>
+                                    <span>细节提取</span>
+                                    <strong>{structuredCount + (synopsisData.endingState ? 1 : 0)} 项</strong>
+                                </div>
+                            )}
+                        </div>
+                        <label className="synopsis-lock-row">
+                            <input
+                                type="checkbox"
+                                checked={synopsisLocked}
+                                onChange={e => onLockedChange(e.target.checked)}
+                            />
+                            <span>
+                                <strong>锁定概要</strong>
+                                <em>避免被 AI 生成覆盖</em>
+                            </span>
+                        </label>
+                    </aside>
+
+                    <section className="memory-editor-panel">
+                        <div className="memory-panel-head">
+                            <div>
+                                <div className="memory-panel-title">概要正文</div>
+                                <div className="memory-panel-subtitle">记录本章进展、冲突、信息增量和收束位置</div>
+                            </div>
+                            <span className="memory-token-pill">{formatMemoryTokens(synopsisTokens)}</span>
+                        </div>
+                        <textarea
+                            className="memory-main-textarea synopsis-main-textarea"
+                            value={synopsisDraft}
+                            onChange={e => onDraftChange(e.target.value)}
+                            placeholder="写下这一章发生了什么、冲突如何推进、信息有什么变化，以及最后停在什么状态。"
+                        />
+
+                        <label className="synopsis-ending-field">
+                            <span>结尾状态</span>
+                            <input
+                                value={synopsisData.endingState || ''}
+                                onChange={e => onSynopsisPatch({ endingState: e.target.value })}
+                                placeholder="例如：本章停在主角做出决定、冲突升级或新线索暴露的位置。"
+                            />
+                        </label>
+
+                        {hasAdvancedDetails && (
+                            <details className="chapter-synopsis-details synopsis-advanced-details">
+                                <summary>概要细节 · {structuredCount + (synopsisData.endingState ? 1 : 0)} 项</summary>
+                                <StructuredMemorySections data={synopsisData} mode="synopsis" />
+                                {structuredText && (
+                                    <details className="chapter-synopsis-details memory-raw-details">
+                                        <summary>查看注入文本</summary>
+                                        <pre>{structuredText}</pre>
+                                    </details>
+                                )}
+                            </details>
+                        )}
+
+                        {synopsisError && <div className="chapter-synopsis-error">{synopsisError}</div>}
+                    </section>
+                </div>
+
+                <div className="memory-workspace-footer">
+                    <div className="memory-footer-status">
+                        <CheckCircle2 size={15} />
+                        <span>{synopsisDraft.trim() ? '概要会作为前文摘要参与续写上下文' : '生成或填写后可用于后续章节承接'}</span>
+                    </div>
+                    <div className="memory-footer-actions">
+                        <button className="btn btn-ghost btn-sm" onClick={onClear} disabled={synopsisGenerating || synopsisSaving}>清空</button>
+                        <button className="btn btn-secondary btn-sm" onClick={onGenerate} disabled={synopsisGenerating || synopsisSaving || synopsisLocked}>
+                        {synopsisGenerating ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}
+                        {synopsisGenerating ? '生成中...' : 'AI 生成概要'}
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={onSave} disabled={synopsisGenerating || synopsisSaving}>
+                            {synopsisSaving ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
+                            保存概要
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+}
+
+function ChapterMemoryGroupsModal({
+    chapters,
+    groups,
+    generating,
+    saving,
+    error,
+    draft,
+    selectedChapterIds,
+    selectedGroupIds,
+    onDraftChange,
+    onChapterToggle,
+    onGroupSelectToggle,
+    onGenerate,
+    onMerge,
+    onSave,
+    onEdit,
+    onDelete,
+    onNew,
+    onSwitchToSynopsis,
+    onClose,
+}) {
+    const [chapterQuery, setChapterQuery] = useState('');
+    const realChapters = chapters
+        .map((chapter, index) => ({ chapter, index }))
+        .filter(({ chapter }) => (chapter.type || 'chapter') !== 'volume')
+        .map((entry, ordinalIndex) => ({ ...entry, ordinal: ordinalIndex + 1 }));
+    const selectedGroupCount = selectedGroupIds.size;
+    const query = chapterQuery.trim().toLowerCase();
+    const filteredChapters = query
+        ? realChapters.filter(({ chapter, ordinal }) => `${ordinal} ${chapter.title || ''}`.toLowerCase().includes(query))
+        : realChapters;
+    const draftTokens = estimateTokens(buildChapterMemoryGroupText(draft, chapters) || draft.summary || '');
+    const selectedChapterCount = selectedChapterIds.size;
+
+    return createPortal(
+        <div className="modal-overlay" onMouseDown={e => { e.currentTarget._mouseDownTarget = e.target; }} onClick={e => { if (e.currentTarget._mouseDownTarget === e.currentTarget) onClose(); }}>
+            <div className="modal chapter-memory-workspace" onClick={e => e.stopPropagation()}>
+                <MemoryWorkspaceHeader
+                    activeMode="memory"
+                    subtitle="用于续写承接与长期剧情压缩"
+                    onSwitchToSynopsis={onSwitchToSynopsis}
+                    onClose={onClose}
+                    onSave={onSave}
+                    saving={saving}
+                    saveDisabled={generating}
+                    saveLabel="保存"
+                />
+
+                <div className="chapter-memory-studio-grid">
+                    <aside className="memory-left-rail">
+                        <div className="memory-rail-title">
+                            <Layers3 size={15} />
+                            <span>选择章节</span>
+                        </div>
+                        <label className="memory-search-box">
+                            <Search size={15} />
+                            <input
+                                value={chapterQuery}
+                                onChange={e => setChapterQuery(e.target.value)}
+                                placeholder="搜索章节"
+                            />
+                        </label>
+                        <div className="memory-chapter-progress">
+                            <span>已选择 {selectedChapterCount} / {realChapters.length} 章</span>
+                            {selectedChapterCount > 0 && <strong>{formatMemoryTokens(draftTokens)}</strong>}
+                        </div>
+
+                        <div className="memory-chapter-list">
+                            {filteredChapters.length === 0 ? (
+                                <div className="memory-empty-state">没有匹配的章节。</div>
+                            ) : filteredChapters.map(({ chapter, ordinal }) => {
+                                const selected = selectedChapterIds.has(chapter.id);
+                                return (
+                                    <label key={chapter.id} className={`memory-chapter-row${selected ? ' selected' : ''}`}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selected}
+                                            onChange={() => onChapterToggle(chapter.id)}
+                                        />
+                                        <span className="memory-row-index">{String(ordinal).padStart(2, '0')}</span>
+                                        <span className="memory-row-main">
+                                            <strong title={chapter.title}>{chapter.title || '未命名章节'}</strong>
+                                            <em>{hasChapterSynopsis(chapter) ? '可用概要压缩' : '使用正文首尾线索'}</em>
+                                        </span>
+                                        {hasChapterSynopsis(chapter) && <span className="memory-status-chip">已有概要</span>}
+                                    </label>
+                                );
+                            })}
+                        </div>
+                    </aside>
+
+                    <section className="memory-editor-panel memory-center-rail">
+                        <div className="memory-panel-head">
+                            <div>
+                                <div className="memory-panel-title">记忆正文</div>
+                                <div className="memory-panel-subtitle">高保真记录事件、人物变化、伏笔与未回收问题</div>
+                            </div>
+                            <span className="memory-token-pill">{formatMemoryTokens(draftTokens)}</span>
+                        </div>
+                        <input
+                            className="memory-group-name-input"
+                            value={draft.name}
+                            onChange={e => onDraftChange({ name: e.target.value })}
+                            placeholder="记忆组名，例如：学院篇前半 / 反派伏笔线"
+                        />
+                        <textarea
+                            className="memory-main-textarea memory-group-textarea"
+                            value={draft.summary}
+                            onChange={e => onDraftChange({ summary: e.target.value, source: draft.source === 'ai' ? 'ai' : 'manual' })}
+                            placeholder="可手写，也可选择章节后点击 AI 生成。"
+                        />
+
+                        <StructuredMemorySections data={draft} />
+
+                        {error && <div className="chapter-synopsis-error">{error}</div>}
+                    </section>
+
+                    <aside className="memory-right-rail">
+                        <div className="memory-rail-title">
+                            <BookMarked size={15} />
+                            <span>已保存的记忆组</span>
+                            <em>{groups.length}</em>
+                        </div>
+
+                        <div className="memory-saved-list">
+                            {groups.length === 0 ? (
+                                <div className="memory-empty-state">还没有自定义多章节概要组。</div>
+                            ) : groups.map(group => {
+                                const selected = selectedGroupIds.has(group.id);
+                                return (
+                                    <div key={group.id} className={`memory-group-row${selected ? ' selected' : ''}`}>
+                                        <label className="memory-group-select">
+                                            <input
+                                                type="checkbox"
+                                                checked={selected}
+                                                onChange={() => onGroupSelectToggle(group.id)}
+                                            />
+                                            <span className="memory-group-folder"><BookMarked size={15} /></span>
+                                            <span className="memory-group-row-main">
+                                                <strong>{group.name || '未命名记忆组'}</strong>
+                                                <em>{group.chapterIds.length} 章 · {formatMemoryTokens(estimateTokens(buildChapterMemoryGroupText(group, chapters)))}</em>
+                                            </span>
+                                        </label>
+                                        <p>{group.summary || '暂无概要正文'}</p>
+                                        <div className="memory-group-row-actions">
+                                            <button className="btn btn-ghost btn-sm" onClick={() => onEdit(group)} disabled={generating || saving}>编辑</button>
+                                            <button className="btn btn-ghost btn-sm danger" onClick={() => onDelete(group.id)} disabled={generating || saving}>删除</button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <button className="memory-merge-button" onClick={onMerge} disabled={generating || saving || selectedGroupCount < 2}>
+                            {generating ? <RefreshCw size={15} className="spin" /> : <GitMerge size={15} />}
+                            合并所选 {selectedGroupCount > 0 ? `(${selectedGroupCount})` : ''}
+                        </button>
+                    </aside>
+                </div>
+
+                <div className="memory-workspace-footer">
+                    <div className="memory-footer-status">
+                        <CheckCircle2 size={15} />
+                        <span>{selectedChapterCount > 0 ? `已覆盖 ${selectedChapterCount} 章 · 可作为前文概要注入 AI` : '选择章节后生成或保存多章记忆'}</span>
+                    </div>
+                    <div className="memory-footer-actions">
+                        <button className="btn btn-ghost btn-sm" onClick={onNew} disabled={generating || saving}>新建草稿</button>
+                        <button className="btn btn-secondary btn-sm" onClick={onGenerate} disabled={generating || saving || selectedChapterIds.size === 0}>
+                            {generating ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}
+                            {generating ? '生成中...' : 'AI 生成'}
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={onSave} disabled={generating || saving}>
+                            {saving ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
+                            保存组
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+}
+
+function formatSynopsisTime(value) {
+    if (!value) return '未保存';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '未保存';
+    return date.toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function getSynopsisSourceLabel(synopsis) {
+    if (synopsis?.source === 'ai') return 'AI生成';
+    if (synopsis?.source === 'manual') return '手写';
+    return '未标记';
+}
+
+function ChapterSynopsisOverviewModal({
+    chapters,
+    activeChapterId,
+    activeWorkId,
+    initialView = 'saved',
+    initialChapterId,
+    memoryGroups,
+    onToggleLock,
+    onChapterUpdated,
+    onMemoryGroupsSaved,
+    onCopyAll,
+    onApplyContext,
+    showToast,
+    onClose,
+}) {
+    const [query, setQuery] = useState('');
+    const [filter, setFilter] = useState('all');
+    const [activeView, setActiveView] = useState(initialView);
+    const [multiSelectedIds, setMultiSelectedIds] = useState(() => new Set());
+    const [groupSelectedIds, setGroupSelectedIds] = useState(() => new Set());
+    const [selectedGroupId, setSelectedGroupId] = useState(memoryGroups[0]?.id || '');
+    const [singleDraft, setSingleDraft] = useState('');
+    const [singleEnding, setSingleEnding] = useState('');
+    const [singleLocked, setSingleLocked] = useState(false);
+    const [singleData, setSingleData] = useState(() => normalizeChapterSynopsis());
+    const [singleBusy, setSingleBusy] = useState(false);
+    const [singleError, setSingleError] = useState('');
+    const [multiName, setMultiName] = useState('');
+    const [multiDraft, setMultiDraft] = useState('');
+    const [multiData, setMultiData] = useState(() => normalizeChapterMemoryGroup({ name: '' }));
+    const [multiBusy, setMultiBusy] = useState(false);
+    const [multiError, setMultiError] = useState('');
+    const [groupDraft, setGroupDraft] = useState(() => normalizeChapterMemoryGroup({ name: '' }));
+    const [groupBusy, setGroupBusy] = useState(false);
+    const [groupError, setGroupError] = useState('');
+    const realChapters = [];
+    let ordinal = 0;
+    let currentVolume = '未分卷';
+    chapters.forEach((chapter) => {
+        if (chapter.type === 'volume') {
+            currentVolume = chapter.title || '未命名分卷';
+            return;
+        }
+        const synopsis = getChapterSynopsis(chapter);
+        const hasSynopsis = hasChapterSynopsis(synopsis);
+        realChapters.push({
+            chapter,
+            synopsis,
+            hasSynopsis,
+            ordinal: ++ordinal,
+            volumeTitle: currentVolume,
+            textTokens: estimateTokens(stripChapterHtml(chapter.content || '')),
+            synopsisText: buildChapterSynopsisText(synopsis),
+        });
+    });
+
+    const savedCount = realChapters.filter(entry => entry.hasSynopsis).length;
+    const missingCount = Math.max(0, realChapters.length - savedCount);
+    const lockedCount = realChapters.filter(entry => entry.synopsis.locked).length;
+    const aiCount = realChapters.filter(entry => entry.hasSynopsis && entry.synopsis.source === 'ai').length;
+    const manualCount = realChapters.filter(entry => entry.hasSynopsis && entry.synopsis.source !== 'ai').length;
+    const coverage = realChapters.length ? Math.round((savedCount / realChapters.length) * 100) : 0;
+
+    const normalizedQuery = query.trim().toLowerCase();
+    const filteredEntries = realChapters.filter(entry => {
+        if (filter === 'missing' && entry.hasSynopsis) return false;
+        if (filter === 'locked' && !entry.synopsis.locked) return false;
+        if (filter === 'ai' && (!entry.hasSynopsis || entry.synopsis.source !== 'ai')) return false;
+        if (filter === 'manual' && (!entry.hasSynopsis || entry.synopsis.source === 'ai')) return false;
+        if (!normalizedQuery) return true;
+        const haystack = [
+            entry.ordinal,
+            entry.chapter.title,
+            entry.volumeTitle,
+            entry.synopsis.summary,
+            entry.synopsis.endingState,
+            entry.synopsisText,
+        ].join(' ').toLowerCase();
+        return haystack.includes(normalizedQuery);
+    });
+
+    const defaultSelectedId =
+        initialChapterId ||
+        activeChapterId ||
+        realChapters.find(entry => entry.hasSynopsis)?.chapter.id ||
+        realChapters[0]?.chapter.id ||
+        '';
+    const [selectedId, setSelectedId] = useState(defaultSelectedId);
+    const selectedEntry =
+        realChapters.find(entry => entry.chapter.id === selectedId) ||
+        filteredEntries[0] ||
+        realChapters[0] ||
+        null;
+    const selectedGroup =
+        memoryGroups.find(group => group.id === selectedGroupId) ||
+        memoryGroups[0] ||
+        null;
+    const selectedMultiEntries = realChapters.filter(entry => multiSelectedIds.has(entry.chapter.id));
+
+    useEffect(() => {
+        if (!selectedEntry) return;
+        const synopsis = getChapterSynopsis(selectedEntry.chapter);
+        setSingleDraft(synopsis.summary || '');
+        setSingleEnding(synopsis.endingState || '');
+        setSingleLocked(!!synopsis.locked);
+        setSingleData(synopsis);
+        setSingleError('');
+    }, [selectedEntry?.chapter.id, selectedEntry?.synopsis.updatedAt, selectedEntry?.synopsis.generatedAt]);
+
+    useEffect(() => {
+        if (!selectedGroup) {
+            setGroupDraft(normalizeChapterMemoryGroup({ name: '' }));
+            return;
+        }
+        setGroupDraft(normalizeChapterMemoryGroup(selectedGroup));
+    }, [selectedGroup?.id, selectedGroup?.updatedAt]);
+
+    const toggleMultiChapter = (chapterId) => {
+        setMultiSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(chapterId)) next.delete(chapterId);
+            else next.add(chapterId);
+            return next;
+        });
+    };
+
+    const toggleGroupSelection = (groupId) => {
+        setGroupSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(groupId)) next.delete(groupId);
+            else next.add(groupId);
+            return next;
+        });
+    };
+
+    const handleClearSingle = () => {
+        setSingleDraft('');
+        setSingleEnding('');
+        setSingleData(normalizeChapterSynopsis({ locked: singleLocked }));
+        setSingleError('');
+    };
+
+    const handleSaveSingle = async () => {
+        if (!selectedEntry) return;
+        setSingleBusy(true);
+        setSingleError('');
+        try {
+            const payload = normalizeChapterSynopsis({
+                ...singleData,
+                summary: singleDraft.trim(),
+                endingState: singleEnding.trim(),
+                locked: singleLocked,
+                source: singleData.source || 'manual',
+                updatedAt: new Date().toISOString(),
+            });
+            const updated = await updateChapter(selectedEntry.chapter.id, { synopsis: payload }, activeWorkId);
+            if (updated) onChapterUpdated?.(selectedEntry.chapter.id, { synopsis: payload });
+            setSingleData(payload);
+            showToast?.('章节概要已保存', 'success');
+        } catch (err) {
+            setSingleError(err?.message || '保存失败');
+        } finally {
+            setSingleBusy(false);
+        }
+    };
+
+    const handleGenerateSingle = async () => {
+        if (!selectedEntry) return;
+        if (singleLocked) {
+            showToast?.('当前概要已锁定，取消锁定后再生成', 'info');
+            return;
+        }
+        const plainText = stripChapterHtml(selectedEntry.chapter.content || '');
+        if (plainText.length < 20) {
+            setSingleError('正文太短，暂时无法生成有效概要');
+            return;
+        }
+        setSingleBusy(true);
+        setSingleError('');
+        try {
+            const { apiConfig } = getProjectSettings();
+            const { systemPrompt, userPrompt } = buildSynopsisPrompts(selectedEntry.chapter);
+            const response = await fetch(resolveAiEndpoint(apiConfig), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemPrompt,
+                    userPrompt,
+                    apiConfig,
+                    ...(apiConfig?.useAdvancedParams && apiConfig?.enableMaxOutputTokens ? {
+                        maxTokens: apiConfig.maxOutputTokens || 65536,
+                    } : {}),
+                    temperature: 0.2,
+                    topP: 0.9,
+                }),
+            });
+            const aiText = await readAiTextStream(response);
+            const generated = parseGeneratedSynopsis(aiText);
+            if (!hasChapterSynopsis(generated)) throw new Error('AI 没有返回可用概要');
+            const now = new Date().toISOString();
+            const nextSynopsis = normalizeChapterSynopsis({
+                ...generated,
+                locked: false,
+                source: 'ai',
+                generatedAt: now,
+                updatedAt: now,
+            });
+            setSingleData(nextSynopsis);
+            setSingleDraft(nextSynopsis.summary || aiText);
+            setSingleEnding(nextSynopsis.endingState || '');
+            setSingleLocked(false);
+            showToast?.('概要已生成，请确认后保存', 'success');
+        } catch (err) {
+            setSingleError(err?.message || '生成失败，请检查 API 配置');
+        } finally {
+            setSingleBusy(false);
+        }
+    };
+
+    const handleGenerateMulti = async () => {
+        if (selectedMultiEntries.length === 0) {
+            setMultiError('请先选择至少一个章节');
+            return;
+        }
+        setMultiBusy(true);
+        setMultiError('');
+        try {
+            const { apiConfig } = getProjectSettings();
+            const name = multiName.trim() || `${selectedMultiEntries[0].chapter.title} 等 ${selectedMultiEntries.length} 章`;
+            const { systemPrompt, userPrompt } = buildMemoryGroupPrompts({
+                name,
+                chapters: selectedMultiEntries.map(entry => ({
+                    chapter: entry.chapter,
+                    ordinal: entry.ordinal,
+                })),
+            });
+            const response = await fetch(resolveAiEndpoint(apiConfig), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemPrompt,
+                    userPrompt,
+                    apiConfig,
+                    ...(apiConfig?.useAdvancedParams && apiConfig?.enableMaxOutputTokens ? {
+                        maxTokens: apiConfig.maxOutputTokens || 65536,
+                    } : {}),
+                    temperature: 0.2,
+                    topP: 0.9,
+                }),
+            });
+            const aiText = await readAiTextStream(response);
+            const generated = parseGeneratedSynopsis(aiText);
+            if (!hasChapterSynopsis(generated)) throw new Error('AI 没有返回可用多章节概要');
+            const now = new Date().toISOString();
+            const nextGroup = normalizeChapterMemoryGroup({
+                ...generated,
+                name,
+                chapterIds: selectedMultiEntries.map(entry => entry.chapter.id),
+                sourceType: 'custom',
+                source: 'ai',
+                generatedAt: now,
+                updatedAt: now,
+            });
+            setMultiName(name);
+            setMultiData(nextGroup);
+            setMultiDraft(nextGroup.summary || aiText);
+            showToast?.('多章节概要已生成，请确认后保存为分组', 'success');
+        } catch (err) {
+            setMultiError(err?.message || '生成失败，请检查 API 配置');
+        } finally {
+            setMultiBusy(false);
+        }
+    };
+
+    const handleSaveMulti = async () => {
+        if (selectedMultiEntries.length === 0) {
+            setMultiError('请先选择至少一个章节');
+            return;
+        }
+        if (!multiDraft.trim()) {
+            setMultiError('请填写概要正文，或先用 AI 生成');
+            return;
+        }
+        setMultiBusy(true);
+        setMultiError('');
+        try {
+            const payload = normalizeChapterMemoryGroup({
+                ...multiData,
+                name: multiName.trim() || `${selectedMultiEntries[0].chapter.title} 等 ${selectedMultiEntries.length} 章`,
+                summary: multiDraft.trim(),
+                chapterIds: selectedMultiEntries.map(entry => entry.chapter.id),
+                source: multiData.source || 'manual',
+                updatedAt: new Date().toISOString(),
+            });
+            if (!hasChapterMemoryGroup(payload)) {
+                setMultiError('请填写概要正文，或先用 AI 生成');
+                return;
+            }
+            const nextGroups = memoryGroups.some(group => group.id === payload.id)
+                ? memoryGroups.map(group => group.id === payload.id ? payload : group)
+                : [...memoryGroups, payload];
+            await onMemoryGroupsSaved?.(nextGroups);
+            setSelectedGroupId(payload.id);
+            setGroupSelectedIds(new Set([payload.id]));
+            setActiveView('groups');
+            showToast?.('多章概要组已保存', 'success');
+        } catch (err) {
+            setMultiError(err?.message || '保存失败');
+        } finally {
+            setMultiBusy(false);
+        }
+    };
+
+    const handleSaveGroupDraft = async () => {
+        if (!groupDraft?.id) return;
+        const payload = normalizeChapterMemoryGroup({
+            ...groupDraft,
+            updatedAt: new Date().toISOString(),
+        });
+        if (!payload.name.trim()) {
+            setGroupError('请填写组名');
+            return;
+        }
+        if (!hasChapterMemoryGroup(payload)) {
+            setGroupError('请填写概要正文');
+            return;
+        }
+        setGroupBusy(true);
+        setGroupError('');
+        try {
+            const nextGroups = memoryGroups.map(group => group.id === payload.id ? payload : group);
+            await onMemoryGroupsSaved?.(nextGroups);
+            showToast?.('概要分组已保存', 'success');
+        } catch (err) {
+            setGroupError(err?.message || '保存失败');
+        } finally {
+            setGroupBusy(false);
+        }
+    };
+
+    const handleDeleteGroupDraft = async () => {
+        if (!groupDraft?.id) return;
+        setGroupBusy(true);
+        setGroupError('');
+        try {
+            const nextGroups = memoryGroups.filter(group => group.id !== groupDraft.id);
+            await onMemoryGroupsSaved?.(nextGroups);
+            setGroupSelectedIds(prev => {
+                const next = new Set(prev);
+                next.delete(groupDraft.id);
+                return next;
+            });
+            setSelectedGroupId(nextGroups[0]?.id || '');
+            showToast?.('概要分组已删除', 'success');
+        } catch (err) {
+            setGroupError(err?.message || '删除失败');
+        } finally {
+            setGroupBusy(false);
+        }
+    };
+
+    const handleMergeGroups = async () => {
+        const selectedGroups = memoryGroups.filter(group => groupSelectedIds.has(group.id));
+        if (selectedGroups.length < 2) {
+            setGroupError('请至少选择两个概要组');
+            return;
+        }
+        setGroupBusy(true);
+        setGroupError('');
+        try {
+            const { apiConfig } = getProjectSettings();
+            const unionChapterIds = Array.from(new Set(selectedGroups.flatMap(group => group.chapterIds)));
+            const name = `合并概要：${selectedGroups.map(group => group.name || '未命名概要组').slice(0, 2).join(' + ')}${selectedGroups.length > 2 ? ' 等' : ''}`;
+            const { systemPrompt, userPrompt } = buildMemoryMergePrompts({
+                name,
+                groups: selectedGroups,
+                chapters,
+            });
+            const response = await fetch(resolveAiEndpoint(apiConfig), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemPrompt,
+                    userPrompt,
+                    apiConfig,
+                    ...(apiConfig?.useAdvancedParams && apiConfig?.enableMaxOutputTokens ? {
+                        maxTokens: apiConfig.maxOutputTokens || 65536,
+                    } : {}),
+                    temperature: 0.2,
+                    topP: 0.9,
+                }),
+            });
+            const aiText = await readAiTextStream(response);
+            const generated = parseGeneratedSynopsis(aiText);
+            if (!hasChapterSynopsis(generated)) throw new Error('AI 没有返回可用合并概要');
+            const now = new Date().toISOString();
+            const mergedDraft = normalizeChapterMemoryGroup({
+                ...generated,
+                name,
+                chapterIds: unionChapterIds,
+                sourceGroupIds: selectedGroups.map(group => group.id),
+                sourceType: 'merged',
+                source: 'ai',
+                generatedAt: now,
+                updatedAt: now,
+            });
+            setMultiData(mergedDraft);
+            setMultiName(name);
+            setMultiDraft(mergedDraft.summary || aiText);
+            setMultiSelectedIds(new Set(unionChapterIds));
+            setActiveView('multi');
+            showToast?.('合并概要已生成，请确认后保存', 'success');
+        } catch (err) {
+            setGroupError(err?.message || '合并失败，请检查 API 配置');
+        } finally {
+            setGroupBusy(false);
+        }
+    };
+
+    const filterItems = [
+        { key: 'all', label: '全部', count: realChapters.length },
+        { key: 'missing', label: '缺概要', count: missingCount },
+        { key: 'locked', label: '已锁定', count: lockedCount },
+        { key: 'ai', label: 'AI生成', count: aiCount },
+        { key: 'manual', label: '手写', count: manualCount },
+    ];
+
+    const rows = [];
+    let lastVolume = '';
+    filteredEntries.forEach(entry => {
+        if (entry.volumeTitle !== lastVolume) {
+            rows.push({ type: 'volume', id: `volume-${entry.volumeTitle}-${entry.ordinal}`, title: entry.volumeTitle });
+            lastVolume = entry.volumeTitle;
+        }
+        rows.push({ type: 'chapter', id: entry.chapter.id, entry });
+    });
+
+    return createPortal(
+        <div className="modal-overlay" onMouseDown={e => { e.currentTarget._mouseDownTarget = e.target; }} onClick={e => { if (e.currentTarget._mouseDownTarget === e.currentTarget) onClose(); }}>
+            <div className="modal chapter-memory-workspace synopsis-overview-workspace" onClick={e => e.stopPropagation()}>
+                <MemoryWorkspaceHeader
+                    title="章节概要中心"
+                    subtitle="总览已保存概要、缺失章节、锁定状态与多章分组入口"
+                    icon={<BookMarked size={22} />}
+                    showTabs={false}
+                    onClose={onClose}
+                />
+
+                <div className="synopsis-overview-tabs" aria-label="概要中心视图">
+                    <button type="button" className={activeView === 'single' ? 'active' : ''} onClick={() => setActiveView('single')}>单章概要</button>
+                    <button type="button" className={activeView === 'multi' ? 'active' : ''} onClick={() => setActiveView('multi')}>多章概要</button>
+                    <button type="button" className={activeView === 'groups' ? 'active' : ''} onClick={() => setActiveView('groups')}>概要分组</button>
+                    <button type="button" className={activeView === 'saved' ? 'active' : ''} onClick={() => setActiveView('saved')}>已保存</button>
+                </div>
+
+                <div className="synopsis-overview-grid">
+                    <aside className="synopsis-overview-filter">
+                        <div className="synopsis-coverage-card">
+                            <div>
+                                <span>概要覆盖</span>
+                                <strong>{savedCount}/{realChapters.length} 章</strong>
+                            </div>
+                            <div className="synopsis-progress-bar">
+                                <span style={{ width: `${coverage}%` }} />
+                            </div>
+                            <em>{coverage}% 已完成 · {missingCount} 章缺失</em>
+                        </div>
+
+                        <label className="memory-search-box synopsis-overview-search">
+                            <Search size={15} />
+                            <input
+                                value={query}
+                                onChange={e => setQuery(e.target.value)}
+                                placeholder="搜索章节或概要"
+                            />
+                        </label>
+
+                        <div className="synopsis-filter-list">
+                            {filterItems.map(item => (
+                                <button
+                                    key={item.key}
+                                    type="button"
+                                    className={filter === item.key ? 'active' : ''}
+                                    onClick={() => setFilter(item.key)}
+                                >
+                                    <span>{item.label}</span>
+                                    <strong>{item.count}</strong>
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="synopsis-group-summary">
+                            <div className="memory-rail-title">
+                                <BookMarked size={15} />
+                                <span>概要分组</span>
+                                <em>{memoryGroups.length}</em>
+                            </div>
+                            <p>{memoryGroups.length ? `已有 ${memoryGroups.length} 个多章概要组，可在“概要分组”中编辑、合并或注入上下文。` : '还没有多章概要组。可先选择章节生成多章概要。'}</p>
+                            <button className="btn btn-secondary btn-sm" onClick={() => setActiveView('groups')}>
+                                <Layers3 size={14} />
+                                查看分组
+                            </button>
+                        </div>
+                    </aside>
+
+                    <section className="synopsis-saved-list-panel">
+                        <div className="synopsis-list-head">
+                            <div>
+                                <h3>{activeView === 'multi' ? '选择章节生成多章概要' : activeView === 'groups' ? '概要分组' : activeView === 'single' ? '单章概要' : '已保存概要'}</h3>
+                                <p>{activeView === 'multi' ? '可任选章节组成一组，保存为多章概要' : activeView === 'groups' ? '查看已保存的多章概要组，可在右侧编辑或合并' : '按分卷浏览章节概要，缺失章节也会显示出来'}</p>
+                            </div>
+                            <span>{activeView === 'groups' ? memoryGroups.length : filteredEntries.length} 项</span>
+                        </div>
+
+                        <div className="synopsis-saved-list">
+                            {activeView === 'groups' ? (
+                                memoryGroups.length === 0 ? (
+                                    <div className="memory-empty-state">还没有概要分组。切到“多章概要”选择章节后创建。</div>
+                                ) : memoryGroups.map(group => {
+                                    const selected = selectedGroup?.id === group.id;
+                                    return (
+                                        <div
+                                            key={group.id}
+                                            className={`synopsis-row synopsis-group-overview-row${selected ? ' selected' : ''}`}
+                                            onClick={() => setSelectedGroupId(group.id)}
+                                        >
+                                            <label className="synopsis-row-index" onClick={e => e.stopPropagation()}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={groupSelectedIds.has(group.id)}
+                                                    onChange={() => toggleGroupSelection(group.id)}
+                                                />
+                                            </label>
+                                            <span className="synopsis-row-main">
+                                                <strong>{group.name || '未命名概要组'}</strong>
+                                                <em>{group.summary || '暂无概要正文'}</em>
+                                            </span>
+                                            <span className="synopsis-row-badge saved">{group.chapterIds?.length || 0} 章</span>
+                                            <span className="synopsis-row-source">{getSynopsisSourceLabel(group)}</span>
+                                            <span className="synopsis-row-time">{formatSynopsisTime(group.updatedAt || group.generatedAt)}</span>
+                                            <div className="synopsis-row-actions" onClick={e => e.stopPropagation()}>
+                                                <button className="btn btn-ghost btn-sm" onClick={() => setSelectedGroupId(group.id)}>编辑</button>
+                                                <button className="btn btn-ghost btn-sm" onClick={() => toggleGroupSelection(group.id)}>选择合并</button>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            ) : rows.length === 0 ? (
+                                <div className="memory-empty-state">没有匹配的概要。</div>
+                            ) : rows.map(row => {
+                                if (row.type === 'volume') {
+                                    return <div key={row.id} className="synopsis-volume-row">{row.title}</div>;
+                                }
+                                const { entry } = row;
+                                const selected = selectedEntry?.chapter.id === entry.chapter.id;
+                                const synopsisPreview = entry.hasSynopsis
+                                    ? (entry.synopsis.summary || entry.synopsisText || '已有概要')
+                                    : '尚未生成章节概要。';
+                                return (
+                                    <div
+                                        key={entry.chapter.id}
+                                        className={`synopsis-row${selected ? ' selected' : ''}${entry.hasSynopsis ? '' : ' missing'}`}
+                                        onClick={() => {
+                                            setSelectedId(entry.chapter.id);
+                                            if (activeView === 'multi') toggleMultiChapter(entry.chapter.id);
+                                        }}
+                                    >
+                                        <span className="synopsis-row-index">
+                                            {activeView === 'multi' ? (
+                                                <input
+                                                    type="checkbox"
+                                                    checked={multiSelectedIds.has(entry.chapter.id)}
+                                                    onChange={() => toggleMultiChapter(entry.chapter.id)}
+                                                    onClick={e => e.stopPropagation()}
+                                                />
+                                            ) : String(entry.ordinal).padStart(2, '0')}
+                                        </span>
+                                        <span className="synopsis-row-main">
+                                            <strong>{entry.chapter.title || '未命名章节'}</strong>
+                                            <em>{activeView === 'multi' ? (entry.hasSynopsis ? '可使用单章概要压缩' : '缺概要，将使用正文首尾线索') : synopsisPreview}</em>
+                                        </span>
+                                        <span className={`synopsis-row-badge${entry.hasSynopsis ? ' saved' : ' missing'}`}>
+                                            {entry.hasSynopsis ? '已概要' : '缺概要'}
+                                        </span>
+                                        {entry.synopsis.locked && <span className="synopsis-row-badge locked">锁定</span>}
+                                        {entry.hasSynopsis && <span className="synopsis-row-source">{getSynopsisSourceLabel(entry.synopsis)}</span>}
+                                        <span className="synopsis-row-time">{formatSynopsisTime(entry.synopsis.updatedAt || entry.synopsis.generatedAt)}</span>
+                                        <div className="synopsis-row-actions" onClick={e => e.stopPropagation()}>
+                                            <button className="btn btn-ghost btn-sm" onClick={() => {
+                                                setSelectedId(entry.chapter.id);
+                                                setActiveView('single');
+                                            }}>
+                                                {entry.hasSynopsis ? '编辑' : '生成'}
+                                            </button>
+                                            <button className="btn btn-ghost btn-sm" onClick={() => {
+                                                setSelectedId(entry.chapter.id);
+                                                setActiveView('single');
+                                            }}>
+                                                重新生成
+                                            </button>
+                                            <button className="btn btn-ghost btn-sm" onClick={() => onToggleLock(entry.chapter.id, !entry.synopsis.locked)}>
+                                                {entry.synopsis.locked ? '解锁' : '锁定'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+
+                    <aside className="synopsis-inspector">
+                        {activeView === 'groups' ? (
+                            selectedGroup ? (
+                                <>
+                                    <div className="synopsis-inspector-head">
+                                        <span className="synopsis-row-badge saved">概要组</span>
+                                        {groupSelectedIds.size > 0 && <span className="synopsis-row-badge locked">已选 {groupSelectedIds.size}</span>}
+                                        <h3>{groupDraft.name || selectedGroup.name || '未命名概要组'}</h3>
+                                        <p>{groupDraft.chapterIds?.length || 0} 章 · {formatMemoryTokens(estimateTokens(buildChapterMemoryGroupText(groupDraft, chapters)))}</p>
+                                    </div>
+                                    <input
+                                        className="memory-group-name-input"
+                                        value={groupDraft.name}
+                                        onChange={e => setGroupDraft(prev => normalizeChapterMemoryGroup({ ...prev, name: e.target.value }))}
+                                        placeholder="概要组名"
+                                    />
+                                    <textarea
+                                        className="memory-main-textarea synopsis-center-textarea"
+                                        value={groupDraft.summary}
+                                        onChange={e => setGroupDraft(prev => normalizeChapterMemoryGroup({ ...prev, summary: e.target.value, source: prev.source === 'ai' ? 'ai' : 'manual' }))}
+                                        placeholder="概要正文"
+                                    />
+                                    <StructuredMemorySections data={groupDraft} />
+                                    {groupError && <div className="chapter-synopsis-error">{groupError}</div>}
+                                    <div className="synopsis-inspector-actions">
+                                        <button className="btn btn-secondary btn-sm" onClick={handleMergeGroups} disabled={groupBusy || groupSelectedIds.size < 2}>
+                                            {groupBusy ? <RefreshCw size={14} className="spin" /> : <GitMerge size={14} />}
+                                            合并所选
+                                        </button>
+                                        <button className="btn btn-ghost btn-sm danger" onClick={handleDeleteGroupDraft} disabled={groupBusy}>
+                                            删除
+                                        </button>
+                                        <button className="btn btn-primary btn-sm" onClick={handleSaveGroupDraft} disabled={groupBusy}>
+                                            {groupBusy ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
+                                            保存
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="memory-empty-state">还没有概要分组。切到“多章概要”选择章节后创建。</div>
+                            )
+                        ) : activeView === 'multi' ? (
+                            <>
+                                <div className="synopsis-inspector-head">
+                                    <span className="synopsis-row-badge saved">多章概要</span>
+                                    <span className="synopsis-row-badge locked">已选 {selectedMultiEntries.length}</span>
+                                    <h3>{multiName || '新建多章概要组'}</h3>
+                                    <p>{selectedMultiEntries.length ? selectedMultiEntries.map(entry => entry.chapter.title || '未命名章节').slice(0, 3).join('、') : '从中间列表任选章节组成一组'}</p>
+                                </div>
+                                <input
+                                    className="memory-group-name-input"
+                                    value={multiName}
+                                    onChange={e => {
+                                        setMultiName(e.target.value);
+                                        setMultiData(prev => normalizeChapterMemoryGroup({ ...prev, name: e.target.value }));
+                                    }}
+                                    placeholder="概要组名，例如：第一卷前五章 / 学院篇开端"
+                                />
+                                <textarea
+                                    className="memory-main-textarea synopsis-center-textarea"
+                                    value={multiDraft}
+                                    onChange={e => {
+                                        setMultiDraft(e.target.value);
+                                        setMultiData(prev => normalizeChapterMemoryGroup({ ...prev, summary: e.target.value, source: prev.source === 'ai' ? 'ai' : 'manual' }));
+                                    }}
+                                    placeholder="可手写，也可选择章节后点击 AI 生成多章概要。"
+                                />
+                                <StructuredMemorySections data={multiData} />
+                                {multiError && <div className="chapter-synopsis-error">{multiError}</div>}
+                                <div className="synopsis-inspector-actions">
+                                    <button className="btn btn-secondary btn-sm" onClick={handleGenerateMulti} disabled={multiBusy || selectedMultiEntries.length === 0}>
+                                        {multiBusy ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}
+                                        AI 生成
+                                    </button>
+                                    <button className="btn btn-primary btn-sm" onClick={handleSaveMulti} disabled={multiBusy || selectedMultiEntries.length === 0}>
+                                        {multiBusy ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
+                                        保存为分组
+                                    </button>
+                                </div>
+                            </>
+                        ) : selectedEntry ? (
+                            activeView === 'single' ? (
+                                <>
+                                    <div className="synopsis-inspector-head">
+                                        <span className={`synopsis-row-badge${selectedEntry.hasSynopsis ? ' saved' : ' missing'}`}>
+                                            {selectedEntry.hasSynopsis ? '已保存' : '缺概要'}
+                                        </span>
+                                        {singleLocked && <span className="synopsis-row-badge locked">锁定</span>}
+                                        <h3>{selectedEntry.chapter.title || '未命名章节'}</h3>
+                                        <p>第 {selectedEntry.ordinal} 章 · {formatMemoryTokens(selectedEntry.textTokens)}</p>
+                                    </div>
+                                    <label className="synopsis-lock-row">
+                                        <input
+                                            type="checkbox"
+                                            checked={singleLocked}
+                                            onChange={e => setSingleLocked(e.target.checked)}
+                                        />
+                                        <span>
+                                            <strong>锁定概要</strong>
+                                            <em>避免被 AI 生成覆盖</em>
+                                        </span>
+                                    </label>
+                                    <textarea
+                                        className="memory-main-textarea synopsis-center-textarea"
+                                        value={singleDraft}
+                                        onChange={e => {
+                                            const value = e.target.value;
+                                            setSingleDraft(value);
+                                            setSingleData(prev => normalizeChapterSynopsis({ ...prev, summary: value, source: prev.source === 'ai' ? 'ai' : 'manual' }));
+                                        }}
+                                        placeholder="写下这一章发生了什么、冲突如何推进、信息有什么变化，以及最后停在什么状态。"
+                                    />
+                                    <label className="synopsis-ending-field">
+                                        <span>结尾状态</span>
+                                        <input
+                                            value={singleEnding}
+                                            onChange={e => {
+                                                const value = e.target.value;
+                                                setSingleEnding(value);
+                                                setSingleData(prev => normalizeChapterSynopsis({ ...prev, endingState: value, source: prev.source === 'ai' ? 'ai' : 'manual' }));
+                                            }}
+                                            placeholder="本章最后停留的画面、决定、冲突或情绪状态"
+                                        />
+                                    </label>
+                                    <details className="chapter-synopsis-details synopsis-advanced-details">
+                                        <summary>概要细节</summary>
+                                        <StructuredMemorySections data={singleData} mode="synopsis" />
+                                        {buildChapterSynopsisText(singleData) && (
+                                            <details className="chapter-synopsis-details memory-raw-details">
+                                                <summary>查看注入文本</summary>
+                                                <pre>{buildChapterSynopsisText(singleData)}</pre>
+                                            </details>
+                                        )}
+                                    </details>
+                                    {singleError && <div className="chapter-synopsis-error">{singleError}</div>}
+                                    <div className="synopsis-inspector-actions">
+                                        <button className="btn btn-ghost btn-sm" onClick={handleClearSingle} disabled={singleBusy}>清空</button>
+                                        <button className="btn btn-secondary btn-sm" onClick={handleGenerateSingle} disabled={singleBusy || singleLocked}>
+                                            {singleBusy ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}
+                                            AI 生成
+                                        </button>
+                                        <button className="btn btn-primary btn-sm" onClick={handleSaveSingle} disabled={singleBusy}>
+                                            {singleBusy ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
+                                            保存
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="synopsis-inspector-head">
+                                        <span className={`synopsis-row-badge${selectedEntry.hasSynopsis ? ' saved' : ' missing'}`}>
+                                            {selectedEntry.hasSynopsis ? '已保存' : '缺概要'}
+                                        </span>
+                                        {selectedEntry.synopsis.locked && <span className="synopsis-row-badge locked">锁定</span>}
+                                        <h3>{selectedEntry.chapter.title || '未命名章节'}</h3>
+                                        <p>第 {selectedEntry.ordinal} 章 · {formatMemoryTokens(selectedEntry.textTokens)}</p>
+                                    </div>
+
+                                    <div className="synopsis-inspector-block">
+                                        <h4>概要正文</h4>
+                                        <p>{selectedEntry.synopsis.summary || '还没有保存概要。'}</p>
+                                    </div>
+                                    <div className="synopsis-inspector-block">
+                                        <h4>结尾状态</h4>
+                                        <p>{selectedEntry.synopsis.endingState || '暂无结尾状态。'}</p>
+                                    </div>
+                                    <div className="synopsis-inspector-block">
+                                        <h4>续写注意</h4>
+                                        {selectedEntry.synopsis.continuityNotes.length ? (
+                                            <ul>{selectedEntry.synopsis.continuityNotes.slice(0, 5).map((item, index) => <li key={index}>{item}</li>)}</ul>
+                                        ) : (
+                                            <p>暂无续写注意。</p>
+                                        )}
+                                    </div>
+                                    <div className="synopsis-inspector-block">
+                                        <h4>待回收信息</h4>
+                                        {selectedEntry.synopsis.openThreads.length ? (
+                                            <ul>{selectedEntry.synopsis.openThreads.slice(0, 5).map((item, index) => <li key={index}>{item}</li>)}</ul>
+                                        ) : (
+                                            <p>暂无待回收信息。</p>
+                                        )}
+                                    </div>
+                                    <div className="synopsis-inspector-meta">
+                                        <span>{getSynopsisSourceLabel(selectedEntry.synopsis)}</span>
+                                        <span>{formatSynopsisTime(selectedEntry.synopsis.updatedAt || selectedEntry.synopsis.generatedAt)}</span>
+                                        <span>{formatMemoryTokens(estimateTokens(selectedEntry.synopsisText || selectedEntry.synopsis.summary || ''))}</span>
+                                    </div>
+                                    <div className="synopsis-inspector-actions">
+                                        <button className="btn btn-secondary btn-sm" onClick={() => setActiveView('single')}>
+                                            <FileText size={14} />
+                                            {selectedEntry.hasSynopsis ? '编辑概要' : '生成概要'}
+                                        </button>
+                                        <button className="btn btn-ghost btn-sm" onClick={() => onToggleLock(selectedEntry.chapter.id, !selectedEntry.synopsis.locked)}>
+                                            {selectedEntry.synopsis.locked ? '解锁' : '锁定'}
+                                        </button>
+                                    </div>
+                                </>
+                            )
+                        ) : (
+                            <div className="memory-empty-state">请选择一个章节。</div>
+                        )}
+                    </aside>
+                </div>
+
+                <div className="memory-workspace-footer synopsis-overview-footer">
+                    <div className="memory-footer-status">
+                        <CheckCircle2 size={15} />
+                        <span>保存的单章概要会自动作为前文摘要参与续写上下文；多章分组可手动管理。</span>
+                    </div>
+                    <div className="memory-footer-actions">
+                        <button className="btn btn-ghost btn-sm" onClick={() => {
+                            const firstMissing = realChapters.find(entry => !entry.hasSynopsis);
+                            if (firstMissing) {
+                                setSelectedId(firstMissing.chapter.id);
+                                setActiveView('single');
+                            }
+                        }} disabled={missingCount === 0 || activeView === 'groups'}>
+                            <Sparkles size={14} />
+                            生成缺失概要
+                        </button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => {
+                            if (activeView !== 'multi') {
+                                setActiveView('multi');
+                                return;
+                            }
+                            handleGenerateMulti();
+                        }} disabled={activeView === 'multi' && (multiBusy || multiSelectedIds.size === 0)}>
+                            <Layers3 size={14} />
+                            {activeView === 'multi' ? `AI 生成多章概要${multiSelectedIds.size ? ` (${multiSelectedIds.size})` : ''}` : '选择章节生成多章概要'}
+                        </button>
+                        <button className="btn btn-ghost btn-sm" onClick={onCopyAll}>
+                            导出概要
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={onApplyContext}>
+                            应用到上下文
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+}
+
 export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const {
         chapters, addChapter, setChapters, updateChapter: updateChapterStore,
@@ -221,7 +1677,55 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     const [dragOverId, setDragOverId] = useState(null); // 拖拽悬停目标 id
     const [dragOverPos, setDragOverPos] = useState(null); // 'top' | 'bottom'
     const [activeVolumeId, setActiveVolumeId] = useState(null); // 当前选中的分卷
+    const [synopsisModal, setSynopsisModal] = useState(null);
+    const [synopsisDraft, setSynopsisDraft] = useState('');
+    const [synopsisLocked, setSynopsisLocked] = useState(false);
+    const [synopsisData, setSynopsisData] = useState(() => normalizeChapterSynopsis());
+    const [synopsisGenerating, setSynopsisGenerating] = useState(false);
+    const [synopsisSaving, setSynopsisSaving] = useState(false);
+    const [synopsisError, setSynopsisError] = useState('');
+    const [synopsisOverviewModal, setSynopsisOverviewModal] = useState(null);
+    const [showMemoryGroupsModal, setShowMemoryGroupsModal] = useState(false);
+    const [memoryGroups, setMemoryGroups] = useState([]);
+    const [memoryDraft, setMemoryDraft] = useState(() => normalizeChapterMemoryGroup({ name: '' }));
+    const [memorySelectedChapterIds, setMemorySelectedChapterIds] = useState(() => new Set());
+    const [memorySelectedGroupIds, setMemorySelectedGroupIds] = useState(() => new Set());
+    const [memoryGenerating, setMemoryGenerating] = useState(false);
+    const [memorySaving, setMemorySaving] = useState(false);
+    const [memoryError, setMemoryError] = useState('');
     const { t } = useI18n();
+
+    const synopsisChapter = synopsisModal
+        ? chapters.find(ch => ch.id === synopsisModal.chapterId && (ch.type || 'chapter') !== 'volume')
+        : null;
+    const activeSynopsisTarget = activeChapterId
+        ? chapters.find(ch => ch.id === activeChapterId && (ch.type || 'chapter') !== 'volume')
+        : null;
+
+    useEffect(() => {
+        const syncPinnedCategories = (event) => {
+            setPinnedCategories(Array.isArray(event?.detail) ? event.detail : getPinnedCategories());
+        };
+        const handleStorage = (event) => {
+            if (event.key === 'author-pinned-categories') syncPinnedCategories();
+        };
+        window.addEventListener('author-pinned-categories-changed', syncPinnedCategories);
+        window.addEventListener('storage', handleStorage);
+        return () => {
+            window.removeEventListener('author-pinned-categories-changed', syncPinnedCategories);
+            window.removeEventListener('storage', handleStorage);
+        };
+    }, []);
+
+    const reloadMemoryGroups = useCallback(async () => {
+        const groups = await getChapterMemoryGroups(activeWorkId);
+        setMemoryGroups(groups);
+        return groups;
+    }, [activeWorkId]);
+
+    useEffect(() => {
+        reloadMemoryGroups();
+    }, [reloadMemoryGroups]);
 
     // ---- 云同步状态（侧栏图标指示） ----
     const [cloudAuthUser, setCloudAuthUser] = useState(null);
@@ -263,7 +1767,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             setCatCustomIcons(iconMap);
             setCatCustomLabels(labelMap);
         })();
-    }, [settingsVersion, activeWorkId]);
+    }, [settingsVersion, activeWorkId, pinnedCategories]);
 
     // 切换主题 (light → eye → dark 循环)
     const toggleTheme = useCallback(() => {
@@ -488,6 +1992,424 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             : `「${item.title}」已恢复普通章节`,
             'success');
     }, [activeWorkId, chapters, showToast, updateChapterStore]);
+
+    const handleOpenSynopsis = useCallback((id) => {
+        const chapter = chapters.find(c => c.id === id && (c.type || 'chapter') !== 'volume');
+        if (!chapter) return;
+        setSynopsisOverviewModal({ view: 'single', chapterId: id });
+    }, [chapters]);
+
+    const handleOpenActiveSynopsis = useCallback((e) => {
+        e?.stopPropagation?.();
+        const chapterId = activeSynopsisTarget?.id || activeChapterId;
+        if (!chapterId) return;
+        handleOpenSynopsis(chapterId);
+    }, [activeChapterId, activeSynopsisTarget?.id, handleOpenSynopsis]);
+
+    const handleOpenSynopsisOverview = useCallback(async (e) => {
+        e?.stopPropagation?.();
+        await reloadMemoryGroups();
+        setSynopsisOverviewModal({ view: 'saved', chapterId: activeSynopsisTarget?.id || activeChapterId || null });
+    }, [activeChapterId, activeSynopsisTarget?.id, reloadMemoryGroups]);
+
+    const handleOverviewOpenChapter = useCallback((chapterId) => {
+        setSynopsisOverviewModal({ view: 'single', chapterId });
+    }, []);
+
+    const handleCloseSynopsis = useCallback(() => {
+        if (synopsisGenerating || synopsisSaving) return;
+        setSynopsisModal(null);
+        setSynopsisDraft('');
+        setSynopsisLocked(false);
+        setSynopsisData(normalizeChapterSynopsis());
+        setSynopsisError('');
+    }, [synopsisGenerating, synopsisSaving]);
+
+    const handleClearSynopsis = useCallback(() => {
+        setSynopsisDraft('');
+        setSynopsisData(normalizeChapterSynopsis({ locked: synopsisLocked }));
+        setSynopsisError('');
+    }, [synopsisLocked]);
+
+    const handleSaveSynopsis = useCallback(async () => {
+        if (!synopsisChapter) return;
+        setSynopsisSaving(true);
+        setSynopsisError('');
+        try {
+            const now = new Date().toISOString();
+            const payload = normalizeChapterSynopsis({
+                ...synopsisData,
+                summary: synopsisDraft.trim(),
+                locked: synopsisLocked,
+                source: synopsisData.source || 'manual',
+                updatedAt: now,
+            });
+            const updated = await updateChapter(synopsisChapter.id, { synopsis: payload }, activeWorkId);
+            if (updated) {
+                updateChapterStore(synopsisChapter.id, { synopsis: payload });
+            }
+            showToast('章节概要已保存', 'success');
+            handleCloseSynopsis();
+        } catch (err) {
+            setSynopsisError(err?.message || '保存失败');
+        } finally {
+            setSynopsisSaving(false);
+        }
+    }, [activeWorkId, handleCloseSynopsis, showToast, synopsisChapter, synopsisData, synopsisDraft, synopsisLocked, updateChapterStore]);
+
+    const handleGenerateSynopsis = useCallback(async () => {
+        if (!synopsisChapter) return;
+        if (synopsisLocked) {
+            showToast('当前概要已锁定，取消锁定后再生成', 'info');
+            return;
+        }
+
+        const plainText = stripChapterHtml(synopsisChapter.content || '');
+        if (plainText.length < 20) {
+            setSynopsisError('正文太短，暂时无法生成有效概要');
+            return;
+        }
+
+        setSynopsisGenerating(true);
+        setSynopsisError('');
+        try {
+            const { apiConfig } = getProjectSettings();
+            const { systemPrompt, userPrompt } = buildSynopsisPrompts(synopsisChapter);
+            const response = await fetch(resolveAiEndpoint(apiConfig), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemPrompt,
+                    userPrompt,
+                    apiConfig,
+                    ...(apiConfig?.useAdvancedParams && apiConfig?.enableMaxOutputTokens ? {
+                        maxTokens: apiConfig.maxOutputTokens || 65536,
+                    } : {}),
+                    temperature: 0.2,
+                    topP: 0.9,
+                }),
+            });
+            const aiText = await readAiTextStream(response);
+            const generated = parseGeneratedSynopsis(aiText);
+            if (!hasChapterSynopsis(generated)) {
+                throw new Error('AI 没有返回可用概要');
+            }
+
+            const now = new Date().toISOString();
+            const nextSynopsis = normalizeChapterSynopsis({
+                ...generated,
+                locked: false,
+                source: 'ai',
+                generatedAt: now,
+                updatedAt: now,
+            });
+            setSynopsisData(nextSynopsis);
+            setSynopsisDraft(nextSynopsis.summary || aiText);
+            showToast('概要已生成，请确认后保存', 'success');
+        } catch (err) {
+            setSynopsisError(err?.message || '生成失败，请检查 API 配置');
+        } finally {
+            setSynopsisGenerating(false);
+        }
+    }, [showToast, synopsisChapter, synopsisLocked]);
+
+    const notifyMemoryGroupsChanged = useCallback(() => {
+        if (typeof window === 'undefined') return;
+        window.dispatchEvent(new CustomEvent('author-chapter-memory-groups-changed', {
+            detail: { workId: activeWorkId || getActiveWorkId() || 'work-default' },
+        }));
+    }, [activeWorkId]);
+
+    const handleSaveOverviewMemoryGroups = useCallback(async (nextGroups) => {
+        await saveChapterMemoryGroups(nextGroups, activeWorkId);
+        setMemoryGroups(nextGroups);
+        notifyMemoryGroupsChanged();
+    }, [activeWorkId, notifyMemoryGroupsChanged]);
+
+    const handleOpenMemoryGroups = useCallback(async () => {
+        await reloadMemoryGroups();
+        setMemoryError('');
+        setShowMemoryGroupsModal(true);
+    }, [reloadMemoryGroups]);
+
+    const handleOverviewOpenMemoryGroups = useCallback(async () => {
+        await reloadMemoryGroups();
+        setSynopsisOverviewModal({ view: 'groups', chapterId: activeChapterId || null });
+    }, [activeChapterId, reloadMemoryGroups]);
+
+    const handleToggleSynopsisLock = useCallback(async (chapterId, locked) => {
+        const chapter = chapters.find(c => c.id === chapterId && (c.type || 'chapter') !== 'volume');
+        if (!chapter) return;
+        const synopsis = getChapterSynopsis(chapter);
+        if (!hasChapterSynopsis(synopsis)) {
+            showToast('这个章节还没有概要，生成或填写后再锁定', 'info');
+            return;
+        }
+        const payload = normalizeChapterSynopsis({
+            ...synopsis,
+            locked,
+            updatedAt: new Date().toISOString(),
+        });
+        const updated = await updateChapter(chapter.id, { synopsis: payload }, activeWorkId);
+        if (updated) {
+            updateChapterStore(chapter.id, { synopsis: payload });
+        }
+        showToast(locked ? '概要已锁定' : '概要已解锁', 'success');
+    }, [activeWorkId, chapters, showToast, updateChapterStore]);
+
+    const handleCopyAllSynopsis = useCallback(async () => {
+        const lines = [];
+        let ordinal = 0;
+        chapters.forEach(chapter => {
+            if ((chapter.type || 'chapter') === 'volume') return;
+            ordinal += 1;
+            if (!hasChapterSynopsis(chapter)) return;
+            lines.push(`第${ordinal}章「${chapter.title || '未命名章节'}」\n${buildChapterSynopsisText(chapter)}`);
+        });
+        const text = lines.join('\n\n---\n\n').trim();
+        if (!text) {
+            showToast('还没有可导出的章节概要', 'info');
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(text);
+            showToast('所有已保存概要已复制', 'success');
+        } catch {
+            showToast('复制失败，请检查浏览器剪贴板权限', 'error');
+        }
+    }, [chapters, showToast]);
+
+    const handleApplySynopsisContext = useCallback(() => {
+        showToast('已保存概要会自动参与前文上下文；多章分组可在概要分组中管理', 'success');
+    }, [showToast]);
+
+    const getSynopsisSwitchTargetId = useCallback(() => {
+        if (activeSynopsisTarget?.id) return activeSynopsisTarget.id;
+        const selectedChapterId = [...memorySelectedChapterIds].find(id =>
+            chapters.some(chapter => chapter.id === id && (chapter.type || 'chapter') !== 'volume')
+        );
+        if (selectedChapterId) return selectedChapterId;
+        return chapters.find(chapter => (chapter.type || 'chapter') !== 'volume')?.id || null;
+    }, [activeSynopsisTarget?.id, chapters, memorySelectedChapterIds]);
+
+    const handleSwitchSynopsisToMemory = useCallback(async () => {
+        if (synopsisGenerating || synopsisSaving) return;
+        handleCloseSynopsis();
+        await handleOpenMemoryGroups();
+    }, [handleCloseSynopsis, handleOpenMemoryGroups, synopsisGenerating, synopsisSaving]);
+
+    const handleSwitchMemoryToSynopsis = useCallback(() => {
+        if (memoryGenerating || memorySaving) return;
+        const chapterId = getSynopsisSwitchTargetId();
+        if (!chapterId) {
+            setMemoryError('请先创建或选择一个章节');
+            return;
+        }
+        setMemoryError('');
+        setShowMemoryGroupsModal(false);
+        handleOpenSynopsis(chapterId);
+    }, [getSynopsisSwitchTargetId, handleOpenSynopsis, memoryGenerating, memorySaving]);
+
+    const handleNewMemoryDraft = useCallback(() => {
+        setMemoryDraft(normalizeChapterMemoryGroup({ name: '' }));
+        setMemorySelectedChapterIds(new Set());
+        setMemoryError('');
+    }, []);
+
+    const handleMemoryDraftChange = useCallback((patch) => {
+        setMemoryDraft(prev => normalizeChapterMemoryGroup({ ...prev, ...patch }));
+    }, []);
+
+    const toggleMemoryChapter = useCallback((chapterId) => {
+        setMemorySelectedChapterIds(prev => {
+            const next = new Set(prev);
+            if (next.has(chapterId)) next.delete(chapterId);
+            else next.add(chapterId);
+            setMemoryDraft(draft => normalizeChapterMemoryGroup({ ...draft, chapterIds: [...next] }));
+            return next;
+        });
+    }, []);
+
+    const toggleMemoryGroupSelection = useCallback((groupId) => {
+        setMemorySelectedGroupIds(prev => {
+            const next = new Set(prev);
+            if (next.has(groupId)) next.delete(groupId);
+            else next.add(groupId);
+            return next;
+        });
+    }, []);
+
+    const getSelectedMemoryChapterEntries = useCallback(() => {
+        let ordinal = 0;
+        return chapters
+            .filter(chapter => (chapter.type || 'chapter') !== 'volume')
+            .map(chapter => ({ chapter, ordinal: ++ordinal }))
+            .filter(({ chapter }) => memorySelectedChapterIds.has(chapter.id));
+    }, [chapters, memorySelectedChapterIds]);
+
+    const handleGenerateMemoryGroup = useCallback(async () => {
+        const selectedEntries = getSelectedMemoryChapterEntries();
+        if (selectedEntries.length === 0) {
+            setMemoryError('请先选择至少一个章节');
+            return;
+        }
+
+        setMemoryGenerating(true);
+        setMemoryError('');
+        try {
+            const { apiConfig } = getProjectSettings();
+            const name = memoryDraft.name || `${selectedEntries[0].chapter.title} 等 ${selectedEntries.length} 章`;
+            const { systemPrompt, userPrompt } = buildMemoryGroupPrompts({
+                name,
+                chapters: selectedEntries,
+            });
+            const response = await fetch(resolveAiEndpoint(apiConfig), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemPrompt,
+                    userPrompt,
+                    apiConfig,
+                    ...(apiConfig?.useAdvancedParams && apiConfig?.enableMaxOutputTokens ? {
+                        maxTokens: apiConfig.maxOutputTokens || 65536,
+                    } : {}),
+                    temperature: 0.2,
+                    topP: 0.9,
+                }),
+            });
+            const aiText = await readAiTextStream(response);
+            const generated = parseGeneratedSynopsis(aiText);
+            if (!hasChapterSynopsis(generated)) throw new Error('AI 没有返回可用多章节概要');
+            const now = new Date().toISOString();
+            setMemoryDraft(prev => normalizeChapterMemoryGroup({
+                ...prev,
+                ...generated,
+                name,
+                chapterIds: selectedEntries.map(({ chapter }) => chapter.id),
+                sourceType: 'custom',
+                source: 'ai',
+                generatedAt: now,
+                updatedAt: now,
+            }));
+            showToast('多章节概要已生成，请确认后保存', 'success');
+        } catch (err) {
+            setMemoryError(err?.message || '生成失败，请检查 API 配置');
+        } finally {
+            setMemoryGenerating(false);
+        }
+    }, [getSelectedMemoryChapterEntries, memoryDraft.name, showToast]);
+
+    const handleMergeMemoryGroups = useCallback(async () => {
+        const selectedGroups = memoryGroups.filter(group => memorySelectedGroupIds.has(group.id));
+        if (selectedGroups.length < 2) {
+            setMemoryError('请至少选择两个记忆组');
+            return;
+        }
+
+        setMemoryGenerating(true);
+        setMemoryError('');
+        try {
+            const { apiConfig } = getProjectSettings();
+            const unionChapterIds = Array.from(new Set(selectedGroups.flatMap(group => group.chapterIds)));
+            const name = `合并概要：${selectedGroups.map(group => group.name || '未命名记忆组').slice(0, 2).join(' + ')}${selectedGroups.length > 2 ? ' 等' : ''}`;
+            const { systemPrompt, userPrompt } = buildMemoryMergePrompts({
+                name,
+                groups: selectedGroups,
+                chapters,
+            });
+            const response = await fetch(resolveAiEndpoint(apiConfig), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemPrompt,
+                    userPrompt,
+                    apiConfig,
+                    ...(apiConfig?.useAdvancedParams && apiConfig?.enableMaxOutputTokens ? {
+                        maxTokens: apiConfig.maxOutputTokens || 65536,
+                    } : {}),
+                    temperature: 0.2,
+                    topP: 0.9,
+                }),
+            });
+            const aiText = await readAiTextStream(response);
+            const generated = parseGeneratedSynopsis(aiText);
+            if (!hasChapterSynopsis(generated)) throw new Error('AI 没有返回可用合并概要');
+            const now = new Date().toISOString();
+            setMemoryDraft(normalizeChapterMemoryGroup({
+                ...generated,
+                name,
+                chapterIds: unionChapterIds,
+                sourceGroupIds: selectedGroups.map(group => group.id),
+                sourceType: 'merged',
+                source: 'ai',
+                generatedAt: now,
+                updatedAt: now,
+            }));
+            setMemorySelectedChapterIds(new Set(unionChapterIds));
+            showToast('合并概要已生成，请确认后保存', 'success');
+        } catch (err) {
+            setMemoryError(err?.message || '合并失败，请检查 API 配置');
+        } finally {
+            setMemoryGenerating(false);
+        }
+    }, [chapters, memoryGroups, memorySelectedGroupIds, showToast]);
+
+    const handleSaveMemoryGroup = useCallback(async () => {
+        const payload = normalizeChapterMemoryGroup({
+            ...memoryDraft,
+            chapterIds: [...memorySelectedChapterIds],
+            source: memoryDraft.source || 'manual',
+            updatedAt: new Date().toISOString(),
+        });
+        if (!payload.name.trim()) {
+            setMemoryError('请填写组名');
+            return;
+        }
+        if (!hasChapterMemoryGroup(payload)) {
+            setMemoryError('请填写概要正文，或先用 AI 生成');
+            return;
+        }
+        if (payload.chapterIds.length === 0) {
+            setMemoryError('请至少选择一个章节');
+            return;
+        }
+
+        setMemorySaving(true);
+        setMemoryError('');
+        try {
+            const nextGroups = memoryGroups.some(group => group.id === payload.id)
+                ? memoryGroups.map(group => group.id === payload.id ? payload : group)
+                : [...memoryGroups, payload];
+            await saveChapterMemoryGroups(nextGroups, activeWorkId);
+            setMemoryGroups(nextGroups);
+            notifyMemoryGroupsChanged();
+            showToast('章节记忆组已保存', 'success');
+        } catch (err) {
+            setMemoryError(err?.message || '保存失败');
+        } finally {
+            setMemorySaving(false);
+        }
+    }, [activeWorkId, memoryDraft, memoryGroups, memorySelectedChapterIds, notifyMemoryGroupsChanged, showToast]);
+
+    const handleEditMemoryGroup = useCallback((group) => {
+        const normalized = normalizeChapterMemoryGroup(group);
+        setMemoryDraft(normalized);
+        setMemorySelectedChapterIds(new Set(normalized.chapterIds));
+        setMemoryError('');
+    }, []);
+
+    const handleDeleteMemoryGroup = useCallback(async (groupId) => {
+        const nextGroups = memoryGroups.filter(group => group.id !== groupId);
+        await saveChapterMemoryGroups(nextGroups, activeWorkId);
+        setMemoryGroups(nextGroups);
+        setMemorySelectedGroupIds(prev => {
+            const next = new Set(prev);
+            next.delete(groupId);
+            return next;
+        });
+        notifyMemoryGroupsChanged();
+        showToast('章节记忆组已删除', 'success');
+    }, [activeWorkId, memoryGroups, notifyMemoryGroupsChanged, showToast]);
 
     // ===== 分卷管理 =====
     const getNextVolumeTitle = useCallback(() => {
@@ -793,6 +2715,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                             {showCategoryPopover && (
                                 <SettingsCategoryPopover
                                     anchorRef={categoryPopoverAnchorRef}
+                                    onPinnedChange={setPinnedCategories}
                                     onClose={() => {
                                         setShowCategoryPopover(false);
                                         setPinnedCategories(getPinnedCategories());
@@ -963,6 +2886,16 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                 <div className="gdocs-section-header">
                     <span className="gdocs-section-title">文档分页</span>
                     <div style={{ display: 'flex', gap: '2px' }}>
+                        <Tooltip content="章节概要总览">
+                            <button
+                                className="gdocs-section-add gdocs-section-summary-btn"
+                                onClick={handleOpenSynopsisOverview}
+                                aria-label="章节概要总览"
+                            >
+                                <FileText size={13} />
+                                <span>概要</span>
+                            </button>
+                        </Tooltip>
                         <Tooltip content={t('sidebar.renumber') || '重新编号'}><button className="gdocs-section-add" onClick={handleRenumber} aria-label={t('sidebar.renumber') || '重新编号'}><ListOrdered size={14} /></button></Tooltip>
                         <Tooltip content={t('sidebar.newVolume') || '新建分卷'}><button className="gdocs-section-add" onClick={handleCreateVolume} aria-label={t('sidebar.newVolume') || '新建分卷'}><Library size={14} /></button></Tooltip>
                         <button id="tour-new-chapter" className="gdocs-section-add" onClick={() => handleCreateChapter()} title={t('sidebar.newChapter')}>+</button>
@@ -1097,6 +3030,9 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                                     {ch.numberingIgnored && (
                                                         <span className="gdocs-special-badge" title="特殊章节：重排编号时忽略">特殊</span>
                                                     )}
+                                                    {hasChapterSynopsis(ch) && (
+                                                        <span className="gdocs-synopsis-badge" title="已有章节概要">概要</span>
+                                                    )}
                                                 </span>
                                                 {(ch.wordCount || 0) > 0 && (
                                                     <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>
@@ -1105,6 +3041,14 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                                 )}
                                             </span>
                                             <div className="gdocs-tab-actions">
+                                                <button
+                                                    className={`gdocs-tab-action-btn synopsis${hasChapterSynopsis(ch) ? ' active' : ''}`}
+                                                    title={hasChapterSynopsis(ch) ? '编辑章节概要' : '添加章节概要'}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleOpenSynopsis(ch.id);
+                                                    }}
+                                                ><FileText size={14} /></button>
                                                 <button
                                                     className="gdocs-tab-action-btn"
                                                     title="在此后插入章节"
@@ -1227,13 +3171,35 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         <button className="dropdown-item" onClick={() => { setRenameId(contextMenu.id); const ch = chapters.find(c => c.id === contextMenu.id); setRenameTitle(ch?.title || ''); setContextMenu(null); }}>{t('sidebar.contextRename')}</button>
                         <button className="dropdown-item" onClick={() => { const ch = chapters.find(c => c.id === contextMenu.id); if (ch) exportWorkAsMarkdown([ch], ch.title); setContextMenu(null); }}>{t('sidebar.contextExport')}</button>
                         {chapters.find(c => c.id === contextMenu.id)?.type !== 'volume' && (
-                            <button className="dropdown-item" onClick={() => { handleToggleSpecialChapter(contextMenu.id); setContextMenu(null); }}>
-                                {chapters.find(c => c.id === contextMenu.id)?.numberingIgnored ? '取消特殊章节' : '设为特殊章节'}
-                            </button>
+                            <>
+                                <button className="dropdown-item" onClick={() => { handleOpenSynopsis(contextMenu.id); setContextMenu(null); }}>
+                                    章节概要
+                                </button>
+                                <button className="dropdown-item" onClick={() => { handleToggleSpecialChapter(contextMenu.id); setContextMenu(null); }}>
+                                    {chapters.find(c => c.id === contextMenu.id)?.numberingIgnored ? '取消特殊章节' : '设为特殊章节'}
+                                </button>
+                            </>
                         )}
                         <button className="dropdown-item danger" onClick={() => handleDeleteChapter(contextMenu.id)}>{t('sidebar.contextDelete')}</button>
                     </div>
                 </div>
+            )}
+            {synopsisOverviewModal && (
+                <ChapterSynopsisOverviewModal
+                    chapters={chapters}
+                    activeChapterId={activeChapterId}
+                    activeWorkId={activeWorkId}
+                    initialView={synopsisOverviewModal.view || 'saved'}
+                    initialChapterId={synopsisOverviewModal.chapterId}
+                    memoryGroups={memoryGroups}
+                    onToggleLock={handleToggleSynopsisLock}
+                    onChapterUpdated={updateChapterStore}
+                    onMemoryGroupsSaved={handleSaveOverviewMemoryGroups}
+                    onCopyAll={handleCopyAllSynopsis}
+                    onApplyContext={handleApplySynopsisContext}
+                    showToast={showToast}
+                    onClose={() => setSynopsisOverviewModal(null)}
+                />
             )}
             {/* ===== 导入作品弹窗 ===== */}
             {importModal && (

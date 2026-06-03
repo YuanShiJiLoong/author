@@ -1,24 +1,21 @@
-## v1.2.35 — 完善 WebDAV 同步与 AI 存档管理
+## v1.2.36 — 新增章节概要中心与上下文优化
 
 ### 中文
 
 #### 桌面端 / Web
 
-- WebDAV 同步目录现在会先通过 `PROPFIND` 判断是否存在，不存在时才执行 `MKCOL`，避免目录已存在时被部分 WebDAV 服务返回 `409` 后误报失败。
-- WebDAV 目录请求统一使用尾部 `/`，兼容自建 WebDAV、坚果云、NAS、Nextcloud 等对 collection 路径更严格的服务。
-- 修复桌面端 WebDAV 密码框留空保存或测试时可能清空已保存密码的问题；留空会继续保留本机已保存密码。
-- 局域网导入支持直接粘贴同步快照 JSON，适合没有局域网直连条件时手动迁移。
-- AI 助手「存档」Tab 新增删除操作，可清理不再需要的内联生成记录；帮助页同步补充复制和删除说明。
-- WebDAV 代理继续保留私网访问限制，公网部署不会代理访问 localhost 或内网地址。
+- 新增章节概要中心，统一管理单章概要、多章概要、概要分组和已保存概要，不再跳转到割裂的独立界面。
+- 章节列表、右键菜单和顶部“概要”入口现在都会打开同一个章节概要中心，可直接编辑、生成、保存、锁定和导出概要。
+- 多章概要支持任选章节组成概要组，也支持选择多个概要组后合并压缩，为后续生态阶段的长期上下文能力做准备。
+- 章节概要提示词升级为高保真总结：不限制输出 tokens，优先保留事件链、剧情颗粒度、结尾状态、续写注意和待回收信息。
+- AI 上下文注入增加章节概要与多章概要组来源，优先使用稳定概要压缩前文，减少重复正文带来的 token 浪费。
+- 优化 DeepSeek 等模型的缓存命中策略：稳定系统提示词和上下文结构，减少用户操作差异对缓存复用的影响。
+- 修复阅读/编辑字号调整后分页排版异常的问题，恢复更稳定的分页裁剪和页面布局表现。
+- 侧边栏自定义导航、API 模型自检、Firebase 离线诊断等细节继续优化，减少误选、误报和功能入口迷路。
 
 #### Android 端
 
-- Android 版本更新为 `1.2.35+1235`。
-- 移动端新增 WebDAV 同步和局域网同步设置，支持坚果云、123 云盘和自建 WebDAV 服务。
-- 移动端 WebDAV 同步同样改为先 `PROPFIND` 后按需 `MKCOL`，目录请求统一带尾部 `/`，提升自建 WebDAV 兼容性。
-- 个人页、同步状态页和同步指示器接入 Firebase、WebDAV、局域网三种同步方式的提示和入口。
-- 修复章节重排页面使用已废弃 `onReorder` API 的 analyze 提示，改用 `onReorderItem`。
-- 新增章节重排工具测试，覆盖新旧索引转换和筛选列表下的排序行为。
+- 本版本先保持移动端既有能力不变；章节概要生态能力先在桌面端打底，移动端后续跟进适配。
 
 ---
 
@@ -26,18 +23,15 @@
 
 #### Desktop / Web
 
-- WebDAV sync now checks directory existence with `PROPFIND` before creating collections with `MKCOL`, preventing false failures when existing directories return `409` on stricter WebDAV services.
-- WebDAV collection requests now consistently use trailing `/` paths for better compatibility with self-hosted WebDAV, Jianguoyun, NAS, and Nextcloud-style services.
-- Fixed saved WebDAV passwords being cleared when saving or testing with an empty password field; leaving the field blank now keeps the local saved password.
-- LAN import can now accept pasted sync snapshot JSON directly, making manual transfer possible when direct LAN access is unavailable.
-- Added delete actions to the AI Assistant Archive tab so old inline generation records can be cleaned up; Help documentation now mentions copy and delete actions.
-- The WebDAV proxy still keeps private-network safeguards, so public deployments cannot proxy localhost or private-network WebDAV targets.
+- Added a unified Chapter Synopsis Center for single-chapter summaries, multi-chapter summaries, summary groups, and saved summaries without jumping into separate workspaces.
+- Chapter list actions, context-menu actions, and the top “Synopsis” entry now all open the same center, where users can edit, generate, save, lock, and export summaries.
+- Multi-chapter summaries can be built from arbitrary chapter selections, and saved summary groups can be selected and merged into a further compressed group for future long-context workflows.
+- Upgraded synopsis prompts for high-fidelity chapter summarization: output tokens are not artificially capped, and the model is asked to preserve event chains, plot granularity, ending state, continuity notes, and unresolved threads.
+- AI context injection now includes chapter summaries and multi-chapter summary groups, using stable summaries to compress prior context and reduce repeated full-text token cost.
+- Improved cache-hit friendliness for DeepSeek-style models by stabilizing prompt and context structure across user operations.
+- Fixed pagination/layout regressions after changing editor font size by restoring the more stable page clipping and layout behavior.
+- Continued polish around custom sidebar navigation, API model self-check behavior, and Firebase offline diagnostics to reduce accidental selections, noisy errors, and fragmented feature entry points.
 
 #### Android
 
-- Android version is now `1.2.35+1235`.
-- Added mobile WebDAV sync and LAN sync settings, supporting Jianguoyun, 123 Cloud Drive, and self-hosted WebDAV services.
-- Mobile WebDAV sync now also uses `PROPFIND` before `MKCOL` and sends trailing `/` collection paths for better self-hosted WebDAV compatibility.
-- Profile, sync status, and sync indicator surfaces now expose Firebase, WebDAV, and LAN sync options.
-- Fixed Flutter analyze warnings from deprecated `onReorder` usage by switching chapter reorder pages to `onReorderItem`.
-- Added chapter reorder utility tests covering index conversion and filtered-list reorder behavior.
+- Mobile behavior is unchanged in this release; the chapter synopsis ecosystem is landing on desktop first and will be adapted to mobile later.

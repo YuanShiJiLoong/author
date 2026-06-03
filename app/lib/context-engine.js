@@ -5,6 +5,8 @@ import { getChapters } from './storage';
 import { getProjectSettings, getSettingsNodes, getWritingMode, getActiveWorkId } from './settings';
 import { getEmbedding, cosineSimilarity } from './embeddings';
 import { estimateTokenCount } from 'tokenx';
+import { buildChapterSynopsisBriefText, buildChapterSynopsisText, hasChapterSynopsis, stripChapterHtml } from './chapter-synopsis';
+import { buildChapterMemoryGroupText, getChapterMemoryGroups, hasChapterMemoryGroup } from './chapter-memory-groups';
 
 // ==================== Graph RAG 智能推荐 ====================
 
@@ -77,8 +79,12 @@ const PRIORITY = {
     locations: 7,      // 地点
     objects: 8,        // 物品
     customSettings: 9, // 自定义设定
+    previousChapterAnchor: 2.5, // 上一章原文——文风与承接锚点
     previousChapters: 10, // 前文回顾（最容易截断）
 };
+
+const CHAPTER_GROUP_SIZE = 5;
+const PREVIOUS_CHAPTER_ANCHOR_ID = 'chapter-previous-anchor';
 
 /**
  * 获取上下文可勾选条目列表（供「📚 参考」Tab 使用） (Async)
@@ -154,27 +160,72 @@ export async function getContextItems(activeChapterId, chaptersOverride, workId 
         });
     }
 
-    // 章节条目 — 显示全部章节
+    const previousEntry = getPreviousRealChapterEntry(chapters, currentIndex);
+    const previousAnchorChapterId = previousEntry?.chapter?.id || null;
+    const memoryGroups = await getChapterMemoryGroups(targetWorkId);
+    const relevantMemoryGroups = getRelevantMemoryGroups(memoryGroups, chapters, currentIndex);
+    const defaultMemoryGroups = relevantMemoryGroups.filter(group => group.enabledByDefault);
+    const memoryCoveredChapterIds = getCoveredChapterIds(defaultMemoryGroups);
+    const olderGroups = getPreviousChapterGroups(chapters, currentIndex);
+
+    for (const group of relevantMemoryGroups) {
+        items.push({
+            id: `memory-group-${group.id}`,
+            group: '章节',
+            name: `${group.name || '未命名记忆组'}（自定义多章节概要）`,
+            tokens: estimateTokens(buildMemoryGroupContext(group, chapters)),
+            category: 'chapterMemoryGroup',
+            enabled: group.enabledByDefault,
+            _groupId: group.id,
+        });
+    }
+
+    for (const group of olderGroups) {
+        items.push({
+            id: group.id,
+            group: '章节',
+            name: group.label,
+            tokens: estimateTokens(buildChapterGroupContext(group)),
+            category: 'chapterGroup',
+            enabled: !isChapterGroupCovered(group, memoryCoveredChapterIds),
+        });
+    }
+
+    if (previousEntry) {
+        items.push({
+            id: PREVIOUS_CHAPTER_ANCHOR_ID,
+            group: '章节',
+            name: `第${previousEntry.ordinal}章「${previousEntry.chapter.title}」（上一章原文·文风锚点）`,
+            tokens: estimateTokens(buildPreviousChapterAnchorContext(chapters, currentIndex)),
+            category: 'previousChapterAnchor',
+            enabled: true,
+            alwaysInclude: true,
+            _chapterId: previousEntry.chapter.id,
+        });
+    }
+
+    // 章节条目 — 单章精查项仍可手动勾选
     chapters.forEach((ch, i) => {
-        const text = stripHtml(ch.content || '');
+        if ((ch.type || 'chapter') === 'volume') return;
         if (i === currentIndex) {
             // 当前章节
             items.push({
                 id: `chapter-current`,
                 group: '章节',
                 name: `${ch.title}（当前）`,
-                tokens: estimateTokens(buildCurrentContext(ch, i, chapters.length)),
+                tokens: estimateTokens(buildCurrentContext(ch, getChapterOrdinal(chapters, i), getRealChapterCount(chapters))),
                 category: 'currentChapter',
                 enabled: true,
             });
         } else {
+            if (ch.id === previousAnchorChapterId) return;
             items.push({
                 id: `chapter-${ch.id}`,
                 group: '章节',
-                name: `${ch.title}${i > currentIndex ? '（后续）' : ''}`,
-                tokens: estimateTokens(text),
+                name: `${ch.title}${hasChapterSynopsis(ch) ? '（概要）' : ''}${i > currentIndex ? '（后续）' : ''}`,
+                tokens: estimateTokens(buildChapterReferenceContext(ch, getChapterOrdinal(chapters, i))),
                 category: 'chapter',
-                enabled: i < currentIndex, // 前文章节默认启用，后续章节默认不启用
+                enabled: false, // 默认由多章节概要 + 上一章原文锚点接管，需要精查时再手动勾选
             });
         }
     });
@@ -194,6 +245,7 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
     const chapters = await getChapters(targetWorkId);
     const currentChapter = chapters.find(ch => ch.id === activeChapterId);
     const currentIndex = chapters.findIndex(ch => ch.id === activeChapterId);
+    const memoryGroups = await getChapterMemoryGroups(targetWorkId);
 
     // 从树形节点读取设定（过滤掉禁用项，并按当前作品过滤）
     // getSettingsNodes() 已按当前作品过滤
@@ -279,10 +331,11 @@ export async function buildContext(activeChapterId, selectedText, selectedIds = 
         writingRules: buildRulesContext(finalItemNodes.filter(n => n.category === 'rules')),
         customSettings: buildCustomContext(finalItemNodes.filter(n => n.category === 'custom'), nodes),
         previousChapters: selectedIds
-            ? buildPreviousContextFiltered(chapters, currentIndex, selectedIds)
-            : buildPreviousContext(chapters, currentIndex),
+            ? buildPreviousContextFiltered(chapters, currentIndex, selectedIds, memoryGroups)
+            : buildPreviousContext(chapters, currentIndex, memoryGroups),
+        previousChapterAnchor: buildPreviousChapterAnchorContext(chapters, currentIndex),
         currentChapter: (!selectedIds || selectedIds.has('chapter-current'))
-            ? buildCurrentContext(currentChapter, currentIndex, chapters.length)
+            ? buildCurrentContext(currentChapter, getChapterOrdinal(chapters, currentIndex), getRealChapterCount(chapters))
             : '',
     };
 
@@ -325,7 +378,11 @@ function applyTokenBudget(modules, inputTokenBudget = DEFAULT_INPUT_TOKEN_BUDGET
             // 截断：按比例保留
             const ratio = remaining / entry.tokens;
             const keepChars = Math.floor(entry.text.length * ratio * 0.9); // 留10%余量
-            result[entry.key] = entry.text.slice(0, keepChars) + '\n…（因 token 限制，部分内容已省略）';
+            if (entry.key === 'previousChapterAnchor') {
+                result[entry.key] = '…（因 token 限制，仅保留上一章末尾作为文风与承接锚点）\n' + entry.text.slice(-keepChars);
+            } else {
+                result[entry.key] = entry.text.slice(0, keepChars) + '\n…（因 token 限制，部分内容已省略）';
+            }
             remaining = 0;
         } else {
             result[entry.key] = ''; // 预算耗尽
@@ -340,9 +397,17 @@ function applyTokenBudget(modules, inputTokenBudget = DEFAULT_INPUT_TOKEN_BUDGET
  */
 export async function getContextPreview(activeChapterId, selectedText) {
     const settings = getProjectSettings();
-    const chapters = await getChapters(getActiveWorkId());
+    const targetWorkId = getActiveWorkId();
+    const chapters = await getChapters(targetWorkId);
     const currentChapter = chapters.find(ch => ch.id === activeChapterId);
     const currentIndex = chapters.findIndex(ch => ch.id === activeChapterId);
+    const memoryGroups = await getChapterMemoryGroups(targetWorkId);
+    const relevantMemoryGroups = getRelevantMemoryGroups(memoryGroups, chapters, currentIndex)
+        .filter(group => group.enabledByDefault);
+    const memoryCoveredChapterIds = getCoveredChapterIds(relevantMemoryGroups);
+    const previousAutoGroups = getPreviousChapterGroups(chapters, currentIndex);
+    const enabledPreviousAutoGroups = previousAutoGroups
+        .filter(group => !isChapterGroupCovered(group, memoryCoveredChapterIds));
 
     // getSettingsNodes() 已按当前作品过滤
     const nodes = await getSettingsNodes();
@@ -408,18 +473,30 @@ export async function getContextPreview(activeChapterId, selectedText) {
         },
         {
             key: 'previousChapters',
-            label: '前文回顾',
-            count: Math.max(0, currentIndex),
-            totalCount: Math.max(0, currentIndex),
-            tokens: estimateTokens(buildPreviousContext(chapters, currentIndex)),
+            label: '前文概要',
+            count: currentIndex > 0
+                ? relevantMemoryGroups.length + enabledPreviousAutoGroups.length
+                : 0,
+            totalCount: currentIndex > 0
+                ? relevantMemoryGroups.length + enabledPreviousAutoGroups.length
+                : 0,
+            tokens: estimateTokens(buildPreviousContext(chapters, currentIndex, memoryGroups)),
             priority: PRIORITY.previousChapters,
+        },
+        {
+            key: 'previousChapterAnchor',
+            label: '上一章文风锚点',
+            count: getPreviousRealChapterEntry(chapters, currentIndex) ? 1 : 0,
+            totalCount: 1,
+            tokens: estimateTokens(buildPreviousChapterAnchorContext(chapters, currentIndex)),
+            priority: PRIORITY.previousChapterAnchor,
         },
         {
             key: 'currentChapter',
             label: '当前章节',
             count: currentChapter ? 1 : 0,
             totalCount: 1,
-            tokens: estimateTokens(buildCurrentContext(currentChapter, currentIndex, chapters.length)),
+            tokens: estimateTokens(buildCurrentContext(currentChapter, getChapterOrdinal(chapters, currentIndex), getRealChapterCount(chapters))),
             priority: PRIORITY.currentChapter,
         },
     ];
@@ -440,55 +517,60 @@ export async function getContextPreview(activeChapterId, selectedText) {
  * 将上下文编译成系统提示词
  */
 export function compileSystemPrompt(context, mode) {
-    const sections = [];
+    const stablePrefixSections = [];
+    const dynamicSections = [];
 
     // 优先使用用户自定义提示词，否则使用内置默认
     const settings = getProjectSettings();
     const rolePrompt = settings.customPrompt?.trim()
         ? settings.customPrompt.trim()
         : getModeRolePrompt(context.writingMode);
-    sections.push(rolePrompt);
+    stablePrefixSections.push(rolePrompt);
 
     if (context.bookInfo) {
-        sections.push(`【作品信息】\n${context.bookInfo}`);
-    }
-    if (context.characters) {
-        sections.push(`【人物档案】\n以下是本作品中的重要角色，写作时必须严格遵循他们的设定：\n${context.characters}`);
-    }
-    if (context.locations) {
-        sections.push(`【空间/地点】\n以下是本作品中的重要场所：\n${context.locations}`);
-    }
-    if (context.worldbuilding) {
-        sections.push(`【世界观设定】\n以下是本作品的世界观，所有内容必须在这个框架内：\n${context.worldbuilding}`);
-    }
-    if (context.objects) {
-        sections.push(`【物品/道具】\n以下是本作品中的重要物品：\n${context.objects}`);
-    }
-    if (context.plotOutline) {
-        sections.push(`【剧情大纲】\n${context.plotOutline}`);
-    }
-    if (context.writingRules) {
-        sections.push(`【写作规则——必须严格遵守】\n${context.writingRules}`);
-    }
-    if (context.customSettings) {
-        sections.push(`【补充设定】\n${context.customSettings}`);
+        stablePrefixSections.push(`【作品信息】\n${context.bookInfo}`);
     }
     if (context.previousChapters) {
-        sections.push(`【前文回顾】\n以下是之前章节的主要内容，续写时必须保持连贯：\n${context.previousChapters}`);
-    }
-    if (context.currentChapter) {
-        sections.push(`【当前写作位置】\n${context.currentChapter}`);
+        stablePrefixSections.push(`【前文概要】\n以下是较早章节的多章节概要，续写时必须保持情节、人物与设定连续：\n${context.previousChapters}`);
     }
 
-    // 在 chat 模式下注入设定索引，让 AI 知道所有条目
+    // 在 chat 模式下注入设定索引，让 AI 知道所有条目。索引通常比勾选详情更稳定，前置有利于 DeepSeek 前缀缓存。
     if (mode === 'chat' && context.settingsIndex) {
-        sections.push(`【设定集条目索引】\n以下是当前作品的全部设定条目列表（包括已禁用的），当用户询问"有哪些角色/设定"或要求查找、删除条目时，请参考此列表：\n${context.settingsIndex}`);
+        stablePrefixSections.push(`【设定集条目索引】\n以下是当前作品的全部设定条目列表（包括已禁用的），当用户询问"有哪些角色/设定"或要求查找、删除条目时，请参考此列表：\n${context.settingsIndex}`);
+    }
+    if (context.previousChapterAnchor) {
+        stablePrefixSections.push(`【上一章原文——文风与承接锚点】\n以下内容位于稳定前文块的末尾，用于继承最近章节的语言节奏、叙事密度和情绪余韵。不要重复上一章剧情，只延续其风格与承接关系：\n${context.previousChapterAnchor}`);
+    }
+
+    if (context.characters) {
+        dynamicSections.push(`【人物档案】\n以下是本作品中的重要角色，写作时必须严格遵循他们的设定：\n${context.characters}`);
+    }
+    if (context.locations) {
+        dynamicSections.push(`【空间/地点】\n以下是本作品中的重要场所：\n${context.locations}`);
+    }
+    if (context.worldbuilding) {
+        dynamicSections.push(`【世界观设定】\n以下是本作品的世界观，所有内容必须在这个框架内：\n${context.worldbuilding}`);
+    }
+    if (context.objects) {
+        dynamicSections.push(`【物品/道具】\n以下是本作品中的重要物品：\n${context.objects}`);
+    }
+    if (context.plotOutline) {
+        dynamicSections.push(`【剧情大纲】\n${context.plotOutline}`);
+    }
+    if (context.writingRules) {
+        dynamicSections.push(`【写作规则——必须严格遵守】\n${context.writingRules}`);
+    }
+    if (context.customSettings) {
+        dynamicSections.push(`【补充设定】\n${context.customSettings}`);
+    }
+    if (context.currentChapter) {
+        dynamicSections.push(`【当前写作位置】\n${context.currentChapter}`);
     }
 
     const modeInstruction = getModeInstruction(mode);
-    sections.push(`【你的任务】\n${modeInstruction}`);
+    dynamicSections.push(`【你的任务】\n${modeInstruction}`);
 
-    return sections.join('\n\n---\n\n');
+    return [...stablePrefixSections, ...dynamicSections].join('\n\n---\n\n');
 }
 
 /**
@@ -619,36 +701,200 @@ function getNodePathStr(node, allNodes) {
     return path.join(' / ');
 }
 
-function buildPreviousContext(chapters, currentIndex) {
-    if (currentIndex <= 0) return '';
+function getChapterOrdinal(chapters, index) {
+    if (index < 0) return 0;
+    return chapters
+        .slice(0, index + 1)
+        .filter(ch => (ch.type || 'chapter') !== 'volume').length;
+}
 
-    const prevChapters = chapters.slice(0, currentIndex);
+function getRealChapterCount(chapters) {
+    return Array.isArray(chapters)
+        ? chapters.filter(ch => (ch.type || 'chapter') !== 'volume').length
+        : 0;
+}
 
-    return prevChapters.map((ch, i) => {
-        const text = stripHtml(ch.content || '');
-        if (!text) return `第${i + 1}章「${ch.title}」：（空）`;
-        return `第${i + 1}章「${ch.title}」：\n${text}`;
-    }).join('\n\n');
+function getRealChapterEntries(chapters, endIndex = chapters.length) {
+    if (!Array.isArray(chapters)) return [];
+    return chapters
+        .map((chapter, index) => ({ chapter, index, ordinal: getChapterOrdinal(chapters, index) }))
+        .filter(entry => entry.index < endIndex && (entry.chapter.type || 'chapter') !== 'volume');
+}
+
+function getPreviousRealChapterEntry(chapters, currentIndex) {
+    if (currentIndex <= 0) return null;
+    const previousEntries = getRealChapterEntries(chapters, currentIndex);
+    return previousEntries.length > 0 ? previousEntries[previousEntries.length - 1] : null;
+}
+
+function getPreviousChapterGroups(chapters, currentIndex) {
+    if (currentIndex <= 0) return [];
+    const previousEntries = getRealChapterEntries(chapters, currentIndex);
+    if (previousEntries.length <= 1) return [];
+
+    const olderEntries = previousEntries.slice(0, -1);
+    const groups = [];
+    for (let i = 0; i < olderEntries.length; i += CHAPTER_GROUP_SIZE) {
+        const entries = olderEntries.slice(i, i + CHAPTER_GROUP_SIZE);
+        const first = entries[0];
+        const last = entries[entries.length - 1];
+        groups.push({
+            id: `chapter-group-${first.chapter.id}-${last.chapter.id}`,
+            entries,
+            label: `第${first.ordinal}-${last.ordinal}章多章节概要`,
+        });
+    }
+    return groups;
+}
+
+function getRelevantMemoryGroups(memoryGroups, chapters, currentIndex) {
+    if (!Array.isArray(memoryGroups) || currentIndex <= 0) return [];
+    const chapterIndexMap = new Map((chapters || []).map((chapter, index) => [chapter.id, index]));
+    const previousEntry = getPreviousRealChapterEntry(chapters, currentIndex);
+    const previousAnchorIndex = previousEntry?.index ?? currentIndex;
+
+    return memoryGroups
+        .filter(group => hasChapterMemoryGroup(group) && group.chapterIds?.some(id => chapterIndexMap.has(id)))
+        .map(group => {
+            const indexes = group.chapterIds
+                .map(id => chapterIndexMap.get(id))
+                .filter(index => Number.isInteger(index));
+            const maxIndex = indexes.length ? Math.max(...indexes) : Infinity;
+            const minIndex = indexes.length ? Math.min(...indexes) : Infinity;
+            return {
+                ...group,
+                enabledByDefault: indexes.length > 0 && minIndex >= 0 && maxIndex < previousAnchorIndex,
+            };
+        });
+}
+
+function buildMemoryGroupContext(group, chapters) {
+    const text = buildChapterMemoryGroupText(group, chapters);
+    if (!text) return '';
+    return `【自定义多章节概要组】\n${text}`;
+}
+
+function getCoveredChapterIds(groups) {
+    return new Set((Array.isArray(groups) ? groups : [])
+        .flatMap(group => Array.isArray(group.chapterIds) ? group.chapterIds : []));
+}
+
+function isChapterGroupCovered(group, coveredChapterIds) {
+    if (!group?.entries?.length || !(coveredChapterIds instanceof Set)) return false;
+    return group.entries.every(entry => coveredChapterIds.has(entry.chapter.id));
+}
+
+function buildRawChapterFallbackDigest(chapter, chapterNumber) {
+    const text = stripHtml(chapter.content || '').replace(/\s+/g, ' ').trim();
+    if (!text) return `第${chapterNumber}章「${chapter.title}」：暂无正文。`;
+
+    const head = text.slice(0, 320);
+    const tail = text.length > 640 ? text.slice(-320) : '';
+    const parts = [
+        `第${chapterNumber}章「${chapter.title}」：尚未生成章节概要，为节省上下文仅保留首尾线索。`,
+        `开头线索：${head}`,
+    ];
+    if (tail) parts.push(`结尾线索：${tail}`);
+    return parts.join('\n');
+}
+
+function buildCompactChapterMemory(chapter, chapterNumber) {
+    const synopsisText = hasChapterSynopsis(chapter) ? buildChapterSynopsisBriefText(chapter) : '';
+    if (synopsisText) {
+        return `第${chapterNumber}章「${chapter.title}」：\n${synopsisText}`;
+    }
+    return buildRawChapterFallbackDigest(chapter, chapterNumber);
+}
+
+function buildChapterGroupContext(group) {
+    if (!group?.entries?.length) return '';
+    const first = group.entries[0];
+    const last = group.entries[group.entries.length - 1];
+    const missingCount = group.entries.filter(entry => !hasChapterSynopsis(entry.chapter)).length;
+    const missingNote = missingCount > 0
+        ? `\n提示：其中 ${missingCount} 章尚未生成单章概要，仅使用首尾线索占位；建议补全概要以提高前情准确度。`
+        : '';
+    return [
+        `第${first.ordinal}-${last.ordinal}章「${first.chapter.title}」至「${last.chapter.title}」（多章节概要）${missingNote}`,
+        group.entries.map(entry => buildCompactChapterMemory(entry.chapter, entry.ordinal)).join('\n\n'),
+    ].join('\n');
+}
+
+function buildChapterReferenceContext(chapter, chapterNumber) {
+    const synopsisText = hasChapterSynopsis(chapter) ? buildChapterSynopsisText(chapter) : '';
+    if (synopsisText) {
+        return `第${chapterNumber}章「${chapter.title}」（章节概要）：\n${synopsisText}`;
+    }
+
+    const text = stripHtml(chapter.content || '');
+    if (!text) return `第${chapterNumber}章「${chapter.title}」：（空）`;
+    return `第${chapterNumber}章「${chapter.title}」：\n${text}`;
+}
+
+function buildPreviousContext(chapters, currentIndex, memoryGroups = []) {
+    const customGroups = getRelevantMemoryGroups(memoryGroups, chapters, currentIndex)
+        .filter(group => group.enabledByDefault);
+    const coveredChapterIds = getCoveredChapterIds(customGroups);
+    const groups = getPreviousChapterGroups(chapters, currentIndex);
+    const fallbackGroups = groups.filter(group => !isChapterGroupCovered(group, coveredChapterIds));
+    const parts = [
+        ...customGroups.map(group => buildMemoryGroupContext(group, chapters)),
+        ...fallbackGroups.map(group => buildChapterGroupContext(group)),
+    ].filter(Boolean);
+    return parts.join('\n\n');
 }
 
 // 按 selectedIds 过滤的章节上下文（包含用户手动勾选的所有章节，不限前后）
-function buildPreviousContextFiltered(chapters, currentIndex, selectedIds) {
-    const selected = chapters.filter((ch, i) => i !== currentIndex && selectedIds.has(`chapter-${ch.id}`));
-    if (selected.length === 0) return '';
+function buildPreviousContextFiltered(chapters, currentIndex, selectedIds, memoryGroups = []) {
+    const parts = [];
+    const includedChapterIds = new Set();
 
-    return selected.map((ch) => {
-        const i = chapters.indexOf(ch);
-        const text = stripHtml(ch.content || '');
-        if (!text) return `第${i + 1}章「${ch.title}」：（空）`;
-        return `第${i + 1}章「${ch.title}」：\n${text}`;
+    for (const group of getRelevantMemoryGroups(memoryGroups, chapters, currentIndex)) {
+        if (!selectedIds.has(`memory-group-${group.id}`)) continue;
+        parts.push(buildMemoryGroupContext(group, chapters));
+        group.chapterIds.forEach(id => includedChapterIds.add(id));
+    }
+
+    for (const group of getPreviousChapterGroups(chapters, currentIndex)) {
+        if (!selectedIds.has(group.id)) continue;
+        if (isChapterGroupCovered(group, includedChapterIds)) continue;
+        parts.push(buildChapterGroupContext(group));
+        group.entries.forEach(entry => includedChapterIds.add(entry.chapter.id));
+    }
+
+    const previousEntry = getPreviousRealChapterEntry(chapters, currentIndex);
+    const previousAnchorChapterId = previousEntry?.chapter?.id || null;
+    const selected = chapters.filter((ch, i) => {
+        if ((ch.type || 'chapter') === 'volume') return false;
+        if (i === currentIndex) return false;
+        if (ch.id === previousAnchorChapterId) return false;
+        if (includedChapterIds.has(ch.id)) return false;
+        return selectedIds.has(`chapter-${ch.id}`);
+    });
+
+    const selectedText = selected.map((ch) => {
+        const index = chapters.indexOf(ch);
+        return buildChapterReferenceContext(ch, getChapterOrdinal(chapters, index));
     }).join('\n\n');
+    if (selectedText) parts.push(selectedText);
+
+    return parts.join('\n\n');
 }
 
-function buildCurrentContext(chapter, index, totalChapters) {
+function buildPreviousChapterAnchorContext(chapters, currentIndex) {
+    const previousEntry = getPreviousRealChapterEntry(chapters, currentIndex);
+    if (!previousEntry) return '';
+
+    const text = stripHtml(previousEntry.chapter.content || '');
+    if (!text) return `第${previousEntry.ordinal}章「${previousEntry.chapter.title}」：（空）`;
+    return `第${previousEntry.ordinal}章「${previousEntry.chapter.title}」：\n${text}`;
+}
+
+function buildCurrentContext(chapter, chapterNumber, totalChapters) {
     if (!chapter) return '';
     const text = stripHtml(chapter.content || '');
     const parts = [
-        `当前章节：第${index + 1}章 / 共${totalChapters}章`,
+        `当前章节：第${chapterNumber}章 / 共${totalChapters}章`,
         `章节标题：「${chapter.title}」`,
     ];
     if (text) {
@@ -825,6 +1071,5 @@ function buildObjectsContext(objectNodes, allNodes) {
 
 // 去除HTML标签
 function stripHtml(html) {
-    if (!html) return '';
-    return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+    return stripChapterHtml(html);
 }

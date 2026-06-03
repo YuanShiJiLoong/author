@@ -1190,18 +1190,18 @@ export default function BookInfoPanel() {
                                 const c = isCustomFolder ? CAT_COLORS.custom : (CAT_COLORS[cat] || CAT_COLORS.custom);
                                 const builtInLabels = { character: '人物', location: '地点', world: '世界观', object: '物品', plot: '大纲', rules: '规则', custom: '自定义', bookInfo: '作品信息' };
                                 const label = isCustomFolder ? (stats.customFolderLabels[cat] || '自定义') : (stats.builtInFolderLabels?.[cat] || builtInLabels[cat] || cat);
-                                const handleClick = () => {
-                                    setShowBookInfo(false);
-                                    setTimeout(() => {
-                                        const realCat = isCustomFolder ? 'custom' : cat;
-                                        useAppStore.getState().setOpenCategoryModal(realCat);
-                                    }, 80);
-                                };
                                 // 获取该分类的根文件夹 ID
                                 const workId = getActiveWorkId();
                                 const rootFolder = isCustomFolder
                                     ? nodes.find(n => n.id === cat.replace('custom__', ''))
                                     : nodes.find(n => (n.type === 'folder') && n.category === cat && n.parentId === workId);
+                                const handleClick = () => {
+                                    setShowBookInfo(false);
+                                    setTimeout(() => {
+                                        const realCat = isCustomFolder ? (rootFolder?.category || 'custom') : cat;
+                                        useAppStore.getState().setOpenCategoryModal(realCat);
+                                    }, 80);
+                                };
                                 return (
                                     <StatCard key={cat} label={label} value={count} icon={Icon} color={c.color} bg={c.bg} onClick={handleClick}
                                         onDelete={() => handleDeleteCat(cat, label, count, isCustomFolder, rootFolder?.id)}

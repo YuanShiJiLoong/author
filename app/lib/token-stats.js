@@ -26,6 +26,7 @@ export function getTokenRecords() {
  *   completionTokens: number,
  *   totalTokens: number,
  *   cachedTokens?: number,
+ *   cacheMissTokens?: number,
  *   durationMs: number,
  *   source: 'chat' | 'inline',
  *   provider?: string,
@@ -41,6 +42,7 @@ export function addTokenRecord(record) {
         completionTokens: record.completionTokens || 0,
         totalTokens: record.totalTokens || 0,
         cachedTokens: record.cachedTokens || 0,
+        cacheMissTokens: record.cacheMissTokens || 0,
         durationMs: record.durationMs || 0,
         source: record.source || 'chat',
         provider: record.provider || 'unknown',
@@ -89,6 +91,8 @@ export function getTokenStats() {
             totalPromptTokens: 0,
             totalCompletionTokens: 0,
             totalCachedTokens: 0,
+            totalCacheMissTokens: 0,
+            cacheHitRate: 0,
             avgSpeed: 0,
             rates: { tps: 0, tpm: 0, tph: 0, tpd: 0, rpm: 0, rph: 0, rpd: 0 },
             recentSpeeds: [],
@@ -110,6 +114,9 @@ export function getTokenStats() {
     const totalPromptTokens = records.reduce((s, r) => s + r.promptTokens, 0);
     const totalCompletionTokens = records.reduce((s, r) => s + r.completionTokens, 0);
     const totalCachedTokens = records.reduce((s, r) => s + (r.cachedTokens || 0), 0);
+    const totalCacheMissTokens = records.reduce((s, r) => s + (r.cacheMissTokens || 0), 0);
+    const cacheMeasuredTokens = totalCachedTokens + totalCacheMissTokens;
+    const cacheHitRate = cacheMeasuredTokens > 0 ? Math.round((totalCachedTokens / cacheMeasuredTokens) * 1000) / 10 : 0;
 
     // 平均速度（tokens/s）：用 completionTokens / durationMs
     const validSpeedRecords = records.filter(r => r.durationMs > 0 && r.completionTokens > 0);
@@ -160,13 +167,14 @@ export function getTokenStats() {
     for (const r of records) {
         const key = `${r.provider || 'unknown'}||${r.model || 'unknown'}`;
         if (!modelMap[key]) {
-            modelMap[key] = { provider: r.provider || 'unknown', model: r.model || 'unknown', tokens: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, requests: 0, totalDurationMs: 0, validSpeedCount: 0, speedSum: 0 };
+            modelMap[key] = { provider: r.provider || 'unknown', model: r.model || 'unknown', tokens: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cacheMissTokens: 0, requests: 0, totalDurationMs: 0, validSpeedCount: 0, speedSum: 0 };
         }
         const m = modelMap[key];
         m.tokens += r.totalTokens;
         m.promptTokens += r.promptTokens;
         m.completionTokens += r.completionTokens;
         m.cachedTokens += (r.cachedTokens || 0);
+        m.cacheMissTokens += (r.cacheMissTokens || 0);
         m.requests += 1;
         if (r.durationMs > 0 && r.completionTokens > 0) {
             m.speedSum += r.completionTokens / r.durationMs * 1000;
@@ -180,6 +188,8 @@ export function getTokenStats() {
         promptTokens: m.promptTokens,
         completionTokens: m.completionTokens,
         cachedTokens: m.cachedTokens,
+        cacheMissTokens: m.cacheMissTokens,
+        cacheHitRate: (m.cachedTokens + m.cacheMissTokens) > 0 ? Math.round((m.cachedTokens / (m.cachedTokens + m.cacheMissTokens)) * 1000) / 10 : 0,
         requests: m.requests,
         avgSpeed: m.validSpeedCount > 0 ? m.speedSum / m.validSpeedCount : 0,
         tokenPercent: totalTokens > 0 ? Math.round(m.tokens / totalTokens * 1000) / 10 : 0,
@@ -191,6 +201,8 @@ export function getTokenStats() {
         totalPromptTokens,
         totalCompletionTokens,
         totalCachedTokens,
+        totalCacheMissTokens,
+        cacheHitRate,
         avgSpeed,
         rates,
         recentSpeeds,

@@ -297,15 +297,16 @@ export function getProjectSettings() {
                     baseUrl: settings.apiConfig.baseUrl || '',
                     model: settings.apiConfig.model || '',
                     apiFormat: settings.apiConfig.apiFormat || '',
+                    models: [],
                 };
             }
         }
         // 自动迁移：为 providerConfigs 中的每个供应商补全 models 数组 + providerType
         if (settings.apiConfig?.providerConfigs) {
             for (const [key, cfg] of Object.entries(settings.apiConfig.providerConfigs)) {
-                if (!cfg.models) {
-                    // 首次迁移：models 字段不存在时，从当前活跃 model 初始化
-                    cfg.models = cfg.model ? [cfg.model] : [];
+                if (!Array.isArray(cfg.models)) {
+                    // models 只代表用户明确加入快切列表的模型；自检/迁移不自动勾选。
+                    cfg.models = [];
                 }
                 // 注意：不再自动将 cfg.model 注入 cfg.models，否则用户无法从快切列表中删除模型
                 // 自动迁移：补全 providerType 字段（多实例支持）

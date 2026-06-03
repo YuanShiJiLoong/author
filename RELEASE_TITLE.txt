@@ -1,1 +1,1 @@
-完善 WebDAV 同步与 AI 存档管理 | Improved WebDAV sync and AI archive management
+新增章节概要中心与上下文优化 | Added chapter synopsis center and context improvements

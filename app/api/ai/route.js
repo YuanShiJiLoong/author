@@ -54,6 +54,20 @@ function isDeepSeekThinkingMode(apiConfig, baseUrl, model, reasoningEffort) {
     return reasoningEffort !== 'none';
 }
 
+function getCachedPromptTokens(usage) {
+    if (!usage) return 0;
+    return usage.prompt_cache_hit_tokens
+        || usage.prompt_tokens_details?.cached_tokens
+        || 0;
+}
+
+function getCacheMissPromptTokens(usage, cachedTokens = getCachedPromptTokens(usage)) {
+    if (!usage) return 0;
+    if (usage.prompt_cache_miss_tokens != null) return usage.prompt_cache_miss_tokens;
+    const promptTokens = usage.prompt_tokens || 0;
+    return Math.max(0, promptTokens - cachedTokens);
+}
+
 function buildBaseParams({ model, maxTokens, temperature, topP, reasoningEffort }) {
     const isV4 = isDeepSeekV4Model(model);
     const thinkingType = isV4 ? (reasoningEffort === 'none' ? 'disabled' : 'enabled') : null;
@@ -125,6 +139,7 @@ export async function POST(request) {
 
         const baseParams = buildBaseParams({ model, maxTokens, temperature, topP, reasoningEffort });
         const keepReasoningContentForTools = isDeepSeekThinkingMode(apiConfig, baseUrl, model, reasoningEffort);
+        const shouldIncludeStreamUsage = toolsConfig?.webSearch || isDeepSeekRequest(apiConfig, baseUrl, model);
 
         const safeSystemPrompt = applyContentSafety(systemPrompt);
         const messages = [
@@ -216,6 +231,7 @@ export async function POST(request) {
                     body: JSON.stringify({
                         model, messages: extendedMessages, ...baseParams,
                         stream: true,
+                        ...(shouldIncludeStreamUsage ? { stream_options: { include_usage: true } } : {}),
                     }),
                 }, proxyUrl);
 
@@ -242,11 +258,14 @@ export async function POST(request) {
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: content })}\n\n`));
                     }
                     if (round1Data.usage) {
+                        const cachedTokens = getCachedPromptTokens(round1Data.usage);
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                             usage: {
                                 promptTokens: round1Data.usage.prompt_tokens || 0,
                                 completionTokens: round1Data.usage.completion_tokens || 0,
                                 totalTokens: round1Data.usage.total_tokens || 0,
+                                cachedTokens,
+                                cacheMissTokens: getCacheMissPromptTokens(round1Data.usage, cachedTokens),
                             }
                         })}\n\n`));
                     }
@@ -265,7 +284,7 @@ export async function POST(request) {
                 model, messages, ...baseParams,
                 ...(toolsConfig?.webSearch ? { web_search_options: { search_context_size: 'medium' } } : {}),
                 stream: true,
-                ...(toolsConfig?.webSearch ? { stream_options: { include_usage: true } } : {}),
+                ...(shouldIncludeStreamUsage ? { stream_options: { include_usage: true } } : {}),
             }),
         }, proxyUrl);
 
@@ -389,13 +408,14 @@ function streamWithGrounding(upstreamRes, preSources) {
 
                                 // usage 信息
                                 if (json.usage) {
-                                    const cachedTokens = json.usage.prompt_tokens_details?.cached_tokens || 0;
+                                    const cachedTokens = getCachedPromptTokens(json.usage);
                                     controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                                         usage: {
                                             promptTokens: json.usage.prompt_tokens || 0,
                                             completionTokens: json.usage.completion_tokens || 0,
                                             totalTokens: json.usage.total_tokens || 0,
                                             cachedTokens,
+                                            cacheMissTokens: getCacheMissPromptTokens(json.usage, cachedTokens),
                                         }
                                     })}\n\n`));
                                 }

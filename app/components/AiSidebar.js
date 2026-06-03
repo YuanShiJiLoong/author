@@ -783,6 +783,7 @@ export default function AiSidebar({ onInsertText }) {
                 completionTokens: usageData.completionTokens || 0,
                 totalTokens: usageData.totalTokens || 0,
                 cachedTokens: usageData.cachedTokens || 0,
+                cacheMissTokens: usageData.cacheMissTokens || 0,
                 durationMs,
                 source: 'chat',
                 provider: apiConfig?.provider || 'unknown',
@@ -848,8 +849,9 @@ export default function AiSidebar({ onInsertText }) {
             if (context.plotOutline) contextSnapshot['剧情大纲'] = context.plotOutline;
             if (context.writingRules) contextSnapshot['写作规则'] = context.writingRules;
             if (context.customSettings) contextSnapshot['补充设定'] = context.customSettings;
-            if (context.previousChapters) contextSnapshot['前文回顾'] = context.previousChapters;
+            if (context.previousChapters) contextSnapshot['前文概要'] = context.previousChapters;
             if (context.currentChapter) contextSnapshot['当前章节'] = context.currentChapter;
+            if (context.previousChapterAnchor) contextSnapshot['上一章文风锚点'] = context.previousChapterAnchor;
             contextSnapshot['对话历史'] = userPrompt;
 
             const aiPlaceholder = { id: aiMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], timestamp: Date.now(), _context: contextSnapshot, _rawRequest: null, _workId: targetWorkId };
@@ -1328,26 +1330,32 @@ export default function AiSidebar({ onInsertText }) {
     // Token 统计
     const totalSelectedTokens = useMemo(() => {
         return contextItems
-            .filter(it => contextSelection?.has(it.id))
+            .filter(it => it.alwaysInclude || contextSelection?.has(it.id))
             .reduce((sum, it) => sum + (it.tokens || 0), 0);
     }, [contextItems, contextSelection]);
 
     // 参考条目切换
     const toggleContextItem = useCallback((itemId) => {
+        const item = contextItems.find(it => it.id === itemId);
+        if (item?.alwaysInclude) return;
         setContextSelection(prev => {
             const next = new Set(prev);
             if (next.has(itemId)) next.delete(itemId);
             else next.add(itemId);
             return next;
         });
-    }, [setContextSelection]);
+    }, [contextItems, setContextSelection]);
 
     const toggleGroup = useCallback((groupName) => {
         const items = groupedItems[groupName] || [];
         setContextSelection(prev => {
             const next = new Set(prev);
-            const allChecked = items.every(it => prev.has(it.id));
+            const allChecked = items.every(it => it.alwaysInclude || prev.has(it.id));
             items.forEach(it => {
+                if (it.alwaysInclude) {
+                    next.add(it.id);
+                    return;
+                }
                 if (allChecked) next.delete(it.id);
                 else next.add(it.id);
             });
@@ -1370,8 +1378,8 @@ export default function AiSidebar({ onInsertText }) {
     }, [contextItems, setContextSelection]);
 
     const selectNone = useCallback(() => {
-        setContextSelection(new Set());
-    }, [setContextSelection]);
+        setContextSelection(new Set((contextItems || []).filter(it => it.alwaysInclude).map(it => it.id)));
+    }, [contextItems, setContextSelection]);
 
     const resetSelection = useCallback(() => {
         if (!contextItems) return;
@@ -2107,9 +2115,9 @@ export default function AiSidebar({ onInsertText }) {
                                 )}
                                 {Object.entries(groupedItems).map(([groupName, items]) => {
                                     const isCollapsed = collapsedGroups.has(groupName);
-                                    const checkedCount = items.filter(it => contextSelection?.has(it.id)).length;
+                                    const checkedCount = items.filter(it => it.alwaysInclude || contextSelection?.has(it.id)).length;
                                     const groupTokens = items
-                                        .filter(it => contextSelection?.has(it.id))
+                                        .filter(it => it.alwaysInclude || contextSelection?.has(it.id))
                                         .reduce((sum, it) => sum + it.tokens, 0);
                                     const allGroupChecked = checkedCount === items.length;
 
@@ -2148,8 +2156,9 @@ export default function AiSidebar({ onInsertText }) {
                                                         <label key={item.id} className="context-item">
                                                             <input
                                                                 type="checkbox"
-                                                                checked={contextSelection?.has(item.id) || false}
+                                                                checked={item.alwaysInclude || contextSelection?.has(item.id) || false}
                                                                 onChange={() => toggleContextItem(item.id)}
+                                                                disabled={item.alwaysInclude}
                                                                 className="context-item-check"
                                                             />
                                                             <span className="context-item-name" title={item.name}>

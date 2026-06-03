@@ -688,6 +688,9 @@ export default function SettingsPanel() {
         // 如果父节点是作品节点，创建文件夹（大分类）；否则创建条目
         // 注意：getSettingsNodes 不含 work 节点，parentId 存在但找不到 parent 说明是 work 节点
         const isParentWork = (parent && parent.type === 'work') || (parentId && !parent);
+        if (isParentWork && cat === 'custom') {
+            cat = 'custom-' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+        }
         const newNode = await addSettingsNode({
             name: isParentWork ? t('settings.newFolder') : t('settings.newItem'),
             type: isParentWork ? 'folder' : 'item',
@@ -2086,7 +2089,9 @@ function ApiConfigForm({ data, onChange }) {
                 baseUrl: data.baseUrl || '',
                 model: data.model || '',
                 apiFormat: data.apiFormat || '',
-                models: data.providerConfigs?.[data.provider]?.models || (data.model ? [data.model] : []),
+                models: Array.isArray(data.providerConfigs?.[data.provider]?.models)
+                    ? data.providerConfigs[data.provider].models
+                    : [],
                 providerType: curType,
             };
         }

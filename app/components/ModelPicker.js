@@ -307,7 +307,7 @@ export default function ModelPicker({ target = 'editor', onOpenSettings, classNa
                 pc[oldKey].baseUrl = settings.apiConfig.baseUrl || '';
                 pc[oldKey].model = settings.apiConfig.model || '';
                 pc[oldKey].apiFormat = settings.apiConfig.apiFormat || '';
-                if (!pc[oldKey].models) pc[oldKey].models = pc[oldKey].model ? [pc[oldKey].model] : [];
+                if (!Array.isArray(pc[oldKey].models)) pc[oldKey].models = [];
             }
             Object.assign(settings.apiConfig, newCfg);
             // 同步更新 chatApiConfig，确保 AI 助手对话也使用新切换的模型
