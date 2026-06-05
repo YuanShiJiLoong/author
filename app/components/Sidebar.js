@@ -801,6 +801,7 @@ function ChapterSynopsisOverviewModal({
     const [singleLocked, setSingleLocked] = useState(false);
     const [singleData, setSingleData] = useState(() => normalizeChapterSynopsis());
     const [singleBusy, setSingleBusy] = useState(false);
+    const [singleGeneratingId, setSingleGeneratingId] = useState('');
     const [singleError, setSingleError] = useState('');
     const [multiName, setMultiName] = useState('');
     const [multiDraft, setMultiDraft] = useState('');
@@ -910,6 +911,12 @@ function ChapterSynopsisOverviewModal({
         });
     };
 
+    const handleSelectSingleEntry = (entry) => {
+        if (!entry || singleBusy) return;
+        setSelectedId(entry.chapter.id);
+        setActiveView('single');
+    };
+
     const handleClearSingle = () => {
         setSingleDraft('');
         setSingleEnding('');
@@ -941,22 +948,30 @@ function ChapterSynopsisOverviewModal({
         }
     };
 
-    const handleGenerateSingle = async () => {
-        if (!selectedEntry) return;
-        if (singleLocked) {
+    const handleGenerateSingle = async (targetEntry = selectedEntry) => {
+        if (!targetEntry || singleBusy) return;
+        const isCurrentEntry = selectedEntry?.chapter.id === targetEntry.chapter.id;
+        const targetLocked = isCurrentEntry ? singleLocked : targetEntry.synopsis.locked;
+
+        setSelectedId(targetEntry.chapter.id);
+        setActiveView('single');
+
+        if (targetLocked) {
             showToast?.('当前概要已锁定，取消锁定后再生成', 'info');
             return;
         }
-        const plainText = stripChapterHtml(selectedEntry.chapter.content || '');
+        const plainText = stripChapterHtml(targetEntry.chapter.content || '');
         if (plainText.length < 20) {
             setSingleError('正文太短，暂时无法生成有效概要');
+            showToast?.('正文太短，暂时无法生成有效概要', 'info');
             return;
         }
         setSingleBusy(true);
+        setSingleGeneratingId(targetEntry.chapter.id);
         setSingleError('');
         try {
             const { apiConfig } = getProjectSettings();
-            const { systemPrompt, userPrompt } = buildSynopsisPrompts(selectedEntry.chapter);
+            const { systemPrompt, userPrompt } = buildSynopsisPrompts(targetEntry.chapter);
             const response = await fetch(resolveAiEndpoint(apiConfig), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -991,6 +1006,7 @@ function ChapterSynopsisOverviewModal({
             setSingleError(err?.message || '生成失败，请检查 API 配置');
         } finally {
             setSingleBusy(false);
+            setSingleGeneratingId('');
         }
     };
 
@@ -1330,6 +1346,7 @@ function ChapterSynopsisOverviewModal({
                                 }
                                 const { entry } = row;
                                 const selected = selectedEntry?.chapter.id === entry.chapter.id;
+                                const isSingleGeneratingEntry = singleGeneratingId === entry.chapter.id;
                                 const synopsisPreview = entry.hasSynopsis
                                     ? (entry.synopsis.summary || entry.synopsisText || '已有概要')
                                     : '尚未生成章节概要。';
@@ -1338,6 +1355,7 @@ function ChapterSynopsisOverviewModal({
                                         key={entry.chapter.id}
                                         className={`synopsis-row${selected ? ' selected' : ''}${entry.hasSynopsis ? '' : ' missing'}`}
                                         onClick={() => {
+                                            if (singleBusy) return;
                                             setSelectedId(entry.chapter.id);
                                             if (activeView === 'multi') toggleMultiChapter(entry.chapter.id);
                                         }}
@@ -1363,19 +1381,19 @@ function ChapterSynopsisOverviewModal({
                                         {entry.hasSynopsis && <span className="synopsis-row-source">{getSynopsisSourceLabel(entry.synopsis)}</span>}
                                         <span className="synopsis-row-time">{formatSynopsisTime(entry.synopsis.updatedAt || entry.synopsis.generatedAt)}</span>
                                         <div className="synopsis-row-actions" onClick={e => e.stopPropagation()}>
-                                            <button className="btn btn-ghost btn-sm" onClick={() => {
-                                                setSelectedId(entry.chapter.id);
-                                                setActiveView('single');
+                                            <button type="button" className="btn btn-ghost btn-sm" disabled={singleBusy} onClick={() => {
+                                                if (entry.hasSynopsis) {
+                                                    handleSelectSingleEntry(entry);
+                                                    return;
+                                                }
+                                                handleGenerateSingle(entry);
                                             }}>
-                                                {entry.hasSynopsis ? '编辑' : '生成'}
+                                                {isSingleGeneratingEntry ? '生成中...' : entry.hasSynopsis ? '编辑' : '生成'}
                                             </button>
-                                            <button className="btn btn-ghost btn-sm" onClick={() => {
-                                                setSelectedId(entry.chapter.id);
-                                                setActiveView('single');
-                                            }}>
-                                                重新生成
+                                            <button type="button" className="btn btn-ghost btn-sm" disabled={singleBusy} onClick={() => handleGenerateSingle(entry)}>
+                                                {isSingleGeneratingEntry ? '生成中...' : '重新生成'}
                                             </button>
-                                            <button className="btn btn-ghost btn-sm" onClick={() => onToggleLock(entry.chapter.id, !entry.synopsis.locked)}>
+                                            <button type="button" className="btn btn-ghost btn-sm" disabled={singleBusy} onClick={() => onToggleLock(entry.chapter.id, !entry.synopsis.locked)}>
                                                 {entry.synopsis.locked ? '解锁' : '锁定'}
                                             </button>
                                         </div>

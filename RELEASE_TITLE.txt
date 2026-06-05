@@ -1,1 +1,1 @@
-新增章节概要中心与上下文优化 | Added chapter synopsis center and context improvements
+完善移动端章节概要中心与夜间模式 | Mobile synopsis center and dark mode polish
