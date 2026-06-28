@@ -204,6 +204,26 @@ gh workflow run "Android APK to Author 1.2 Public Release" --repo YuanShiJiLoong
 
 20. （可选）下载 `.exe` 发到 QQ 群，或直接分享 Release 链接
 
+## 本地打包（归档 / 离线分发）
+
+21. **【发版流程最后一步】** CI 产物确认无误后，在本地额外打包一份与线上**同版本**的两端安装包，用于离线分发或归档。两端产物均被 `.gitignore` 忽略，不会进仓库：
+
+```powershell
+# 桌面端 Electron（清理 dist/.next → next build → electron-builder --win）
+npm run electron:build
+# 产物：dist\author-setup-X.Y.Z.exe
+
+# 移动端 Android APK（依赖本机 Flutter SDK + mobile/android/key.properties + keystore 签名）
+cd mobile
+flutter pub get
+flutter build apk --release
+cd ..
+# 产物：mobile\build\app\outputs\flutter-apk\app-release.apk
+```
+
+- **版本号校验（必须）**：两端本地产物的版本号必须与本次发版的 `X.Y.Z` 一致 —— 桌面读 `package.json` 的 `version`，移动读 `mobile/pubspec.yaml` 的 `version`。归档时建议把移动端产物重命名为 `author-mobile-vX.Y.Z.apk`。
+- 桌面与移动构建可并行（互不依赖）。本地构建依赖本机环境（Node + Flutter SDK + 签名 keystore），产物与 CI 一致；若只需线上分发，用 GitHub Release 的产物即可，此步可跳过。
+
 ## 注意事项
 
 - **版本号来源**：桌面端读取 `package.json` 的 `version` 字段，移动端读取 `mobile/pubspec.yaml` 的 `version` 字段。两者的版本号（X.Y.Z 部分）必须与 git tag 一致。
