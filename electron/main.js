@@ -150,6 +150,12 @@ function readLogTail(filePath, maxBytes = 2 * 1024 * 1024) {
     }
 }
 
+// Windows 按 AppUserModelID 认应用，须与安装器写入快捷方式的 appId 一致，
+// 否则“钉到任务栏的快捷方式”与“运行中的窗口”会被当成两个任务栏图标；也用于系统通知归属。
+if (process.platform === 'win32') {
+    app.setAppUserModelId('com.yuanshijilong.author');
+}
+
 // 防止多开
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {

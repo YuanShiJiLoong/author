@@ -26,7 +26,13 @@
 /out/
 
 # production
+# 注意：/build 同时是 electron-builder 的 buildResources 目录（图标、安装脚本等构建源资产）。
+# 这些源文件必须入库——否则 CI 干净 checkout 拿不到，桌面端图标会回退成默认 Electron 图标。
 /build
+!/build/
+/build/*
+!/build/icon.ico
+!/build/installer.nsh
 
 # misc
 .DS_Store
