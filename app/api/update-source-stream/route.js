@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { spawn } from 'child_process';
+import { assertUpdateToken } from '../../lib/update-source-auth';
 
 // 服务启动时记录的版本（Node require 缓存，不会变）
 const RUNNING_VERSION = (() => {
@@ -14,8 +15,17 @@ const RUNNING_VERSION = (() => {
  * POST /api/update-source-stream
  * SSE 流式更新源码：git pull → npm install → npm run build
  * 实时推送每个步骤的进度
+ * 安全：需通过 UPDATE_SOURCE_TOKEN 校验，避免匿名访客触发命令执行
  */
-export async function POST() {
+export async function POST(request) {
+    const authCheck = assertUpdateToken(request);
+    if (!authCheck.ok) {
+        return new Response(
+            JSON.stringify({ error: authCheck.error, code: authCheck.code }),
+            { status: authCheck.status, headers: { 'Content-Type': 'application/json' } }
+        );
+    }
+
     const cwd = process.cwd();
     const gitDir = join(cwd, '.git');
 
