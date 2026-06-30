@@ -7,6 +7,7 @@ export const maxDuration = 120;
 import { applyContentSafety } from '../../../lib/content-safety';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
+import { assertUpstreamUrl } from '../../../lib/upstream-guard';
 
 export async function POST(request) {
     try {
@@ -29,6 +30,15 @@ export async function POST(request) {
             return new Response(
                 JSON.stringify({ error: '请先填写 Gemini 原生 API 地址（通常以 /v1beta 结尾）', code: 'NO_BASE_URL_GEMINI' }),
                 { status: 400, headers: { 'Content-Type': 'application/json' } }
+            );
+        }
+
+        // SSRF 防护：校验用户可控的 baseUrl（仅放行公网 http/https；本机请求可放行私网）
+        const guard = assertUpstreamUrl(baseUrl, request);
+        if (!guard.ok) {
+            return new Response(
+                JSON.stringify({ error: guard.error, code: guard.code }),
+                { status: guard.status, headers: { 'Content-Type': 'application/json' } }
             );
         }
 

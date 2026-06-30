@@ -4,45 +4,28 @@ export const runtime = 'nodejs';
 
 import { proxyFetch } from '../../lib/proxy-fetch';
 import { rotateKey } from '../../lib/keyRotator';
+import { assertUpstreamUrl } from '../../lib/upstream-guard';
 
-function readErrorDetail(errorText) {
-    try {
-        const parsed = JSON.parse(errorText);
-        const detail = parsed?.error?.message || parsed?.errors?.message || parsed?.error || parsed?.errors || parsed?.message;
-        if (!detail) return errorText;
-        return typeof detail === 'string' ? detail : JSON.stringify(detail);
-    } catch {
-        return errorText;
-    }
-}
-
-async function embeddingErrorResponse(response, { provider, model }) {
-    const detail = readErrorDetail(await response.text());
-    let hint = '';
+// SSRF 防护：错误响应不再回显上游原始响应体，避免把内网服务返回内容泄露给客户端
+function safeEmbedFailure(status, { provider, model }) {
     let hintCode = '';
-
-    if (response.status === 401 || response.status === 403) {
-        hintCode = 'EMBED_HINT_AUTH';
-        hint = '请检查 Embedding API Key 是否正确，并确认该 Key 有调用当前嵌入模型的权限。';
-    } else if (response.status === 404) {
-        hintCode = 'EMBED_HINT_ADDR';
-        hint = '请检查 Embedding API 地址是否正确。OpenAI 兼容地址通常需要包含 /v1，最终会请求 /embeddings。';
-    } else if (response.status === 429) {
-        hintCode = 'EMBED_HINT_RATE';
-        hint = '请求过于频繁或额度不足，请稍后重试，或降低重建频率。';
-    }
-
-    const prefix = `${provider || 'Embedding'} 模型 ${model || '未指定'} 调用失败 (${response.status})`;
-    // 保留中文兜底全文（无 code 的消费方仍可读）；同时返回结构化字段供前端按 code 本地化
+    if (status === 401 || status === 403) hintCode = 'EMBED_HINT_AUTH';
+    else if (status === 404) hintCode = 'EMBED_HINT_ADDR';
+    else if (status === 429) hintCode = 'EMBED_HINT_RATE';
+    const hintMap = {
+        EMBED_HINT_AUTH: '请检查 Embedding API Key 是否正确，并确认该 Key 有调用当前嵌入模型的权限。',
+        EMBED_HINT_ADDR: '请检查 Embedding API 地址是否正确。OpenAI 兼容地址通常需要包含 /v1，最终会请求 /embeddings。',
+        EMBED_HINT_RATE: '请求过于频繁或额度不足，请稍后重试，或降低重建频率。',
+    };
+    const prefix = `${provider || 'Embedding'} 模型 ${model || '未指定'} 调用失败 (${status})`;
     return Response.json({
-        error: [prefix, detail, hint].filter(Boolean).join('：'),
+        error: [prefix, hintMap[hintCode]].filter(Boolean).join('：'),
         code: 'EMBED_CALL_FAILED',
         provider: provider || '',
         model: model || '',
-        status: response.status,
-        detail: detail || '',
+        status,
         hintCode,
-    }, { status: response.status });
+    }, { status });
 }
 
 function invalidEmbeddingResponse(provider, model) {
@@ -102,6 +85,12 @@ export async function POST(request) {
             ? (apiConfig.embedModel || getDefaultEmbeddingModel(provider))
             : (apiConfig.embedModel || getDefaultEmbeddingModel(provider));
 
+        // SSRF 防护：校验用户可控的 baseUrl（仅放行公网 http/https；本机请求可放行私网）
+        const guard = assertUpstreamUrl(baseUrl, request);
+        if (!guard.ok) {
+            return Response.json({ error: guard.error, code: guard.code }, { status: guard.status });
+        }
+
         if (!embedModelName) {
             return Response.json({ error: '请先选择或填写 Embedding 模型', code: 'NO_EMBED_MODEL' }, { status: 400 });
         }
@@ -146,7 +135,7 @@ export async function POST(request) {
         }
 
         if (lastErrorResponse) {
-            return embeddingErrorResponse(lastErrorResponse, { provider, model: embedModelName });
+            return safeEmbedFailure(lastErrorResponse.status, { provider, model: embedModelName });
         }
         return invalidEmbeddingResponse(provider, embedModelName);
     } catch (error) {

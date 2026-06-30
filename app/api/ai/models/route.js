@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
+import { assertUpstreamUrl } from '../../../lib/upstream-guard';
 
 // 通用模型列表拉取 — OpenAI 兼容 / Claude 兼容 / Gemini 原生
 export async function POST(request) {
@@ -17,16 +18,16 @@ export async function POST(request) {
 
         // Gemini 原生格式
         if (provider === 'gemini-native') {
-            return await fetchGeminiModels(apiKey, baseUrl, embedOnly, proxyUrl);
+            return await fetchGeminiModels(apiKey, baseUrl, embedOnly, proxyUrl, request);
         }
 
         // Claude 兼容格式
         if (provider === 'claude') {
-            return await fetchClaudeModels(apiKey, baseUrl, proxyUrl);
+            return await fetchClaudeModels(apiKey, baseUrl, proxyUrl, request);
         }
 
         // OpenAI 兼容格式（适用于所有其他供应商）
-        return await fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider, proxyUrl);
+        return await fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider, proxyUrl, request);
 
     } catch (error) {
         console.error('拉取模型列表错误:', error);
@@ -103,13 +104,19 @@ function normalizeOpenAIBaseUrl(rawBaseUrl) {
     return base;
 }
 
-async function fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider, proxyUrl) {
+async function fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider, proxyUrl, request) {
     const base = normalizeOpenAIBaseUrl(baseUrl);
     if (!base) {
         return NextResponse.json(
             { error: '请先填写 API 地址', code: 'NO_BASE_URL' },
             { status: 400 }
         );
+    }
+
+    // SSRF 防护：校验用户可控的 baseUrl（仅放行公网 http/https；本机请求可放行私网）
+    const guard = assertUpstreamUrl(base, request);
+    if (!guard.ok) {
+        return NextResponse.json({ error: guard.error, code: guard.code }, { status: guard.status });
     }
 
     const headers = {
@@ -226,10 +233,16 @@ async function handleFetchError(response) {
 }
 
 // Claude 兼容模型列表（Anthropic /v1/models 协议）
-async function fetchClaudeModels(apiKey, baseUrl, proxyUrl) {
+async function fetchClaudeModels(apiKey, baseUrl, proxyUrl, request) {
     const base = String(baseUrl || '').trim().replace(/\/+$/, '');
     if (!base) {
         return NextResponse.json({ error: '请先填写 Claude 兼容 API 地址', code: 'NO_BASE_URL_CLAUDE' }, { status: 400 });
+    }
+
+    // SSRF 防护：校验用户可控的 baseUrl（仅放行公网 http/https；本机请求可放行私网）
+    const guard = assertUpstreamUrl(base, request);
+    if (!guard.ok) {
+        return NextResponse.json({ error: guard.error, code: guard.code }, { status: guard.status });
     }
 
     const endpoint = base.endsWith('/v1') ? base + '/models?limit=100' : base + '/v1/models?limit=100';
@@ -266,10 +279,16 @@ async function fetchClaudeModels(apiKey, baseUrl, proxyUrl) {
 }
 
 // Gemini 原生格式模型列表 — 分页拉取（不内置官方默认地址，baseUrl 必填）
-async function fetchGeminiModels(apiKey, baseUrl, embedOnly, proxyUrl) {
+async function fetchGeminiModels(apiKey, baseUrl, embedOnly, proxyUrl, request) {
     const base = String(baseUrl || '').trim().replace(/\/+$/, '');
     if (!base) {
         return NextResponse.json({ error: '请先填写 Gemini 原生 API 地址（通常以 /v1beta 结尾）', code: 'NO_BASE_URL_GEMINI' }, { status: 400 });
+    }
+
+    // SSRF 防护：校验用户可控的 baseUrl（仅放行公网 http/https；本机请求可放行私网）
+    const guard = assertUpstreamUrl(base, request);
+    if (!guard.ok) {
+        return NextResponse.json({ error: guard.error, code: guard.code }, { status: guard.status });
     }
 
     let allModels = [];

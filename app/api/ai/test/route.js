@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
+import { assertUpstreamUrl } from '../../../lib/upstream-guard';
 
 const DEEPSEEK_V4_MODELS = new Set(['deepseek-v4-pro', 'deepseek-v4-flash']);
 
@@ -22,6 +23,11 @@ export async function POST(request) {
         }
         if (!baseUrl) {
             return NextResponse.json({ success: false, error: '请先填写兼容 API 地址', code: 'NO_BASE_URL_COMPAT' }, { status: 400 });
+        }
+        // SSRF 防护：校验用户可控的 baseUrl（仅放行公网 http/https；本机请求可放行私网）
+        const guard = assertUpstreamUrl(baseUrl, request);
+        if (!guard.ok) {
+            return NextResponse.json({ success: false, error: guard.error, code: guard.code }, { status: guard.status });
         }
         if (provider === 'claude' || apiFormat === 'anthropic') {
             return await testClaudeCompatible(apiKey, baseUrl, model, proxyUrl);

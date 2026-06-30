@@ -8,6 +8,7 @@ export const maxDuration = 120;
 import { applyContentSafety } from '../../lib/content-safety';
 import { proxyFetch } from '../../lib/proxy-fetch';
 import { rotateKey } from '../../lib/keyRotator';
+import { assertUpstreamUrl } from '../../lib/upstream-guard';
 
 // Function Calling 搜索工具定义
 const WEB_SEARCH_TOOL = {
@@ -135,6 +136,15 @@ export async function POST(request) {
             return new Response(
                 JSON.stringify({ error: '请先填写 OpenAI 兼容端点地址（通常以 /v1 结尾）', code: 'NO_BASE_URL_OPENAI' }),
                 { status: 400, headers: { 'Content-Type': 'application/json' } }
+            );
+        }
+
+        // SSRF 防护：校验用户可控的 baseUrl（仅放行公网 http/https；本机请求可放行私网）
+        const guard = assertUpstreamUrl(baseUrl, request);
+        if (!guard.ok) {
+            return new Response(
+                JSON.stringify({ error: guard.error, code: guard.code }),
+                { status: guard.status, headers: { 'Content-Type': 'application/json' } }
             );
         }
 
