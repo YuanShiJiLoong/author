@@ -793,7 +793,11 @@ export async function parsePdfToText(file) {
  */
 export function exportSettingsAsPdf(nodes) {
     const workNode = nodes.find(n => n.type === 'work');
-    const title = `${workNode?.name || '设定集'} — 设定集`;
+    // 转义作品名（用户可控），避免 </title> / </h1> 上下文逃逸执行脚本
+    const safeWorkName = String(workNode?.name || '设定集')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    const title = `${safeWorkName} — 设定集`;
 
     let html = '';
     const knownCategories = ['character', 'location', 'world', 'object', 'plot', 'rules'];
