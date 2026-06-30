@@ -2355,8 +2355,15 @@ function renderSimpleMarkdown(md) {
     // Blockquote
     html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
 
-    // Links [text](url)
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    // Links [text](url) — 仅允许 http/https/mailto 协议，拒绝 javascript:/data: 等可执行协议
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
+        const trimmedUrl = String(url || '').trim();
+        if (/^(https?:|mailto:)/i.test(trimmedUrl)) {
+            return `<a href="${trimmedUrl}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+        }
+        // 非白名单协议：去掉可执行性，仅保留可见文字
+        return text;
+    });
 
     // List items  
     html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
