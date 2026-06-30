@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../lib/proxy-fetch';
 import { rotateKey } from '../../lib/keyRotator';
+import { assertUpstreamUrl } from '../../lib/upstream-guard';
 
 export const runtime = 'nodejs';
 
@@ -19,6 +20,14 @@ export async function POST(request) {
         }
 
         const effectiveBaseUrl = (baseUrl || '').replace(/\/+$/, '');
+
+        // SSRF 防护：校验用户可控的 baseUrl（仅放行公网 http/https；本机请求可放行私网）
+        if (effectiveBaseUrl) {
+            const guard = assertUpstreamUrl(effectiveBaseUrl, request);
+            if (!guard.ok) {
+                return NextResponse.json({ error: guard.error, code: guard.code }, { status: guard.status });
+            }
+        }
 
         // 有专用接口的已知供应商列表
         const knownProviders = ['deepseek', 'siliconflow', 'moonshot'];

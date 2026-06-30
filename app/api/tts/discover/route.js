@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 
 import { proxyFetch } from '../../../lib/proxy-fetch';
+import { assertUpstreamUrl } from '../../../lib/upstream-guard';
 
 const OPENAI_COMMON_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'];
 const GEMINI_COMMON_VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Aoede', 'Leda', 'Orus', 'Zephyr'];
@@ -27,10 +28,19 @@ function joinUrl(baseUrl, suffix) {
     return `${baseUrl.replace(/\/+$/, '')}/${String(suffix || '').replace(/^\/+/, '')}`;
 }
 
-function discoveryRoot(provider, config) {
+function discoveryRoot(provider, config, request) {
     const raw = provider === 'gemini' ? config?.baseUrl : config?.endpoint;
-    const normalized = normalizeUrl(raw);
+    let normalized;
+    try {
+        normalized = normalizeUrl(raw);
+    } catch (e) {
+        // 地址格式/协议错误，统一抛出供上层 catch 返回
+        throw new Error(e.message || 'TTS 地址无效');
+    }
     if (!normalized) return '';
+    // SSRF 防护：拒绝私网/保留/元数据地址（本机请求可放行私网）
+    const guard = assertUpstreamUrl(normalized, request);
+    if (!guard.ok) throw new Error(guard.error);
     const url = new URL(normalized);
     let pathname = url.pathname.replace(/\/+$/, '');
     if (provider === 'gemini') {
@@ -46,8 +56,8 @@ function discoveryRoot(provider, config) {
     return url.toString().replace(/\/+$/, '');
 }
 
-function discoveryEndpoints(provider, config) {
-    const root = discoveryRoot(provider, config);
+function discoveryEndpoints(provider, config, request) {
+    const root = discoveryRoot(provider, config, request);
     if (!root) return { models: [], voices: [] };
     const rootPath = new URL(root).pathname.replace(/\/+$/, '');
     const hasVersion = /\/v\d+(?:beta\d*)?$/i.test(rootPath);
@@ -191,7 +201,7 @@ export async function POST(request) {
             return jsonError('请先填写此音源的 API Key');
         }
 
-        const endpoints = discoveryEndpoints(provider, config);
+        const endpoints = discoveryEndpoints(provider, config, request);
         if (endpoints.models.length === 0) return jsonError('请先填写 TTS 接口地址');
         const headers = requestHeaders(provider, config, apiKey);
         const modelResult = await fetchCandidates(endpoints.models, headers, config.proxyUrl, 'models');

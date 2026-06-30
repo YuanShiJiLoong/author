@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 
 import { proxyFetch } from '../../lib/proxy-fetch';
+import { assertUpstreamUrl } from '../../lib/upstream-guard';
 
 const GEMINI_MODEL = 'gemini-3.1-flash-tts-preview';
 
@@ -14,6 +15,15 @@ function normalizeUrl(value) {
     const url = new URL(raw);
     if (!['http:', 'https:'].includes(url.protocol)) throw new Error('TTS 地址只支持 HTTP 或 HTTPS');
     return url.toString().replace(/\/+$/, '');
+}
+
+// SSRF 防护：在 normalizeUrl 之上叠加主机校验，拒绝私网/保留/元数据地址
+function guardTtsUrl(value, request) {
+    const normalized = normalizeUrl(value);
+    if (!normalized) return '';
+    const guard = assertUpstreamUrl(normalized, request);
+    if (!guard.ok) throw new Error(guard.error);
+    return normalized;
 }
 
 function readPath(source, path) {
@@ -68,9 +78,14 @@ function audioResponse(buffer, contentType) {
     });
 }
 
-async function requestOpenAICompatible(input, config, apiKey) {
+async function requestOpenAICompatible(input, config, apiKey, request) {
     if (!apiKey) return errorResponse('请先在本机填写 OpenAI 兼容 API Key');
-    const endpoint = normalizeUrl(config.endpoint);
+    let endpoint;
+    try {
+        endpoint = guardTtsUrl(config.endpoint, request);
+    } catch (e) {
+        return errorResponse(e.message || 'OpenAI 兼容 TTS 地址无效');
+    }
     if (!endpoint) return errorResponse('请先填写 OpenAI 兼容 TTS 完整接口地址');
     const model = String(config.model || 'tts-1').trim();
     const voice = String(config.voice || 'alloy').trim();
@@ -99,9 +114,14 @@ async function requestOpenAICompatible(input, config, apiKey) {
     );
 }
 
-async function requestGemini(input, config, apiKey) {
+async function requestGemini(input, config, apiKey, request) {
     if (!apiKey) return errorResponse('请先在本机填写 Gemini 兼容 API Key');
-    const baseUrl = normalizeUrl(config.baseUrl);
+    let baseUrl;
+    try {
+        baseUrl = guardTtsUrl(config.baseUrl, request);
+    } catch (e) {
+        return errorResponse(e.message || 'Gemini 兼容 TTS 地址无效');
+    }
     if (!baseUrl) return errorResponse('请先填写 Gemini 兼容 API Base URL');
     const model = String(config.model || GEMINI_MODEL).trim();
     const voice = String(config.voice || 'Kore').trim();
@@ -140,8 +160,13 @@ function customHeaders(config, apiKey, provider) {
     return headers;
 }
 
-async function requestCustom(input, config, apiKey, provider) {
-    const endpoint = normalizeUrl(config.endpoint);
+async function requestCustom(input, config, apiKey, provider, request) {
+    let endpoint;
+    try {
+        endpoint = guardTtsUrl(config.endpoint, request);
+    } catch (e) {
+        return errorResponse(e.message || '兼容 TTS 地址无效');
+    }
     if (!endpoint) return errorResponse('请先填写兼容 TTS 完整接口地址');
     const authType = provider === 'anthropic-custom' ? 'x-api-key' : (config.authType || 'bearer');
     if (authType !== 'none' && !apiKey) return errorResponse('请先在本机填写此接口的 API Key');
@@ -176,9 +201,9 @@ export async function POST(request) {
         if (!input) return errorResponse('没有可朗读的文字');
         if (input.length > 5000) return errorResponse('单次朗读文字过长，请分段发送');
         if (!config.licenseConfirmed) return errorResponse('请先确认你拥有该音源及输出内容的使用授权');
-        if (provider === 'openai-compatible') return await requestOpenAICompatible(input, config, apiKey);
-        if (provider === 'gemini') return await requestGemini(input, config, apiKey);
-        if (provider === 'anthropic-custom' || provider === 'custom') return await requestCustom(input, config, apiKey, provider);
+        if (provider === 'openai-compatible') return await requestOpenAICompatible(input, config, apiKey, request);
+        if (provider === 'gemini') return await requestGemini(input, config, apiKey, request);
+        if (provider === 'anthropic-custom' || provider === 'custom') return await requestCustom(input, config, apiKey, provider, request);
         return errorResponse('不支持的 TTS 音源类型');
     } catch (error) {
         return errorResponse(error?.message || 'TTS 请求失败', 500);
