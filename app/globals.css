@@ -335,15 +335,26 @@ body {
 }
 
 .top-header-logo {
-  font-family: var(--font-writing);
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-
-.top-header-logo span {
-  color: var(--accent);
+.top-header-logo .brand-mark,
+.top-header-logo .brand-word {
+  display: block;
+  background-color: var(--text-primary);
+}
+.top-header-logo .brand-mark {
+  width: 22px;
+  height: 26px;
+  -webkit-mask: url("/brand/feather-logo.svg") center / contain no-repeat;
+  mask: url("/brand/feather-logo.svg") center / contain no-repeat;
+}
+.top-header-logo .brand-word {
+  width: 75px;
+  height: 32px;
+  -webkit-mask: url("/brand/author-wordmark.svg") left center / contain no-repeat;
+  mask: url("/brand/author-wordmark.svg") left center / contain no-repeat;
 }
 
 .top-header-right {
@@ -9608,7 +9619,6 @@ h5.chat-md-heading {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: fadeIn 0.2s ease;
 }
 
 .login-modal {
@@ -9823,6 +9833,47 @@ h5.chat-md-heading {
   gap: 6px;
 }
 
+.login-modal-code-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.login-modal-code-input {
+  flex: 1;
+  margin-bottom: 0;
+}
+.login-modal-code-btn {
+  flex-shrink: 0;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-family: var(--font-ui);
+}
+.login-modal-code-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+.login-modal-code-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.login-modal-code-notice {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: -4px;
+  margin-bottom: 12px;
+}
+.login-modal-code-notice.is-error {
+  color: #ef4444;
+}
+
 .login-modal-submit-btn {
   width: 100%;
   padding: 11px 20px;
@@ -9866,6 +9917,215 @@ h5.chat-md-heading {
 }
 .login-modal-switch button:hover {
   color: var(--accent-hover);
+}
+
+/* 主区：登录 / 注册切换 tab */
+.login-modal-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 16px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+}
+.login-modal-tab {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: all var(--transition-fast);
+}
+.login-modal-tab.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+.login-modal-tab:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+/* 主区底部：切到旧版 Firebase 的低调次入口 */
+.login-modal-alt-entry {
+  display: block;
+  width: 100%;
+  margin-top: 18px;
+  padding: 8px;
+  background: none;
+  border: none;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: color var(--transition-fast);
+}
+.login-modal-alt-entry:hover {
+  color: var(--accent);
+}
+
+/* 主区：其他登录方式占位（即将推出） */
+.login-modal-soon {
+  margin-top: 18px;
+}
+.login-modal-soon-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 8px;
+}
+.login-modal-soon-row {
+  display: flex;
+  gap: 8px;
+}
+.login-modal-soon-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 6px;
+  font-size: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  font-family: var(--font-ui);
+  opacity: 0.65;
+}
+/* ===== 同步方式选择弹窗 ===== */
+.sync-method-modal {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px 24px;
+  box-shadow: var(--shadow-lg);
+  animation: modalSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sync-method-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+.sync-method-title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.sync-method-desc {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.sync-method-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sync-method-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-ui);
+  transition: border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.sync-method-item:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+.sync-method-item-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--accent-light);
+  color: var(--accent);
+}
+.sync-method-item-body {
+  flex: 1;
+  min-width: 0;
+}
+.sync-method-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+.sync-method-item-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.sync-method-item-arrow {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+/* ===== 同步配置弹窗（WebDAV / 局域网） ===== */
+.sync-config-modal {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+  animation: modalSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sync-config-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.sync-config-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Firebase 次入口：返回主区 */
+.login-modal-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  margin-bottom: 8px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: color var(--transition-fast);
+}
+.login-modal-back:hover {
+  color: var(--text-primary);
 }
 
 .login-modal-terms {

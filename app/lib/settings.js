@@ -403,6 +403,7 @@ const DEFAULT_SETTINGS = {
         useCustomEmbed: false, // 是否使用独立的 Embedding API
         embedProvider: 'zhipu',
         embedApiKey: '',
+        embedReuseChatKey: true, // 向量 Key 留空时复用对话 Key；关闭后留空即真留空（本地无鉴权服务如 Ollama）
         embedBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
         embedModel: 'embedding-3',
         // 高级模型参数

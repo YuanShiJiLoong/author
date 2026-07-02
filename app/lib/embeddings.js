@@ -39,8 +39,10 @@ export async function getEmbedding(text, apiConfig, options = {}) {
     };
 
     if (!text || text.trim() === '') return null;
-    // 没有配置 Embedding Key 时静默跳过，不发请求
-    if (!apiConfig?.embedApiKey && !apiConfig?.embeddingApiKey && !apiConfig?.apiKey) {
+    // 没有配置 Embedding Key 时静默跳过，不发请求。
+    // 例外：独立向量供应商且关闭“复用对话 Key”时允许无 Key（本地服务如 Ollama）。
+    const allowKeylessEmbed = !!apiConfig?.useCustomEmbed && apiConfig?.embedReuseChatKey === false;
+    if (!allowKeylessEmbed && !apiConfig?.embedApiKey && !apiConfig?.embeddingApiKey && !apiConfig?.apiKey) {
         return fail(tt('未配置 Embedding API Key', 'Embedding API Key is not configured', 'Ключ Embedding API не настроен'));
     }
     // 如果上次失败的退避期还没过，直接跳过

@@ -124,6 +124,35 @@ function isFirebaseSignedIn() {
     return _authModule?.isSignedIn?.() || false;
 }
 
+// ==================== 自建服务器（Author Cloud）同步 ====================
+
+let _customReady = false;
+let _customSync = null;
+let _customAuthModule = null;
+
+// 懒加载自建服务器同步模块（仅当配置了服务器地址时）
+async function ensureCustomSync() {
+    if (_customReady) return _customSync;
+    try {
+        _customAuthModule = await import('./custom-auth');
+        if (!_customAuthModule.isCustomServerConfigured()) {
+            _customReady = true;
+            return null;
+        }
+        _customSync = await import('./custom-server-sync');
+        _customSync.bindLocalIO(persistGet, persistSet); // 注入本地读写，避免循环依赖
+        _customReady = true;
+        return _customSync;
+    } catch {
+        _customReady = true;
+        return null;
+    }
+}
+
+function isCustomSignedIn() {
+    return _customAuthModule?.isCustomSignedIn?.() || false;
+}
+
 function enqueuePortableSync(key, value, options = {}) {
     if (!isSyncableKey(key)) return;
     import('./portable-sync')
@@ -190,11 +219,15 @@ export async function persistSet(key, value) {
         if (awaitServerWrite) await serverWrite;
     }
 
-    // 3. Firebase 云同步（去抖队列，5分钟批量写入）
+    // 3. 云同步（去抖队列，5分钟批量写入）。单后端跟随登录：Firebase 或自建服务器
     if (isSyncableKey(key)) {
         const sync = await ensureFirebase();
         if (sync && isFirebaseSignedIn()) {
             sync.firestoreEnqueue(key, value);
+        }
+        const custom = await ensureCustomSync();
+        if (custom && isCustomSignedIn()) {
+            custom.customEnqueue(key);
         }
         enqueuePortableSync(key, value);
     }
@@ -213,11 +246,15 @@ export async function persistDel(key) {
         serverDel(key).catch(() => { });
     }
 
-    // Firebase 删除
+    // 云端删除（Firebase 或自建服务器）
     if (isSyncableKey(key)) {
         const sync = await ensureFirebase();
         if (sync && isFirebaseSignedIn()) {
             sync.firestoreDel(key).catch(() => { });
+        }
+        const custom = await ensureCustomSync();
+        if (custom && isCustomSignedIn()) {
+            custom.customDel(key);
         }
         enqueuePortableSync(key, null, { deleted: true });
     }
@@ -296,6 +333,13 @@ export async function initPersistence() {
         // 页面卸载前尝试同步
         sync.setupBeforeUnloadSync();
     }
+
+    // 初始化自建服务器 Auth（如果配置了服务器地址）
+    const custom = await ensureCustomSync();
+    if (custom && _customAuthModule) {
+        _customAuthModule.initCustomAuth();
+        custom.setupCustomBeforeUnloadSync();
+    }
 }
 
 /**
@@ -303,6 +347,9 @@ export async function initPersistence() {
  * @returns {Promise<number>} 合并的条数
  */
 export async function syncFromCloud() {
+    // 单后端跟随登录：优先自建服务器，否则 Firebase
+    const custom = await ensureCustomSync();
+    if (custom && isCustomSignedIn()) return await custom.pullFromCloud();
     const sync = await ensureFirebase();
     if (!sync || !isFirebaseSignedIn()) return 0;
     return await sync.pullAllFromCloud(persistGet, persistSet);
@@ -338,9 +385,12 @@ async function collectSyncableKeysForCloudPush() {
  * 这比 flush pending 更适合登录后补传已有本地稿件。
  */
 export async function syncToCloud() {
+    const keys = await collectSyncableKeysForCloudPush();
+    // 单后端跟随登录：优先自建服务器，否则 Firebase
+    const custom = await ensureCustomSync();
+    if (custom && isCustomSignedIn()) return await custom.pushAllToCloud(keys);
     const sync = await ensureFirebase();
     if (!sync || !isFirebaseSignedIn()) return 0;
-    const keys = await collectSyncableKeysForCloudPush();
     return await sync.pushAllToCloud(persistGet, keys);
 }
 
@@ -348,13 +398,33 @@ export async function syncToCloud() {
  * Firebase 退出登录前调用：同步剩余数据 + 停止同步
  */
 export async function stopCloudSync() {
+    // 自建服务器：先补传剩余，再停并清增量状态（换用户不能沿用旧游标）
+    const custom = await ensureCustomSync();
+    if (custom && isCustomSignedIn()) {
+        const keys = await collectSyncableKeysForCloudPush();
+        // 退出前的补传是“尽力而为”：服务器地址缺失 / 网络断 / 服务器挂都可能失败，
+        // 但绝不能因此中断“停止同步 + 清增量状态 + 登出”，否则退出会被带崩、登录态残留。
+        try {
+            await custom.pushAllToCloud(keys);
+        } catch (err) {
+            console.warn('[stopCloudSync] 退出前补传失败，继续退出流程:', err?.message || err);
+        }
+        custom.stopCustomSync();
+        custom.resetSyncState?.();
+        return;
+    }
+
     const sync = await ensureFirebase();
     if (!sync) return;
-    if (isFirebaseSignedIn()) {
-        const keys = await collectSyncableKeysForCloudPush();
-        await sync.pushAllToCloud(persistGet, keys);
-    } else {
-        await sync.flushSync(); // 先同步剩余
+    try {
+        if (isFirebaseSignedIn()) {
+            const keys = await collectSyncableKeysForCloudPush();
+            await sync.pushAllToCloud(persistGet, keys);
+        } else {
+            await sync.flushSync(); // 先同步剩余
+        }
+    } catch (err) {
+        console.warn('[stopCloudSync] 退出前同步失败，继续退出流程:', err?.message || err);
     }
     sync.stopSync();        // 再停止
 }

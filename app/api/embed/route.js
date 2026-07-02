@@ -90,7 +90,11 @@ export async function POST(request) {
         const provider = isCustomEmbed
             ? apiConfig.embedProvider
             : (apiConfig?.providerType || apiConfig?.provider || 'zhipu');
-        const apiKey = rotateKey(isCustomEmbed ? (apiConfig.embedApiKey || apiConfig?.apiKey) : apiConfig?.apiKey);
+        // 复用对话 Key：默认开启（向后兼容：旧配置无此字段时视为开启）。
+        // 关闭后表示“向量 Key 留空就是真留空”，用于本地无鉴权服务（如 Ollama）。
+        const reuseChatKey = apiConfig?.embedReuseChatKey !== false;
+        const allowKeyless = !!isCustomEmbed && !reuseChatKey;
+        const apiKey = rotateKey(isCustomEmbed ? (apiConfig.embedApiKey || (reuseChatKey ? apiConfig?.apiKey : '')) : apiConfig?.apiKey);
         const rawBaseUrl = isCustomEmbed ? apiConfig.embedBaseUrl : apiConfig?.baseUrl;
         const baseUrl = normalizeOpenAIBaseUrl(rawBaseUrl);
 
@@ -105,7 +109,7 @@ export async function POST(request) {
         if (!embedModelName) {
             return Response.json({ error: '请先选择或填写 Embedding 模型', code: 'NO_EMBED_MODEL' }, { status: 400 });
         }
-        if (!apiKey) {
+        if (!apiKey && !allowKeyless) {
             return Response.json({ error: isCustomEmbed ? '请在 API 配置中填写独立的 Embedding API Key' : '请先配置 API Key', code: isCustomEmbed ? 'NO_EMBED_KEY' : 'NO_API_KEY_FOR_EMBED' }, { status: 400 });
         }
         if (!text || typeof text !== 'string') {
@@ -115,15 +119,14 @@ export async function POST(request) {
         const urls = baseUrl.endsWith('/v1') || baseUrl.endsWith('/v1beta')
             ? [`${baseUrl}/embeddings`]
             : [`${baseUrl}/embeddings`, `${baseUrl}/v1/embeddings`];
+        const embedHeaders = { 'Content-Type': 'application/json' };
+        if (apiKey) embedHeaders['Authorization'] = `Bearer ${apiKey}`;
         let lastErrorResponse = null;
 
         for (const url of urls) {
             const response = await proxyFetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`,
-                },
+                headers: embedHeaders,
                 body: JSON.stringify({
                     input: text,
                     model: embedModelName,

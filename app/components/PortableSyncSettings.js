@@ -49,7 +49,7 @@ function formatTime(ts) {
     }
 }
 
-export default function PortableSyncSettings() {
+export default function PortableSyncSettings({ mode = 'all' }) {
     const { showToast } = useAppStore();
     const { text } = useI18n();
     const [sync, setSync] = useState(null);
@@ -250,7 +250,8 @@ export default function PortableSyncSettings() {
 
     return (
         <>
-            <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--border-light)' }}>
+            {mode !== 'lan' && (
+            <div style={{ marginTop: mode === 'all' ? 18 : 0, paddingTop: mode === 'all' ? 18 : 0, borderTop: mode === 'all' ? '1px solid var(--border-light)' : 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                     <HardDrive size={15} style={{ color: 'var(--accent)' }} />
                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{text('WebDAV 同步', 'WebDAV Sync', 'Синхронизация WebDAV')}</span>
@@ -356,8 +357,10 @@ export default function PortableSyncSettings() {
                     </button>
                 </div>
             </div>
+            )}
 
-            <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--border-light)' }}>
+            {mode !== 'webdav' && (
+            <div style={{ marginTop: mode === 'all' ? 18 : 0, paddingTop: mode === 'all' ? 18 : 0, borderTop: mode === 'all' ? '1px solid var(--border-light)' : 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                     <Wifi size={15} style={{ color: 'var(--accent)' }} />
                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{text('局域网同步', 'LAN Sync', 'LAN-синхронизация')}</span>
@@ -423,6 +426,7 @@ export default function PortableSyncSettings() {
                     </div>
                 )}
             </div>
+            )}
         </>
     );
 }

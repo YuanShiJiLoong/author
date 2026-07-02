@@ -54,7 +54,9 @@ const CloudSyncIndicator = dynamic(() => importWithChunkRecovery(() => import('.
 const LoginModal = dynamic(() => importWithChunkRecovery(() => import('./components/LoginModal')), { ssr: false });
 const AccountModal = dynamic(() => importWithChunkRecovery(() => import('./components/AccountModal')), { ssr: false });
 const RegisterModal = dynamic(() => importWithChunkRecovery(() => import('./components/RegisterModal')), { ssr: false });
-const SyncGuideModal = dynamic(() => importWithChunkRecovery(() => import('./components/SyncGuideModal')), { ssr: false });
+const SyncMethodModal = dynamic(() => importWithChunkRecovery(() => import('./components/SyncMethodModal')), { ssr: false });
+const WebDavSyncModal = dynamic(() => importWithChunkRecovery(() => import('./components/WebDavSyncModal')), { ssr: false });
+const LanSyncModal = dynamic(() => importWithChunkRecovery(() => import('./components/LanSyncModal')), { ssr: false });
 
 const ACTIVE_CHAPTER_KEY_PREFIX = 'author-active-chapter-';
 const CONTEXT_STRATEGY_VERSION_KEY = 'author-context-strategy-version';
@@ -865,8 +867,9 @@ export default function Home() {
       {/* ===== 顶栏（Google Docs 风格，全宽，只含 Logo）===== */}
       <header className="top-header-bar">
         <div className="top-header-left">
-          <div className="top-header-logo">
-            <span>A</span>uthor
+          <div className="top-header-logo" role="img" aria-label="Author">
+            <span className="brand-mark" aria-hidden="true"></span>
+            <span className="brand-word" aria-hidden="true"></span>
           </div>
         </div>
         <div className="top-header-right">
@@ -1015,8 +1018,10 @@ export default function Home() {
       <LoginModal />
       <AccountModal />
       <RegisterModal />
+      <SyncMethodModal />
+      <WebDavSyncModal />
+      <LanSyncModal />
       <WelcomeModal />
-      <SyncGuideModal />
     </div>
   );
 }

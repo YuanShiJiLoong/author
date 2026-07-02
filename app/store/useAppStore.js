@@ -129,8 +129,14 @@ const store = create((set, get) => ({
     showLoginModal: false,
     setShowLoginModal: (show) => set({ showLoginModal: !!show }),
 
-    showSyncGuideModal: false,
-    setShowSyncGuideModal: (show) => set({ showSyncGuideModal: !!show }),
+    showSyncMethodModal: false,
+    setShowSyncMethodModal: (show) => set({ showSyncMethodModal: !!show }),
+
+    showWebdavSyncModal: false,
+    setShowWebdavSyncModal: (show) => set({ showWebdavSyncModal: !!show }),
+
+    showLanSyncModal: false,
+    setShowLanSyncModal: (show) => set({ showLanSyncModal: !!show }),
 
     showAccountModal: false,
     accountModalSwitcher: false,

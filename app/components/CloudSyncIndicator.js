@@ -8,68 +8,86 @@ import { useI18n } from '../lib/useI18n';
 
 /**
  * 顶栏云同步状态指示器
- * - 未登录：显示灰色云图标 + "同步方式"，点击打开偏好设置
- * - 已登录：显示用户头像 + 绿色圆点，点击弹出账户菜单
+ * - 未登录：显示灰色云图标 + "同步方式"，点击弹出登录弹窗
+ * - 已登录（Firebase 或自建服务器）：显示用户头像 + 绿色圆点，点击弹出账户菜单
+ *
+ * 登录态来自两个来源：Firebase 与自建服务器（Author Cloud）。单后端跟随登录，
+ * 两者不会并存；Firebase 优先。
  */
 export default function CloudSyncIndicator() {
-    const { setShowAccountModal, setShowSettings } = useAppStore();
+    const { setShowAccountModal, setShowSyncMethodModal } = useAppStore();
     const { text } = useI18n();
-    const [authUser, setAuthUser] = useState(null);
+    const [firebaseUser, setFirebaseUser] = useState(null);
+    const [customUser, setCustomUser] = useState(null);
     const [syncStatus, setSyncStatus] = useState(null);
-    const [firebaseAvailable, setFirebaseAvailable] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const btnRef = useRef(null);
 
+    // Firebase 登录态
     useEffect(() => {
         let unmounted = false;
         (async () => {
             try {
                 const { isFirebaseConfigured } = await import('../lib/firebase');
                 if (!isFirebaseConfigured || unmounted) return;
-                setFirebaseAvailable(true);
                 const { onAuthChange, initAuth } = await import('../lib/auth');
                 const { onSyncStatusChange } = await import('../lib/firestore-sync');
                 initAuth();
-                onAuthChange(user => { if (!unmounted) setAuthUser(user); });
+                onAuthChange(user => { if (!unmounted) setFirebaseUser(user); });
                 onSyncStatusChange(status => { if (!unmounted) setSyncStatus(status); });
             } catch { /* Firebase 未配置 */ }
         })();
         return () => { unmounted = true; };
     }, []);
 
-    const openSyncSettings = () => {
-        setMenuOpen(false);
-        setShowSettings(true, 'preferences');
-    };
+    // 自建服务器登录态
+    useEffect(() => {
+        let unmounted = false;
+        let unsub = null;
+        (async () => {
+            try {
+                const { onCustomAuthChange, getCustomUserProfile, initCustomAuth, isCustomServerConfigured } = await import('../lib/custom-auth');
+                if (unmounted || !isCustomServerConfigured()) return;
+                initCustomAuth();
+                unsub = onCustomAuthChange(() => {
+                    if (!unmounted) setCustomUser(getCustomUserProfile());
+                });
+            } catch { /* 自建服务器未配置 */ }
+        })();
+        return () => { unmounted = true; if (unsub) unsub(); };
+    }, []);
 
-    if (!firebaseAvailable) {
-        return (
-            <button
-                id="tour-cloud-sync"
-                className="cloud-sync-indicator cloud-sync-login"
-                onClick={openSyncSettings}
-                title={text('选择 Firebase、WebDAV 或局域网同步', 'Choose Firebase, WebDAV, or LAN sync', 'Выберите Firebase, WebDAV или LAN-синхронизацию')}
-            >
-                <CloudOff size={15} />
-                <span className="cloud-sync-label">{text('同步方式', 'Sync Method', 'Способ синхронизации')}</span>
-            </button>
-        );
-    }
+    // 统一登录态：Firebase 优先，其次自建服务器
+    const account = firebaseUser
+        ? { provider: 'firebase', displayName: firebaseUser.displayName, email: firebaseUser.email, photoURL: firebaseUser.photoURL }
+        : customUser
+            ? { provider: 'custom', displayName: customUser.displayName, email: customUser.email, photoURL: customUser.photoURL || '' }
+            : null;
+
+    const openSyncMethod = () => {
+        setMenuOpen(false);
+        setShowSyncMethodModal(true);
+    };
 
     const handleSignOut = async () => {
         try {
             await useAppStore.getState().flushPendingEditorSave();
             const { stopCloudSync } = await import('../lib/persistence');
             await stopCloudSync();
-            const auth = await import('../lib/auth');
-            await auth.signOut();
+            if (account?.provider === 'custom') {
+                const { signOutCustom } = await import('../lib/custom-auth');
+                await signOutCustom();
+            } else {
+                const auth = await import('../lib/auth');
+                await auth.signOut();
+            }
         } catch (err) {
             console.error('Sign out error:', err);
         }
         setMenuOpen(false);
     };
 
-    // 同步状态文字
+    // 同步状态文字（目前来自 Firebase；自建服务器同步状态在后续接入）
     const getSyncText = () => {
         if (!syncStatus) return null;
         if (syncStatus.syncing) return text('同步中...', 'Syncing...', 'Синхронизация...');
@@ -78,14 +96,14 @@ export default function CloudSyncIndicator() {
         return null;
     };
 
-    // 未登录状态
-    if (!authUser) {
+    // 未登录状态：点击弹出登录弹窗
+    if (!account) {
         return (
             <button
                 id="tour-cloud-sync"
                 className="cloud-sync-indicator cloud-sync-login"
-                onClick={openSyncSettings}
-                title={text('选择 Firebase、WebDAV 或局域网同步', 'Choose Firebase, WebDAV, or LAN sync', 'Выберите Firebase, WebDAV или LAN-синхронизацию')}
+                onClick={openSyncMethod}
+                title={text('选择同步方式', 'Choose a sync method', 'Выбрать способ синхронизации')}
             >
                 <CloudOff size={15} />
                 <span className="cloud-sync-label">{text('同步方式', 'Sync Method', 'Способ синхронизации')}</span>
@@ -94,7 +112,7 @@ export default function CloudSyncIndicator() {
     }
 
     // 已登录状态
-    const initial = (authUser.displayName || authUser.email || '?')[0].toUpperCase();
+    const initial = (account.displayName || account.email || '?')[0].toUpperCase();
 
     return (
         <>
@@ -103,10 +121,10 @@ export default function CloudSyncIndicator() {
                 ref={btnRef}
                 className="cloud-sync-indicator cloud-sync-active"
                 onClick={() => setMenuOpen(!menuOpen)}
-                title={`${authUser.displayName || authUser.email} · ${text('点击查看同步状态和同步方式', 'View sync status and method', 'Просмотреть статус и способ синхронизации')}`}
+                title={`${account.displayName || account.email} · ${text('点击查看同步状态和同步方式', 'View sync status and method', 'Просмотреть статус и способ синхронизации')}`}
             >
-                {authUser.photoURL ? (
-                    <img src={authUser.photoURL} alt="" className="cloud-sync-avatar" />
+                {account.photoURL ? (
+                    <img src={account.photoURL} alt="" className="cloud-sync-avatar" />
                 ) : (
                     <span className="cloud-sync-avatar-letter">{initial}</span>
                 )}
@@ -127,17 +145,17 @@ export default function CloudSyncIndicator() {
                         }}
                     >
                         <div className="cloud-sync-menu-header">
-                            {authUser.photoURL ? (
-                                <img src={authUser.photoURL} alt="" className="cloud-sync-menu-avatar" />
+                            {account.photoURL ? (
+                                <img src={account.photoURL} alt="" className="cloud-sync-menu-avatar" />
                             ) : (
                                 <div className="cloud-sync-menu-avatar-letter">{initial}</div>
                             )}
                             <div className="cloud-sync-menu-info">
                                 <div className="cloud-sync-menu-name">
-                                    {authUser.displayName || authUser.email}
+                                    {account.displayName || account.email}
                                 </div>
-                                {authUser.displayName && (
-                                    <div className="cloud-sync-menu-email">{authUser.email}</div>
+                                {account.displayName && (
+                                    <div className="cloud-sync-menu-email">{account.email}</div>
                                 )}
                             </div>
                         </div>
@@ -176,7 +194,7 @@ export default function CloudSyncIndicator() {
 
                         <button
                             className="cloud-sync-menu-item"
-                            onClick={openSyncSettings}
+                            onClick={openSyncMethod}
                         >
                             <Settings size={14} /> {text('同步方式', 'Sync Method', 'Способ синхронизации')}
                         </button>

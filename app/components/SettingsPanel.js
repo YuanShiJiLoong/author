@@ -6,11 +6,11 @@ import {
     Library, KeyRound, Settings, BookOpen, User, MapPin, Globe, Gem,
     ClipboardList, Ruler, Upload, Download, Trash2, X, Maximize2, Minimize2,
     FileText, Sparkles, Search, Coins, Plug, Radio, RefreshCw, CheckCircle2,
-    XCircle, AlertTriangle, Globe2, Shuffle, Eye, EyeOff, Ban, Pencil, FolderOpen,
+    XCircle, AlertTriangle, Shuffle, Eye, EyeOff, Ban, Pencil, FolderOpen,
     Bell, RotateCcw, CircleDot, Smartphone, Clapperboard,
     Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers,
     Bookmark, Crown, Flame, Lightbulb, Music, Palette, Sword, Target,
-    Moon, Sun, Cloud, CloudOff, TreePine, Mountain, Waves, Building, Car,
+    Moon, Sun, Cloud, TreePine, Mountain, Waves, Building, Car,
     Keyboard, Plus, Type
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
@@ -43,7 +43,6 @@ import { useI18n } from '../lib/useI18n';
 import { localizeApiError } from '../lib/api-error-i18n';
 import SettingsItemEditor from './SettingsItemEditor';
 import { getModeRolePrompt } from '../lib/context-engine';
-import PortableSyncSettings from './PortableSyncSettings';
 import { downloadFile, downloadBlob } from '../lib/project-io';
 import {
     detectCategory, parseTextToFields, mapFieldsToContent,
@@ -1557,7 +1556,6 @@ function PreferencesForm() {
         currentLineHighlight, setCurrentLineHighlight,
         writingFontFamily, setWritingFontFamily,
         uiFontSize, setUiFontSize,
-        setShowSyncGuideModal,
     } = useAppStore();
     const { t, text } = useI18n();
     const normalizedChatSendShortcutMode = chatSendShortcutMode === 'ctrlEnter' ? 'ctrlEnter' : 'enter';
@@ -1567,82 +1565,7 @@ function PreferencesForm() {
         ? writingFontFamily
         : DEFAULT_WRITING_FONT_FAMILY;
 
-    // ---- Firebase 账户 ----
-    const [authUser, setAuthUser] = useState(null);
-    const [authLoading, setAuthLoading] = useState(false);
-    const [authError, setAuthError] = useState('');
-    const [authEmail, setAuthEmail] = useState('');
-    const [authPassword, setAuthPassword] = useState('');
-    const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
-    const [syncStatus, setSyncStatus] = useState(null);
-    const [firebaseAvailable, setFirebaseAvailable] = useState(false);
-
-    useEffect(() => {
-        // 动态加载 Firebase 模块（避免未配置时报错）
-        (async () => {
-            try {
-                const { isFirebaseConfigured } = await import('../lib/firebase');
-                if (!isFirebaseConfigured) return;
-                setFirebaseAvailable(true);
-                const { onAuthChange, initAuth } = await import('../lib/auth');
-                const { onSyncStatusChange } = await import('../lib/firestore-sync');
-                initAuth();
-                onAuthChange(user => setAuthUser(user));
-                onSyncStatusChange(status => setSyncStatus(status));
-            } catch { /* Firebase 未配置，忽略 */ }
-        })();
-    }, []);
-
-    const handleEmailAuth = async () => {
-        setAuthLoading(true);
-        setAuthError('');
-        try {
-            const auth = await import('../lib/auth');
-            if (authMode === 'register') {
-                await auth.signUpWithEmail(authEmail, authPassword);
-            } else {
-                await auth.signInWithEmail(authEmail, authPassword);
-            }
-            // 登录成功后从云端拉取数据
-            const { syncFromCloud } = await import('../lib/persistence');
-            const merged = await syncFromCloud();
-            if (merged > 0) {
-                window.location.reload(); // 数据合并后刷新
-            }
-        } catch (err) {
-            setAuthError(err.message || text('操作失败', 'Operation failed', 'Операция не удалась'));
-        } finally {
-            setAuthLoading(false);
-        }
-    };
-
-    const handleGoogleAuth = async () => {
-        setAuthLoading(true);
-        setAuthError('');
-        try {
-            const auth = await import('../lib/auth');
-            await auth.signInWithGoogle();
-            const { syncFromCloud } = await import('../lib/persistence');
-            const merged = await syncFromCloud();
-            if (merged > 0) window.location.reload();
-        } catch (err) {
-            setAuthError(err.message || text('Google 登录失败', 'Google sign-in failed', 'Не удалось войти через Google'));
-        } finally {
-            setAuthLoading(false);
-        }
-    };
-
-    const handleSignOut = async () => {
-        try {
-            await useAppStore.getState().flushPendingEditorSave();
-            const { stopCloudSync } = await import('../lib/persistence');
-            await stopCloudSync();
-            const auth = await import('../lib/auth');
-            await auth.signOut();
-        } catch (err) {
-            console.error('Sign out error:', err);
-        }
-    };
+    // 账户登录与同步方式（账号 / WebDAV / 局域网）已统一到右上角“同步方式”弹窗流，此处不再涉及。
 
     // ---- 自定义提示词 ----
     const [customPrompt, setCustomPrompt] = useState('');
@@ -1717,205 +1640,6 @@ function PreferencesForm() {
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
                 {t('preferences.intro')}
             </p>
-
-            {/* ===== 云同步账户 ===== */}
-            <div style={{ marginBottom: 28, padding: '20px 24px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-light)', background: 'var(--bg-secondary)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                    <Cloud size={16} style={{ color: 'var(--accent)' }} />
-                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{text('云同步', 'Cloud Sync', 'Облачная синхронизация')}</span>
-                    {firebaseAvailable && authUser && (
-                        <span style={{
-                            fontSize: 11, padding: '2px 8px', borderRadius: 20,
-                            background: 'rgba(34,197,94,0.1)', color: '#22c55e', fontWeight: 500,
-                            marginLeft: 'auto',
-                        }}>
-                            <CheckCircle2 size={12} style={{ marginRight: 4, verticalAlign: -1 }} />
-                            {text('已连接', 'Connected', 'Подключено')}
-                        </span>
-                    )}
-                </div>
-
-                {!firebaseAvailable ? (
-                    /* 未配置 Firebase（本地离线模式） */
-                    <div style={{
-                        padding: '16px 20px', borderRadius: 'var(--radius-md)',
-                        background: 'var(--bg-primary)', border: '1px solid var(--border-light)',
-                        display: 'flex', flexDirection: 'column', gap: 12,
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                            <div style={{ padding: 8, background: 'var(--bg-secondary)', borderRadius: '50%', color: 'var(--text-muted)' }}>
-                                <CloudOff size={20} />
-                            </div>
-                            <div>
-                                <h4 style={{ margin: '0 0 6px 0', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{text('本地离线模式', 'Local Offline Mode', 'Локальный офлайн-режим')}</h4>
-                                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                                    {text(
-                                        '当前未配置云同步服务。您的所有数据都安全地保存在浏览器本地，不会上传到任何服务器。配置云同步后，可开启多设备之间的自动同步功能。',
-                                        'Cloud sync is not configured. All data is stored safely in this browser and is not uploaded to any server. Configure cloud sync to enable automatic syncing across devices.',
-                                        'Облачная синхронизация не настроена. Все данные безопасно хранятся в этом браузере и не отправляются на сервер. Настройте синхронизацию для автоматической работы между устройствами.'
-                                    )}
-                                </p>
-                            </div>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
-                            <button
-                                onClick={() => setShowSyncGuideModal(true)}
-                                style={{
-                                    padding: '6px 14px', fontSize: 12, fontWeight: 500,
-                                    background: 'var(--accent)', color: '#fff', border: 'none',
-                                    borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-                                    transition: 'all 0.2s', boxShadow: '0 2px 8px var(--accent-glow)'
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                            >
-                                {text('了解如何开启云同步', 'Learn How to Enable Cloud Sync', 'Как включить облачную синхронизацию')}
-                            </button>
-                        </div>
-                    </div>
-                ) : authUser ? (
-                    /* 已登录状态 */
-                        <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                                {authUser.photoURL ? (
-                                    <img src={authUser.photoURL} alt="" style={{ width: 36, height: 36, borderRadius: '50%', border: '2px solid var(--border-light)' }} />
-                                ) : (
-                                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--accent-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)', fontWeight: 700, fontSize: 15, border: '2px solid var(--border-light)' }}>
-                                        {(authUser.email || '?')[0].toUpperCase()}
-                                    </div>
-                                )}
-                                <div>
-                                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                        {authUser.displayName || authUser.email}
-                                    </div>
-                                    {authUser.displayName && (
-                                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{authUser.email}</div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* 同步状态 */}
-                            {syncStatus && (
-                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, padding: '6px 10px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)' }}>
-                                    {syncStatus.syncing ? (
-                                        <><RefreshCw size={11} style={{ marginRight: 4, animation: 'spin 1s linear infinite' }} />{text('正在同步...', 'Syncing...', 'Синхронизация...')}</>
-                                    ) : syncStatus.pending > 0 ? (
-                                        <>{text(`${syncStatus.pending} 项待同步`, `${syncStatus.pending} pending`, `Ожидает синхронизации: ${syncStatus.pending}`)}</>
-                                    ) : syncStatus.lastSync ? (
-                                        <><CheckCircle2 size={11} style={{ marginRight: 4, color: '#22c55e' }} />{text('上次同步', 'Last synced', 'Последняя синхронизация')}: {new Date(syncStatus.lastSync).toLocaleTimeString()}</>
-                                    ) : null}
-                                    {syncStatus.error && (
-                                        <span style={{ color: '#ef4444', marginLeft: 8 }}>{text('同步失败', 'Sync failed', 'Ошибка синхронизации')}: {syncStatus.error}</span>
-                                    )}
-                                </div>
-                            )}
-
-                            <button
-                                onClick={handleSignOut}
-                                style={{
-                                    padding: '6px 16px', fontSize: 12, border: '1px solid var(--border-light)',
-                                    borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer',
-                                    color: 'var(--text-muted)', transition: 'all 0.15s',
-                                }}
-                                onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
-                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
-                            >
-                                {text('退出登录', 'Sign Out', 'Выйти')}
-                            </button>
-                        </div>
-                    ) : (
-                        /* 未登录状态 */
-                        <div>
-                            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
-                                {text('登录后自动同步作品到云端，支持多设备访问。未登录时数据仅保存在本地。', 'Sign in to automatically sync works to the cloud and access them across devices. When signed out, data stays local.', 'Войдите, чтобы автоматически синхронизировать произведения с облаком и работать на разных устройствах. Без входа данные остаются локально.')}
-                            </p>
-
-                            {/* 邮箱/密码 */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                                <input
-                                    type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)}
-                                    placeholder={text('邮箱', 'Email', 'Email')} autoComplete="email"
-                                    style={{
-                                        padding: '8px 12px', border: '1px solid var(--border-light)',
-                                        borderRadius: 'var(--radius-sm)', background: 'var(--bg-primary)',
-                                        color: 'var(--text-primary)', fontSize: 13, outline: 'none',
-                                    }}
-                                    onFocus={e => e.currentTarget.style.borderColor = 'var(--accent)'}
-                                    onBlur={e => e.currentTarget.style.borderColor = 'var(--border-light)'}
-                                />
-                                <input
-                                    type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)}
-                                    placeholder={text('密码（至少6位）', 'Password (at least 6 characters)', 'Пароль (минимум 6 символов)')} autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
-                                    onKeyDown={e => { if (e.key === 'Enter') handleEmailAuth(); }}
-                                    style={{
-                                        padding: '8px 12px', border: '1px solid var(--border-light)',
-                                        borderRadius: 'var(--radius-sm)', background: 'var(--bg-primary)',
-                                        color: 'var(--text-primary)', fontSize: 13, outline: 'none',
-                                    }}
-                                    onFocus={e => e.currentTarget.style.borderColor = 'var(--accent)'}
-                                    onBlur={e => e.currentTarget.style.borderColor = 'var(--border-light)'}
-                                />
-                            </div>
-
-                            {authError && (
-                                <div style={{ fontSize: 12, color: '#ef4444', marginBottom: 8, padding: '6px 10px', background: 'rgba(239,68,68,0.06)', borderRadius: 'var(--radius-sm)' }}>
-                                    <XCircle size={12} style={{ marginRight: 4, verticalAlign: -1 }} />{authError}
-                                </div>
-                            )}
-
-                            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                                <button
-                                    onClick={handleEmailAuth}
-                                    disabled={authLoading || !authEmail || !authPassword}
-                                    style={{
-                                        flex: 1, padding: '8px 16px', fontSize: 13, fontWeight: 600,
-                                        border: 'none', borderRadius: 'var(--radius-sm)',
-                                        background: 'var(--accent)', color: '#fff', cursor: 'pointer',
-                                        opacity: (authLoading || !authEmail || !authPassword) ? 0.5 : 1,
-                                        transition: 'all 0.15s',
-                                    }}
-                                >
-                                    {authLoading ? text('处理中...', 'Processing...', 'Обработка...') : authMode === 'register' ? text('注册', 'Register', 'Регистрация') : text('登录', 'Sign In', 'Войти')}
-                                </button>
-                                <button
-                                    onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }}
-                                    style={{
-                                        padding: '8px 12px', fontSize: 12, border: '1px solid var(--border-light)',
-                                        borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer',
-                                        color: 'var(--text-muted)', transition: 'all 0.15s',
-                                    }}
-                                >
-                                    {authMode === 'login' ? text('没有账号？注册', 'No account? Register', 'Нет аккаунта? Зарегистрироваться') : text('已有账号？登录', 'Already have an account? Sign in', 'Уже есть аккаунт? Войти')}
-                                </button>
-                            </div>
-
-                            {/* 分隔线 */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '12px 0' }}>
-                                <div style={{ flex: 1, height: 1, background: 'var(--border-light)' }} />
-                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{text('或', 'or', 'или')}</span>
-                                <div style={{ flex: 1, height: 1, background: 'var(--border-light)' }} />
-                            </div>
-
-                            {/* Google 登录 */}
-                            <button
-                                onClick={handleGoogleAuth}
-                                disabled={authLoading}
-                                style={{
-                                    width: '100%', padding: '8px 16px', fontSize: 13, fontWeight: 500,
-                                    border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)',
-                                    background: 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                                    transition: 'all 0.15s',
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-primary)'}
-                            >
-                                <Globe2 size={15} /> {text('使用 Google 账号登录', 'Sign in with Google', 'Войти через Google')}
-                            </button>
-                        </div>
-                    )}
-                    <PortableSyncSettings />
-                </div>
 
             {/* 写作模式选择器 */}
             <div style={{ marginBottom: 28 }}>
@@ -2416,9 +2140,11 @@ function ApiConfigForm({ data, onChange }) {
         setFetchedEmbedModels('loading');
         setEmbedFetchMsg(null);
         try {
-            const embedKey = data.embedApiKey || data.apiKey;
+            const reuseChatKey = data.embedReuseChatKey !== false;
+            const allowKeyless = !reuseChatKey;
+            const embedKey = data.embedApiKey || (reuseChatKey ? data.apiKey : '');
             const embedBase = data.embedBaseUrl || data.baseUrl;
-            const res = await fetch('/api/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: embedKey, baseUrl: embedBase, provider: data.embedProvider, embedOnly: true, proxyUrl: data.proxyUrl }) });
+            const res = await fetch('/api/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: embedKey, baseUrl: embedBase, provider: data.embedProvider, embedOnly: true, proxyUrl: data.proxyUrl, allowKeyless }) });
             const result = await res.json();
             // 结果就近显示在向量模型区下方（旧逻辑写到对话模型的 testStatus，离这里几百行，用户看不到）
             if (result.error) { setFetchedEmbedModels(null); setEmbedFetchMsg({ type: 'error', text: t('apiConfig.embedApiPrefix') + localizeApiError(result, text) }); }
@@ -3239,7 +2965,11 @@ function ApiConfigForm({ data, onChange }) {
                             <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{currentEmbedProvider.key}</span>
                         </div>
 
-                        <FieldInput label="Embedding API Key" value={data.embedApiKey} onChange={v => update('embedApiKey', v)} placeholder={t('apiConfig.embedApiKeyPlaceholder')} secret />
+                        <FieldInput label="Embedding API Key" value={data.embedApiKey} onChange={v => update('embedApiKey', v)} placeholder={data.embedReuseChatKey === false ? text('本地服务（如 Ollama）无需 Key，留空即可', 'Local service (e.g. Ollama) needs no key — leave blank', 'Локальному сервису (напр. Ollama) ключ не нужен — оставьте пустым') : t('apiConfig.embedApiKeyPlaceholder')} secret />
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)', marginTop: -6, marginBottom: 14 }}>
+                            <input type="checkbox" checked={data.embedReuseChatKey !== false} onChange={e => update('embedReuseChatKey', e.target.checked)} style={{ margin: 0, flexShrink: 0 }} />
+                            {text('留空时复用对话 API Key', 'Reuse chat API Key when blank', 'Использовать ключ чата, если поле пустое')}
+                        </label>
                         <FieldInput label={isEmbedCustom ? t('apiConfig.embedApiAddress') : t('apiConfig.embedApiAddressAuto')} value={data.embedBaseUrl} onChange={v => update('embedBaseUrl', v)} placeholder="https://api.example.com/v1" />
 
                         {/* 模型选择 */}
@@ -3249,7 +2979,7 @@ function ApiConfigForm({ data, onChange }) {
                             </label>
                             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                 <input className="modal-input" style={{ marginBottom: 0, flex: 1 }} value={data.embedModel || ''} onChange={e => update('embedModel', e.target.value)} placeholder={data.embedProvider === 'bailian' ? 'text-embedding-v4' : text('例如：embedding-3', 'e.g. embedding-3', 'например: embedding-3')} />
-                                {(data.embedApiKey || data.apiKey) ? (
+                                {(data.embedApiKey || data.apiKey || data.embedReuseChatKey === false) ? (
                                     <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }} onClick={() => { if (Array.isArray(fetchedEmbedModels) && fetchedEmbedModels.length > 0) { setShowEmbedModelModal(true); setEmbedModelSearch(''); } else { handleFetchEmbedModels(); } }} disabled={fetchedEmbedModels === 'loading'}>
                                         {fetchedEmbedModels === 'loading' ? text('获取中…', 'Fetching...', 'Загрузка...') : Array.isArray(fetchedEmbedModels) && fetchedEmbedModels.length > 0 ? text(`模型列表 (${fetchedEmbedModels.length})`, `Model List (${fetchedEmbedModels.length})`, `Список моделей (${fetchedEmbedModels.length})`) : text('获取模型列表', 'Fetch Model List', 'Получить список моделей')}
                                     </button>

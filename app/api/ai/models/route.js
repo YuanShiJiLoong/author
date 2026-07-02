@@ -5,10 +5,11 @@ import { rotateKey } from '../../../lib/keyRotator';
 // 通用模型列表拉取 — OpenAI 兼容 / Claude 兼容 / Gemini 原生
 export async function POST(request) {
     try {
-        let { apiKey, baseUrl, provider, embedOnly, proxyUrl } = await request.json();
+        let { apiKey, baseUrl, provider, embedOnly, proxyUrl, allowKeyless } = await request.json();
         apiKey = rotateKey(apiKey);
 
-        if (!apiKey) {
+        // allowKeyless：本地无鉴权服务（如 Ollama）拉取模型列表时不强制要求 Key
+        if (!apiKey && !allowKeyless) {
             return NextResponse.json(
                 { error: '请先填入 API Key', code: 'NO_API_KEY' },
                 { status: 400 }
@@ -112,10 +113,8 @@ async function fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider, proxyUrl)
         );
     }
 
-    const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-    };
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
 
     // 根据 baseUrl 构建候选路径列表
     // 用户可能填 https://api.example.com/v1 或 https://api.example.com

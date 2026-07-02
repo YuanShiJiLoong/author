@@ -16,7 +16,8 @@ import { useI18n } from '../lib/useI18n';
 export default function AccountModal() {
     const { showAccountModal, accountModalSwitcher, setShowAccountModal, setShowLoginModal } = useAppStore();
     const { text } = useI18n();
-    const [authUser, setAuthUser] = useState(null);
+    const [firebaseUser, setFirebaseUser] = useState(null);
+    const [customUser, setCustomUser] = useState(null);
     const [syncStatus, setSyncStatus] = useState(null);
     const [signingOut, setSigningOut] = useState(false);
 
@@ -31,27 +32,59 @@ export default function AccountModal() {
     const [accountHistory, setAccountHistory] = useState([]);
     const avatarInputRef = useRef(null);
 
+    // Firebase 登录态（老账号）
     useEffect(() => {
-        if (!showAccountModal) return;
         let unmounted = false;
         (async () => {
             try {
                 const { isFirebaseConfigured } = await import('../lib/firebase');
                 if (!isFirebaseConfigured || unmounted) return;
-                const { onAuthChange, getAccountHistory } = await import('../lib/auth');
+                const { onAuthChange } = await import('../lib/auth');
                 const { onSyncStatusChange } = await import('../lib/firestore-sync');
-                onAuthChange(user => {
-                    if (!unmounted) {
-                        setAuthUser(user);
-                        if (user) setEditName(user.displayName || '');
-                    }
-                });
+                onAuthChange(user => { if (!unmounted) setFirebaseUser(user); });
                 onSyncStatusChange(status => { if (!unmounted) setSyncStatus(status); });
-                setAccountHistory(getAccountHistory());
             } catch { }
         })();
         return () => { unmounted = true; };
-    }, [showAccountModal]);
+    }, []);
+
+    // 自建服务器登录态（邮箱账号）
+    useEffect(() => {
+        let unmounted = false;
+        let unsub = null;
+        (async () => {
+            try {
+                const { onCustomAuthChange, getCustomUserProfile, isCustomServerConfigured } = await import('../lib/custom-auth');
+                if (unmounted || !isCustomServerConfigured()) return;
+                unsub = onCustomAuthChange(() => { if (!unmounted) setCustomUser(getCustomUserProfile()); });
+            } catch { }
+        })();
+        return () => { unmounted = true; if (unsub) unsub(); };
+    }, []);
+
+    // 载入对应后端的账号历史（切换账号用）
+    useEffect(() => {
+        if (!showAccountModal) return;
+        let unmounted = false;
+        (async () => {
+            try {
+                if (firebaseUser) {
+                    const { getAccountHistory } = await import('../lib/auth');
+                    if (!unmounted) setAccountHistory(getAccountHistory());
+                } else if (customUser) {
+                    const { getCustomAccountHistory } = await import('../lib/custom-auth');
+                    if (!unmounted) setAccountHistory(getCustomAccountHistory());
+                }
+            } catch { }
+        })();
+        return () => { unmounted = true; };
+    }, [showAccountModal, firebaseUser, customUser]);
+
+    // 昵称输入框跟随当前账号（非编辑态）
+    useEffect(() => {
+        if (editing) return;
+        setEditName(firebaseUser?.displayName || customUser?.displayName || '');
+    }, [firebaseUser, customUser, editing]);
 
     // 重置状态 & 初始化 switcher
     useEffect(() => {
@@ -63,6 +96,13 @@ export default function AccountModal() {
             setShowSwitcher(true);
         }
     }, [showAccountModal, accountModalSwitcher]);
+
+    // 统一登录态：Firebase 优先，其次自建服务器。渲染层沿用 authUser 的字段
+    // （email/displayName/photoURL/metadata/providerData）；自建账号无 metadata/providerData，
+    // 注册时间/Google 判断会自动落空、登录方式回退为「邮箱密码」，无需分支处理。
+    const authUser = firebaseUser || customUser || null;
+    const isCustomAccount = !firebaseUser && !!customUser;
+    const canEdit = !!firebaseUser; // 改昵称/头像走 Firebase 接口；自建后端暂无对应端点，先隐藏入口
 
     if (!showAccountModal || !authUser) return null;
 
@@ -123,8 +163,13 @@ export default function AccountModal() {
             await useAppStore.getState().flushPendingEditorSave();
             const { stopCloudSync } = await import('../lib/persistence');
             await stopCloudSync();
-            const auth = await import('../lib/auth');
-            await auth.signOut();
+            if (isCustomAccount) {
+                const { signOutCustom } = await import('../lib/custom-auth');
+                await signOutCustom();
+            } else {
+                const auth = await import('../lib/auth');
+                await auth.signOut();
+            }
             setShowAccountModal(false);
         } catch (err) {
             console.error('Sign out error:', err);
@@ -140,8 +185,13 @@ export default function AccountModal() {
             await useAppStore.getState().flushPendingEditorSave();
             const { stopCloudSync } = await import('../lib/persistence');
             await stopCloudSync();
-            const auth = await import('../lib/auth');
-            await auth.signOut();
+            if (isCustomAccount) {
+                const { signOutCustom } = await import('../lib/custom-auth');
+                await signOutCustom();
+            } else {
+                const auth = await import('../lib/auth');
+                await auth.signOut();
+            }
         } catch (err) {
             console.error('Switch account sync error:', err);
             setSaveMsg(text('切换账号前同步失败，请稍后重试', 'Sync failed before switching accounts. Please try again later.', 'Синхронизация перед сменой аккаунта не удалась. Попробуйте позже.'));
@@ -161,9 +211,15 @@ export default function AccountModal() {
     };
 
     const handleRemoveFromHistory = async (uid) => {
-        const { removeAccountFromHistory, getAccountHistory } = await import('../lib/auth');
-        removeAccountFromHistory(uid);
-        setAccountHistory(getAccountHistory());
+        if (isCustomAccount) {
+            const { removeCustomAccountFromHistory, getCustomAccountHistory } = await import('../lib/custom-auth');
+            removeCustomAccountFromHistory(uid);
+            setAccountHistory(getCustomAccountHistory());
+        } else {
+            const { removeAccountFromHistory, getAccountHistory } = await import('../lib/auth');
+            removeAccountFromHistory(uid);
+            setAccountHistory(getAccountHistory());
+        }
     };
 
     const handleManualSync = async () => {
@@ -273,18 +329,20 @@ export default function AccountModal() {
                     <>
                         {/* 用户头部 */}
                         <div className="account-modal-profile">
-                            <div className="account-modal-avatar-wrap" onClick={() => avatarInputRef.current?.click()} style={{ cursor: 'pointer' }} title={text('点击更换头像', 'Click to change avatar', 'Нажмите, чтобы сменить аватар')}>
+                            <div className="account-modal-avatar-wrap" onClick={canEdit ? () => avatarInputRef.current?.click() : undefined} style={{ cursor: canEdit ? 'pointer' : 'default' }} title={canEdit ? text('点击更换头像', 'Click to change avatar', 'Нажмите, чтобы сменить аватар') : undefined}>
                                 {authUser.photoURL ? (
                                     <img src={authUser.photoURL} alt="" className="account-modal-avatar" />
                                 ) : (
                                     <div className="account-modal-avatar-letter">{initial}</div>
                                 )}
-                                <div className="account-modal-avatar-overlay">
-                                    <Camera size={18} />
-                                </div>
+                                {canEdit && (
+                                    <div className="account-modal-avatar-overlay">
+                                        <Camera size={18} />
+                                    </div>
+                                )}
                                 <span className="account-modal-status-dot" style={{ background: syncInfo.color }} />
                             </div>
-                            <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />
+                            {canEdit && <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />}
 
                             {/* 昵称 — 可编辑 */}
                             {editing ? (
@@ -309,9 +367,11 @@ export default function AccountModal() {
                             ) : (
                                 <div className="account-modal-name-row">
                                     <h2 className="account-modal-name">{authUser.displayName || text('用户', 'User', 'Пользователь')}</h2>
-                                    <button className="account-modal-edit-btn" onClick={() => setEditing(true)} title={text('编辑昵称', 'Edit nickname', 'Редактировать имя')}>
-                                        <Edit3 size={13} />
-                                    </button>
+                                    {canEdit && (
+                                        <button className="account-modal-edit-btn" onClick={() => setEditing(true)} title={text('编辑昵称', 'Edit nickname', 'Редактировать имя')}>
+                                            <Edit3 size={13} />
+                                        </button>
+                                    )}
                                 </div>
                             )}
                             {saveMsg && <p className="account-modal-save-msg">{saveMsg}</p>}
