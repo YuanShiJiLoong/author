@@ -129,6 +129,10 @@ const store = create((set, get) => ({
     showLoginModal: false,
     setShowLoginModal: (show) => set({ showLoginModal: !!show }),
 
+    // 老用户 Firebase → 自建迁移向导
+    showMigrationWizard: false,
+    setShowMigrationWizard: (show) => set({ showMigrationWizard: !!show }),
+
     showSyncMethodModal: false,
     setShowSyncMethodModal: (show) => set({ showSyncMethodModal: !!show }),
 

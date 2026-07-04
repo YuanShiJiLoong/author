@@ -41,6 +41,7 @@ import {
 import SettingsTree from './SettingsTree';
 import { useI18n } from '../lib/useI18n';
 import { localizeApiError } from '../lib/api-error-i18n';
+import { apiPath } from '../lib/api-base';
 import SettingsItemEditor from './SettingsItemEditor';
 import { getModeRolePrompt } from '../lib/context-engine';
 import { downloadFile, downloadBlob } from '../lib/project-io';
@@ -2120,7 +2121,7 @@ function ApiConfigForm({ data, onChange }) {
         setTestStatus('loading');
         try {
             const pType = instanceCfg?.providerType || data.provider;
-            const res = await fetch('/api/ai/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiConfig: { ...data, provider: pType } }) });
+            const res = await fetch(apiPath('/api/ai/test'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiConfig: { ...data, provider: pType } }) });
             setTestStatus(await res.json());
         } catch { setTestStatus({ success: false, error: t('apiConfig.networkError') }); }
     };
@@ -2129,7 +2130,7 @@ function ApiConfigForm({ data, onChange }) {
         setFetchedModels('loading');
         try {
             const pType = instanceCfg?.providerType || data.provider;
-            const res = await fetch('/api/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: data.apiKey, baseUrl: data.baseUrl, provider: pType, proxyUrl: data.proxyUrl }) });
+            const res = await fetch(apiPath('/api/ai/models'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: data.apiKey, baseUrl: data.baseUrl, provider: pType, proxyUrl: data.proxyUrl }) });
             const result = await res.json();
             if (result.error) { setFetchedModels(null); setTestStatus({ success: false, error: localizeApiError(result, text) }); }
             else { setFetchedModels(result.models || []); setShowModelModal(true); setModelSearch(''); }
@@ -2144,7 +2145,7 @@ function ApiConfigForm({ data, onChange }) {
             const allowKeyless = !reuseChatKey;
             const embedKey = data.embedApiKey || (reuseChatKey ? data.apiKey : '');
             const embedBase = data.embedBaseUrl || data.baseUrl;
-            const res = await fetch('/api/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: embedKey, baseUrl: embedBase, provider: data.embedProvider, embedOnly: true, proxyUrl: data.proxyUrl, allowKeyless }) });
+            const res = await fetch(apiPath('/api/ai/models'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: embedKey, baseUrl: embedBase, provider: data.embedProvider, embedOnly: true, proxyUrl: data.proxyUrl, allowKeyless }) });
             const result = await res.json();
             // 结果就近显示在向量模型区下方（旧逻辑写到对话模型的 testStatus，离这里几百行，用户看不到）
             if (result.error) { setFetchedEmbedModels(null); setEmbedFetchMsg({ type: 'error', text: t('apiConfig.embedApiPrefix') + localizeApiError(result, text) }); }
@@ -2226,7 +2227,7 @@ function ApiConfigForm({ data, onChange }) {
     const handleQueryBalance = async () => {
         setBalanceInfo('loading');
         try {
-            const res = await fetch('/api/balance', {
+            const res = await fetch(apiPath('/api/balance'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: buildBalanceRequestBody(),
@@ -2252,7 +2253,7 @@ function ApiConfigForm({ data, onChange }) {
         const timer = setTimeout(async () => {
             setBalanceInfo('loading');
             try {
-                const res = await fetch('/api/balance', {
+                const res = await fetch(apiPath('/api/balance'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: buildBalanceRequestBody(),

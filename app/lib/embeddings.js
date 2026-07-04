@@ -2,6 +2,7 @@
 
 import { tt } from './runtime-i18n';
 import { localizeApiError } from './api-error-i18n';
+import { apiPath } from './api-base';
 
 // 错误退避缓存：API 连续失败时暂停重试 60 秒
 let _embedErrorUntil = 0;
@@ -51,7 +52,7 @@ export async function getEmbedding(text, apiConfig, options = {}) {
     }
 
     try {
-        const res = await fetch('/api/embed', {
+        const res = await fetch(apiPath('/api/embed'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text, apiConfig })

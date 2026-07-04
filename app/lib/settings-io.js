@@ -5,6 +5,7 @@
 
 import { localizedError, tt } from './runtime-i18n';
 import { localizeApiError } from './api-error-i18n';
+import { apiPath } from './api-base';
 
 // ==================== 字段映射表 ====================
 
@@ -767,7 +768,7 @@ export async function parseDocxToText(file) {
 export async function parsePdfToText(file) {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch('/api/parse-file', {
+    const response = await fetch(apiPath('/api/parse-file'), {
         method: 'POST',
         body: formData,
     });

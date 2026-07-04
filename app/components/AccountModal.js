@@ -57,6 +57,9 @@ export default function AccountModal() {
                 const { onCustomAuthChange, getCustomUserProfile, isCustomServerConfigured } = await import('../lib/custom-auth');
                 if (unmounted || !isCustomServerConfigured()) return;
                 unsub = onCustomAuthChange(() => { if (!unmounted) setCustomUser(getCustomUserProfile()); });
+                // 自建同步状态也接进来（否则走自建时账户菜单的同步状态永远显示 Firebase 的）
+                const { onCustomSyncStatusChange } = await import('../lib/custom-server-sync');
+                onCustomSyncStatusChange(status => { if (!unmounted) setSyncStatus(status); });
             } catch { }
         })();
         return () => { unmounted = true; if (unsub) unsub(); };
@@ -258,7 +261,7 @@ export default function AccountModal() {
     })();
 
     return (
-        <div className="login-modal-overlay" onClick={() => setShowAccountModal(false)}>
+        <div className="login-modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowAccountModal(false); }}>
             <div className="account-modal" onClick={e => e.stopPropagation()}>
                 {/* 关闭按钮 */}
                 <button className="login-modal-close" onClick={() => setShowAccountModal(false)}>

@@ -1,16 +1,19 @@
 {
   "name": "author-app",
-  "version": "1.2.47",
+  "version": "1.2.48",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
+    "sync:legal": "node scripts/sync-legal-docs.mjs",
+    "predev": "npm run sync:legal",
     "dev": "next dev",
+    "prebuild": "npm run sync:legal",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "check:open-core-boundary": "git ls-files -z | node scripts/check-open-core-boundary.js --stdin",
     "electron:dev": "npm run dev & npx electron . --dev",
-    "electron:build": "node -e \"const fs=require('fs');['dist','.next'].forEach(d=>{if(fs.existsSync(d)){fs.rmSync(d,{recursive:true,force:true})}})\" && npx next build && npx electron-builder --win",
+    "electron:build": "node -e \"const fs=require('fs');['dist','.next'].forEach(d=>{if(fs.existsSync(d)){fs.rmSync(d,{recursive:true,force:true})}})\" && npm run sync:legal && npx next build && npx electron-builder --win",
     "electron:start": "npx electron ."
   },
   "dependencies": {
@@ -62,6 +65,7 @@
     "electron-builder": "^26.8.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "markdown-it": "^14.3.0",
     "tailwindcss": "^4"
   },
   "build": {

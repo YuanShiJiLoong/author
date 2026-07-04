@@ -5,7 +5,9 @@ import { X, Mail, Lock, CheckCircle2, XCircle } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 import { useAuthAction } from '../lib/useAuthAction';
-import { legalDocUrl } from '../lib/constants';
+import { apiPath } from '../lib/api-base';
+import { legalDocPath, setAgreedPolicyVersion } from '../lib/constants';
+import BeianNotice from './BeianNotice';
 import GoogleIcon from './icons/GoogleIcon';
 
 /**
@@ -35,6 +37,9 @@ export default function RegisterModal() {
         }
     }, [showRegisterModal]);
 
+    const [agreeChecked, setAgreeChecked] = useState(false); // 勾选同意条款后才允许注册
+    useEffect(() => { if (showRegisterModal) setAgreeChecked(false); }, [showRegisterModal]);
+
     if (!showRegisterModal) return null;
 
     const handleEmailRegister = () => {
@@ -51,12 +56,14 @@ export default function RegisterModal() {
         run(async () => {
             const auth = await import('../lib/auth');
             await auth.signUpWithEmail(email, password);
+            setAgreedPolicyVersion(); // 注册即同意当前版本政策
         });
     };
 
     const handleGoogleRegister = () => run(async () => {
         const auth = await import('../lib/auth');
         await auth.signInWithGoogle();
+        setAgreedPolicyVersion(); // Google 注册即同意当前版本政策
     });
 
     const switchToLogin = () => {
@@ -69,14 +76,12 @@ export default function RegisterModal() {
     const pwColors = ['', '#ef4444', '#f59e0b', '#22c55e'];
     const pwLabels = ['', t('registerModal.pwStrengthWeak'), t('registerModal.pwStrengthMedium'), t('registerModal.pwStrengthStrong')];
 
-    // 法律文档链接 — 通过集中化的工具函数生成
-    const termsUrl = legalDocUrl('github', 'TERMS', language);
-    const privacyUrl = legalDocUrl('github', 'PRIVACY', language);
-    const termsUrlMirror = legalDocUrl('gitee', 'TERMS', language);
-    const privacyUrlMirror = legalDocUrl('gitee', 'PRIVACY', language);
+    // 法律文档 — 应用内置的本地页面(构建时由根目录 md 生成),点击直接打开,不依赖外部站点
+    const termsUrl = apiPath(legalDocPath('TERMS', language));
+    const privacyUrl = apiPath(legalDocPath('PRIVACY', language));
 
     return (
-        <div className="login-modal-overlay" onClick={() => setShowRegisterModal(false)}>
+        <div className="login-modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowRegisterModal(false); }}>
             <div className="login-modal register-modal" onClick={e => e.stopPropagation()}>
                 <button className="login-modal-close" onClick={() => setShowRegisterModal(false)}>
                     <X size={18} />
@@ -85,7 +90,7 @@ export default function RegisterModal() {
                 {/* 头部 */}
                 <div className="login-modal-header">
                     <div className="login-modal-icon">
-                        <img src="/author-logo.png" alt="Author" className="login-modal-logo-img" />
+                        <img src={apiPath('/author-logo.png')} alt="Author" className="login-modal-logo-img" />
                     </div>
                     <h2 className="login-modal-title">{t('registerModal.title')}</h2>
                     <p className="login-modal-desc">{t('registerModal.desc')}</p>
@@ -132,7 +137,7 @@ export default function RegisterModal() {
                             onChange={e => setConfirmPassword(e.target.value)}
                             placeholder={t('registerModal.confirmPasswordPlaceholder')}
                             autoComplete="new-password"
-                            onKeyDown={e => { if (e.key === 'Enter' && email && password && confirmPassword) handleEmailRegister(); }}
+                            onKeyDown={e => { if (e.key === 'Enter' && email && password && confirmPassword && agreeChecked) handleEmailRegister(); }}
                             className="login-modal-input"
                         />
                     </div>
@@ -147,7 +152,7 @@ export default function RegisterModal() {
                 <button
                     className="login-modal-submit-btn"
                     onClick={handleEmailRegister}
-                    disabled={loading || !email || !password || !confirmPassword}
+                    disabled={loading || !email || !password || !confirmPassword || !agreeChecked}
                 >
                     {loading ? t('registerModal.registering') : t('registerModal.registerBtn')}
                 </button>
@@ -158,24 +163,26 @@ export default function RegisterModal() {
                 <button
                     className="login-modal-google-btn"
                     onClick={handleGoogleRegister}
-                    disabled={loading}
+                    disabled={loading || !agreeChecked}
                 >
                     <GoogleIcon />
                     {t('registerModal.googleRegister')}
                 </button>
 
-                <p className="login-modal-terms">
-                    {t('registerModal.agreeTerms')}
-                    <a href={termsUrl} target="_blank" rel="noopener noreferrer">{t('registerModal.termsOfService')}</a>
-                    <span className="legal-mirror-link">(<a href={termsUrlMirror} target="_blank" rel="noopener noreferrer">{t('registerModal.mirrorLink')}</a>)</span>
-                    {t('registerModal.and')}
-                    <a href={privacyUrl} target="_blank" rel="noopener noreferrer">{t('registerModal.privacyPolicy')}</a>
-                    <span className="legal-mirror-link">(<a href={privacyUrlMirror} target="_blank" rel="noopener noreferrer">{t('registerModal.mirrorLink')}</a>)</span>
-                </p>
+                <label className="login-modal-agree-row">
+                    <input type="checkbox" checked={agreeChecked} onChange={e => setAgreeChecked(e.target.checked)} />
+                    <span>
+                        {t('policyConsent.checkLabel')}
+                        <a href={termsUrl} target="_blank" rel="noopener noreferrer">{t('registerModal.termsOfService')}</a>
+                        {t('registerModal.and')}
+                        <a href={privacyUrl} target="_blank" rel="noopener noreferrer">{t('registerModal.privacyPolicy')}</a>
+                    </span>
+                </label>
 
                 <div className="login-modal-switch">
                     {t('registerModal.hasAccount')}<button onClick={switchToLogin}>{t('registerModal.backToLogin')}</button>
                 </div>
+                <BeianNotice className="login-modal-beian" />
             </div>
         </div>
     );

@@ -52,6 +52,10 @@ export default function CloudSyncIndicator() {
                 unsub = onCustomAuthChange(() => {
                     if (!unmounted) setCustomUser(getCustomUserProfile());
                 });
+                // 自建同步状态（待同步 / 同步中 / 已同步）也要接到指示器上，
+                // 否则走自建同步时指示器只反映 Firebase 状态、永远显示旧的“已同步”。
+                const { onCustomSyncStatusChange } = await import('../lib/custom-server-sync');
+                onCustomSyncStatusChange(status => { if (!unmounted) setSyncStatus(status); });
             } catch { /* 自建服务器未配置 */ }
         })();
         return () => { unmounted = true; if (unsub) unsub(); };

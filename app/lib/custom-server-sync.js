@@ -11,12 +11,13 @@
 // 数据安全铁律见 custom-sync-core.js 顶部说明。
 
 import { isSyncableKey } from './sync-key-policy';
-import { authorizedFetch, isCustomSignedIn } from './custom-auth';
+import { authorizedFetch, isCustomSignedIn, getCurrentCustomUser } from './custom-auth';
 import { fingerprint, parseKey, itemToKey, diffKeyToItems, mergeItemsIntoLocal } from './custom-sync-core';
 
 // ==================== 配置 ====================
 
-const SYNC_INTERVAL = 5 * 60 * 1000; // 5 分钟
+const SYNC_INTERVAL = 5 * 60 * 1000; // 5 分钟（push 去抖）
+const PULL_INTERVAL = 90 * 1000;     // 90 秒：前台自动拉取云端新变动（别的设备刚改的）
 const IDLE_TIMEOUT = 5 * 60 * 1000;  // 5 分钟无变化后停止自动同步
 const PUSH_BATCH = 100;              // 单次 push 的条目数（配合后端 ~1MB 请求体上限）
 const PULL_LIMIT = 200;
@@ -26,9 +27,11 @@ const SYNC_STATE_KEY = 'author-cloud-sync-state'; // 本地增量状态，绝不
 
 const _pendingKeys = new Set(); // 变化的 key（待拆分对账）
 let _syncTimer = null;
+let _pullTimer = null;
 let _idleTimer = null;
 let _isSyncing = false;
 let _firstSyncAfterLogin = true;
+let _autoSetupDone = false;     // 全局监听（beforeunload/visibilitychange）只装一次
 let _localGet = null;           // 由 persistence 注入，避免循环依赖
 let _localSet = null;
 
@@ -42,15 +45,19 @@ function notifyStatus(status) {
 export function bindLocalIO(localGet, localSet) { _localGet = localGet; _localSet = localSet; }
 
 // ==================== 增量状态 ====================
-// { cursor: <server_seq>, keys: { [key]: { [itemId]: { hash } | { deleted:true } } } }
+// { cursor: <server_seq>, accountId, keys: { [key]: { [itemId]: { hash } | { deleted:true } } } }
+
+function currentAccountId() {
+    try { const u = getCurrentCustomUser(); return u?.id != null ? String(u.id) : null; } catch { return null; }
+}
 
 function loadState() {
-    if (typeof window === 'undefined') return { cursor: 0, keys: {} };
+    if (typeof window === 'undefined') return { cursor: 0, keys: {}, accountId: null };
     try {
         const s = JSON.parse(localStorage.getItem(SYNC_STATE_KEY) || 'null');
-        if (s && typeof s === 'object') return { cursor: Number(s.cursor) || 0, keys: s.keys || {} };
+        if (s && typeof s === 'object') return { cursor: Number(s.cursor) || 0, keys: s.keys || {}, accountId: s.accountId || null };
     } catch {}
-    return { cursor: 0, keys: {} };
+    return { cursor: 0, keys: {}, accountId: null };
 }
 function saveState() {
     if (typeof window === 'undefined') return;
@@ -60,8 +67,18 @@ let _state = loadState();
 
 // 退出/切换账号时清空增量状态（换用户后不能沿用旧游标/指纹）
 export function resetSyncState() {
-    _state = { cursor: 0, keys: {} };
+    _state = { cursor: 0, keys: {}, accountId: currentAccountId() };
     saveState();
+}
+
+// 游标/指纹按账号隔离：当前登录账号与 state 记录的不一致，一律清零重来。
+// 防止"切账号（未登出）后沿用旧游标跳过新账号数据"或"把旧账号本地内容推进新账号"。
+function ensureAccountBound() {
+    const id = currentAccountId();
+    if (_state.accountId !== id) {
+        _state = { cursor: 0, keys: {}, accountId: id };
+        saveState();
+    }
 }
 
 // 把某 key 的增量状态推进到"与云端一致"（pull 应用后调用）
@@ -99,6 +116,20 @@ function ensureSyncTimer() {
 function clearSyncTimer() {
     if (_syncTimer) { clearInterval(_syncTimer); _syncTimer = null; }
 }
+
+// 前台自动拉取定时器（只在页面可见时拉，后台标签不拉、省资源）。
+// 补上"5 分钟定时器只上传、不下载"的缺口：别的设备改了，已登录的本端能被动发现。
+function ensurePullTimer() {
+    if (_pullTimer) return;
+    _pullTimer = setInterval(() => {
+        if (typeof document !== 'undefined' && document.hidden) return;
+        if (isCustomSignedIn()) pullFromCloud().catch(() => {});
+    }, PULL_INTERVAL);
+}
+function clearPullTimer() {
+    if (_pullTimer) { clearInterval(_pullTimer); _pullTimer = null; }
+}
+
 function resetIdleTimer() {
     if (_idleTimer) clearTimeout(_idleTimer);
     _idleTimer = setTimeout(() => {
@@ -115,6 +146,7 @@ export async function flushSync(options = {}) {
     const { throwOnError = false } = options;
     if (!isCustomSignedIn() || !_localGet) return;
     if (_isSyncing) return;
+    ensureAccountBound();
 
     if (_firstSyncAfterLogin) _firstSyncAfterLogin = false;
 
@@ -138,17 +170,23 @@ export async function flushSync(options = {}) {
             if (items.length === 0) { _state.keys[key] = nextItemState; continue; }
 
             let ok = true;
+            let rejected = false; // 非 stale 的逐条拒绝：绝不能当成功，否则该条目再不重推 → 静默丢稿
             for (let i = 0; i < items.length; i += PUSH_BATCH) {
                 const batch = items.slice(i, i + PUSH_BATCH);
                 const res = await authorizedFetch('/api/free/sync/push', { method: 'POST', body: { items: batch } });
                 if (!res.ok) { ok = false; break; }
                 const data = await res.json().catch(() => null);
-                if (data?.results?.some((r) => r.accepted === false && r.reason === 'stale')) sawStale = true;
+                for (const r of (data?.results || [])) {
+                    if (r?.accepted === false) {
+                        if (r.reason === 'stale') sawStale = true; // 云端有更新版，随后 pull 合并
+                        else rejected = true;                       // 校验/其它拒绝：留队列重试，别丢
+                    }
+                }
             }
-            if (ok) {
-                _state.keys[key] = nextItemState;   // 记为已同步
+            if (ok && !rejected) {
+                _state.keys[key] = nextItemState;   // 全部接受，记为已同步
             } else {
-                _pendingKeys.add(key);              // 失败：留队列下次重试，本地不动
+                _pendingKeys.add(key);              // 失败/被拒：留队列下次重试，本地不动、不记已同步
             }
         }
         saveState();
@@ -181,6 +219,7 @@ export async function pushAllToCloud(keys = []) {
 
 export async function pullFromCloud() {
     if (!isCustomSignedIn() || !_localGet || !_localSet) return 0;
+    ensureAccountBound();
     let since = _state.cursor || 0;
     let hasMore = true;
     const byKey = new Map(); // key → items[]
@@ -188,9 +227,9 @@ export async function pullFromCloud() {
     try {
         while (hasMore) {
             const res = await authorizedFetch('/api/free/sync/pull', { method: 'GET', query: { since, limit: PULL_LIMIT } });
-            if (!res.ok) break;
+            if (!res.ok) throw new Error(`pull HTTP ${res.status}`);
             const data = await res.json().catch(() => null);
-            if (!data?.ok) break;
+            if (!data?.ok) throw new Error('pull 响应异常');
             for (const it of (data.items || [])) {
                 const key = itemToKey(it);
                 if (!key || !isSyncableKey(key)) continue;
@@ -213,8 +252,56 @@ export async function pullFromCloud() {
         _state.cursor = since;
         saveState();
         return merged;
-    } catch {
+    } catch (err) {
+        // 自动拉取容错：不中断流程，但错误通过状态回调暴露（不再静默假成功）
+        notifyStatus({ syncing: false, error: err?.message || '云端拉取失败' });
         return 0;
+    }
+}
+
+// 强制从云端覆盖恢复：无视本地改动/删除，用云端数据重建本地（供“从云端同步”手动触发）。
+// 与 pullFromCloud 的区别：把本地当作空（localValue=undefined），云端有的一律写回本地，
+// 从而能把本地误删的作品从云端拉回来。本地独有、云端没有的 key 不动（不删）。
+export async function forcePullFromCloud() {
+    if (!isCustomSignedIn() || !_localGet || !_localSet) return 0;
+    resetSyncState(); // 游标归零 + 绑当前账号，从头全量拉
+    let since = 0;
+    let hasMore = true;
+    const byKey = new Map();
+    try {
+        while (hasMore) {
+            const res = await authorizedFetch('/api/free/sync/pull', { method: 'GET', query: { since, limit: PULL_LIMIT } });
+            if (!res.ok) throw new Error(`从云端拉取失败（HTTP ${res.status}）`);
+            const data = await res.json().catch(() => null);
+            if (!data?.ok) throw new Error('从云端拉取失败：服务器响应异常');
+            for (const it of (data.items || [])) {
+                const key = itemToKey(it);
+                if (!key || !isSyncableKey(key)) continue;
+                if (!byKey.has(key)) byKey.set(key, []);
+                byKey.get(key).push(it);
+            }
+            since = data.nextSince ?? since;
+            hasMore = Boolean(data.hasMore);
+        }
+
+        let restored = 0;
+        for (const [key, items] of byKey) {
+            const meta = parseKey(key);
+            if (!meta) continue;
+            // localValue=undefined + prevState={} → 从零用云端条目重建（云端优先覆盖）
+            const { value } = mergeItemsIntoLocal(meta.kind, undefined, items, {});
+            if (value !== undefined) { await _localSet(key, value); restored++; }
+            commitPulledState(key, items);
+        }
+        _pendingKeys.clear(); // 云端已覆盖本地，放弃本地待推改动，避免把刚覆盖的又推回云端
+        _state.cursor = since;
+        saveState();
+        return restored;
+    } catch (err) {
+        // 手动触发失败必须让用户知道：报状态并把错误抛给调用方（Sidebar 会提示“拉取失败”），
+        // 绝不能静默返回 0 假装成功、还错误推进游标。
+        notifyStatus({ syncing: false, error: err?.message || '从云端拉取失败' });
+        throw err;
     }
 }
 
@@ -222,6 +309,7 @@ export async function pullFromCloud() {
 
 export function stopCustomSync() {
     clearSyncTimer();
+    clearPullTimer();
     if (_idleTimer) { clearTimeout(_idleTimer); _idleTimer = null; }
     _pendingKeys.clear();
     _firstSyncAfterLogin = true;
@@ -230,7 +318,17 @@ export function stopCustomSync() {
 
 export function setupCustomBeforeUnloadSync() {
     if (typeof window === 'undefined') return;
-    window.addEventListener('beforeunload', () => {
-        if (_pendingKeys.size > 0) flushSync().catch(() => {});
-    });
+    if (!_autoSetupDone) {
+        _autoSetupDone = true;
+        window.addEventListener('beforeunload', () => {
+            if (_pendingKeys.size > 0) flushSync().catch(() => {});
+        });
+        // 页面从后台切回前台时立即拉一次：别的设备刚改的能马上被发现
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && isCustomSignedIn()) pullFromCloud().catch(() => {});
+        });
+    }
+    // 前台定时轮询拉取 + 恢复会话/启动后先拉一次（补上“只上传不下载”的缺口）
+    ensurePullTimer();
+    if (isCustomSignedIn()) pullFromCloud().catch(() => {});
 }

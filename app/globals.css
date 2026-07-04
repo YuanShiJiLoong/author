@@ -347,14 +347,14 @@ body {
 .top-header-logo .brand-mark {
   width: 22px;
   height: 26px;
-  -webkit-mask: url("/brand/feather-logo.svg") center / contain no-repeat;
-  mask: url("/brand/feather-logo.svg") center / contain no-repeat;
+  -webkit-mask: var(--brand-feather, url("/brand/feather-logo.svg")) center / contain no-repeat;
+  mask: var(--brand-feather, url("/brand/feather-logo.svg")) center / contain no-repeat;
 }
 .top-header-logo .brand-word {
   width: 75px;
   height: 32px;
-  -webkit-mask: url("/brand/author-wordmark.svg") left center / contain no-repeat;
-  mask: url("/brand/author-wordmark.svg") left center / contain no-repeat;
+  -webkit-mask: var(--brand-wordmark, url("/brand/author-wordmark.svg")) left center / contain no-repeat;
+  mask: var(--brand-wordmark, url("/brand/author-wordmark.svg")) left center / contain no-repeat;
 }
 
 .top-header-right {
@@ -9305,8 +9305,10 @@ h5.chat-md-heading {
 
 .welcome-cloud-feature {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 16px;
+  text-align: center;
+  gap: 8px;
   padding: 14px 18px;
   border-radius: var(--radius-md);
   background: var(--bg-card);
@@ -9620,6 +9622,75 @@ h5.chat-md-heading {
   align-items: center;
   justify-content: center;
 }
+
+/* 政策更新同意闸：压在其它弹窗之上，且背景不可点关闭（组件本身不含 dismiss 逻辑） */
+.policy-consent-overlay {
+  z-index: 100000;
+}
+.policy-consent-links a {
+  white-space: nowrap;
+}
+
+/* 登录/注册的条款同意勾选行（按钮下方、整体居中） */
+.login-modal-agree-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 7px;
+  margin: 12px 2px 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary, #8a8f98);
+  cursor: pointer;
+  text-align: center;
+}
+.login-modal-agree-row input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.login-modal-agree-row a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* 开源/桌面版顶栏通告：国内云同步请前往官方网页版 */
+.sync-notice-banner {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(94vw, 640px);
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(32, 33, 36, 0.94);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(6px);
+}
+.sync-notice-icon { flex-shrink: 0; opacity: 0.85; }
+.sync-notice-text b { margin-right: 6px; }
+.sync-notice-go {
+  flex-shrink: 0;
+  color: #ffd479;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.sync-notice-dismiss {
+  flex-shrink: 0;
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.75);
+}
+.sync-notice-dismiss:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 
 .login-modal {
   position: relative;
@@ -9998,6 +10069,108 @@ h5.chat-md-heading {
   font-family: var(--font-ui);
   opacity: 0.65;
 }
+
+/* ==================== 备案信息角标（仅官方部署渲染） ==================== */
+.beian-notice {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.beian-notice a {
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+.beian-notice a:hover {
+  color: var(--accent);
+}
+.beian-notice a,
+.beian-notice > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+/* 公安备案国徽图标（官方下发的 36×40 PNG，按文字高度缩放） */
+.beian-gongan-icon {
+  height: 14px;
+  width: auto;
+}
+/* 弹窗底部的备案条 */
+.login-modal-beian {
+  margin-top: 14px;
+}
+.sync-method-beian {
+  margin-top: 12px;
+}
+/* 全局固定角标：视口底部居中常驻，不挡编辑操作 */
+.beian-global {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 4px;
+  z-index: 80;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 78%, transparent);
+  backdrop-filter: blur(4px);
+  pointer-events: none; /* 容器不挡点击 */
+}
+.beian-global a {
+  pointer-events: auto; /* 链接本身可点 */
+}
+
+/* ==================== 未配置服务器时的官方网页版引导（登录弹窗 / 迁移向导共用） ==================== */
+.login-modal-official-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.login-modal-official-url {
+  text-align: center;
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: 8px;
+  user-select: all;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.login-modal-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.55;
+  margin: 10px 0 0;
+}
+.login-modal-selfhost-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  margin-top: 16px;
+  padding: 6px;
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: color var(--transition-fast);
+}
+.login-modal-selfhost-toggle:hover {
+  color: var(--accent);
+}
+.login-modal-selfhost {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 /* ===== 同步方式选择弹窗 ===== */
 .sync-method-modal {
   position: relative;
@@ -10144,6 +10317,86 @@ h5.chat-md-heading {
   color: var(--accent-hover);
   text-decoration: underline;
 }
+
+/* ===== 迁移向导 ===== */
+.migration-deadline {
+  margin: 0 0 16px;
+  padding: 9px 12px;
+  background: rgba(234, 160, 60, 0.14);
+  color: #c8862a;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: center;
+}
+.migration-steps {
+  margin: 2px 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+.migration-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--text-primary, #111827);
+  line-height: 1.45;
+}
+.migration-step-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+}
+.migration-fbuser {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  background: rgba(59, 130, 246, 0.08);
+  padding: 9px 12px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+.migration-fbuser b { color: var(--text-primary, #111827); font-weight: 600; word-break: break-all; margin-left: 2px; }
+.migration-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 2px 0 12px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+  line-height: 1.55;
+}
+.migration-progress, .migration-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 20px 8px 8px;
+  gap: 8px;
+}
+.migration-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(128, 128, 128, 0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: migration-spin 0.8s linear infinite;
+  margin-bottom: 8px;
+}
+@keyframes migration-spin { to { transform: rotate(360deg); } }
+.migration-done-icon { color: var(--accent); margin-bottom: 4px; }
+
 .legal-mirror-link {
   font-size: 10px;
   opacity: 0.65;

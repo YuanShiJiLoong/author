@@ -19,6 +19,7 @@ import ExitSyncModal from './ExitSyncModal';
 import { buildChapterSynopsisText, getChapterSynopsis, hasChapterSynopsis, normalizeChapterSynopsis, parseGeneratedSynopsis, stripChapterHtml } from '../lib/chapter-synopsis';
 import { buildChapterMemoryGroupText, buildChapterSourceText, getChapterMemoryGroups, hasChapterMemoryGroup, normalizeChapterMemoryGroup, saveChapterMemoryGroups } from '../lib/chapter-memory-groups';
 import { resolveAiEndpoint } from '../lib/ai-provider-compat';
+import { aiFetch } from '../lib/ai-direct';
 import { localizeApiError } from '../lib/api-error-i18n';
 import { tt } from '../lib/runtime-i18n';
 
@@ -972,7 +973,7 @@ function ChapterSynopsisOverviewModal({
         try {
             const { apiConfig } = getProjectSettings();
             const { systemPrompt, userPrompt } = buildSynopsisPrompts(entry.chapter);
-            const response = await fetch(resolveAiEndpoint(apiConfig), {
+            const response = await aiFetch(resolveAiEndpoint(apiConfig), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1027,7 +1028,7 @@ function ChapterSynopsisOverviewModal({
                     ordinal: entry.ordinal,
                 })),
             });
-            const response = await fetch(resolveAiEndpoint(apiConfig), {
+            const response = await aiFetch(resolveAiEndpoint(apiConfig), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1173,7 +1174,7 @@ function ChapterSynopsisOverviewModal({
                 groups: selectedGroups,
                 chapters,
             });
-            const response = await fetch(resolveAiEndpoint(apiConfig), {
+            const response = await aiFetch(resolveAiEndpoint(apiConfig), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1756,22 +1757,35 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
     }, [reloadMemoryGroups]);
 
     // ---- 云同步状态（侧栏图标指示） ----
-    const [cloudAuthUser, setCloudAuthUser] = useState(null);
+    // 互斥登录：同一时刻只有一个后端在线，谁登录就认谁（Firebase 或自建）。
+    const [firebaseCloudUser, setFirebaseCloudUser] = useState(null);
+    const [customCloudUser, setCustomCloudUser] = useState(null);
+    const cloudAuthUser = firebaseCloudUser || customCloudUser;
     const [cloudSyncStatus, setCloudSyncStatus] = useState(null);
-    const [firebaseAvailable, setFirebaseAvailable] = useState(false);
     useEffect(() => {
         let unmounted = false;
         (async () => {
+            // 旧版 Firebase（若配置）
             try {
                 const { isFirebaseConfigured } = await import('../lib/firebase');
-                if (!isFirebaseConfigured || unmounted) return;
-                setFirebaseAvailable(true);
-                const { onAuthChange, initAuth } = await import('../lib/auth');
-                const { onSyncStatusChange } = await import('../lib/firestore-sync');
-                initAuth();
-                onAuthChange(user => { if (!unmounted) setCloudAuthUser(user); });
-                onSyncStatusChange(status => { if (!unmounted) setCloudSyncStatus(status); });
+                if (isFirebaseConfigured && !unmounted) {
+                    const { onAuthChange, initAuth } = await import('../lib/auth');
+                    const { onSyncStatusChange } = await import('../lib/firestore-sync');
+                    initAuth();
+                    onAuthChange(user => { if (!unmounted) setFirebaseCloudUser(user); });
+                    onSyncStatusChange(status => { if (!unmounted) setCloudSyncStatus(status); });
+                }
             } catch { /* Firebase 未配置 */ }
+            // 自建服务器（独立于 Firebase；二者互斥，只会有一个在线）
+            try {
+                const { onCustomAuthChange, getCustomUserProfile, initCustomAuth, isCustomServerConfigured } = await import('../lib/custom-auth');
+                if (isCustomServerConfigured() && !unmounted) {
+                    initCustomAuth();
+                    onCustomAuthChange(() => { if (!unmounted) setCustomCloudUser(getCustomUserProfile()); });
+                    const { onCustomSyncStatusChange } = await import('../lib/custom-server-sync');
+                    onCustomSyncStatusChange(status => { if (!unmounted) setCloudSyncStatus(status); });
+                }
+            } catch { /* 自建未配置 */ }
         })();
         return () => { unmounted = true; };
     }, []);
@@ -2103,7 +2117,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
         try {
             const { apiConfig } = getProjectSettings();
             const { systemPrompt, userPrompt } = buildSynopsisPrompts(synopsisChapter);
-            const response = await fetch(resolveAiEndpoint(apiConfig), {
+            const response = await aiFetch(resolveAiEndpoint(apiConfig), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -2291,7 +2305,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                 name,
                 chapters: selectedEntries,
             });
-            const response = await fetch(resolveAiEndpoint(apiConfig), {
+            const response = await aiFetch(resolveAiEndpoint(apiConfig), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -2349,7 +2363,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                 groups: selectedGroups,
                 chapters,
             });
-            const response = await fetch(resolveAiEndpoint(apiConfig), {
+            const response = await aiFetch(resolveAiEndpoint(apiConfig), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -2905,7 +2919,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                                 text={sidebarOpen ? text('同步', 'Sync', 'Синхр.') : undefined}
                                 tooltipSide="right"
                                 onClick={async () => {
-                                    if (!firebaseAvailable || !cloudAuthUser) {
+                                    if (!cloudAuthUser) {
                                         useAppStore.getState().setShowSettings(true, 'preferences');
                                         return;
                                     }
@@ -3191,7 +3205,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
 
             {/* ===== Git / 社区弹窗 ===== */}
             {showGitPopup && (
-                <div className="modal-overlay" onClick={() => setShowGitPopup(false)}>
+                <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowGitPopup(false); }}>
                     <div className="glass-panel" onClick={e => e.stopPropagation()} style={{
                         padding: '28px', maxWidth: 360, width: '90%', borderRadius: 'var(--radius-lg)',
                         display: 'flex', flexDirection: 'column', gap: 16,
@@ -3347,23 +3361,13 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                     onConfirm={async () => {
                         try {
                             await useAppStore.getState().flushPendingEditorSave();
-                            const { forcePullFromCloud } = await import('../lib/firestore-sync');
-                            const { persistSet } = await import('../lib/persistence');
+                            const { forcePullFromCloud } = await import('../lib/persistence');
                             const { createSnapshot } = await import('../lib/snapshots');
 
                             await createSnapshot(text('从云端同步前的备份', 'Backup before cloud sync', 'Резервная копия перед синхронизацией из облака'), 'manual', { syncLatestToCloud: false });
-                            
+
                             window._isAppForcePulling = true;
-                            const localSet = async (key, value) => {
-                                window._isForcePullingBypass = true;
-                                try {
-                                    await persistSet(key, value);
-                                } finally {
-                                    window._isForcePullingBypass = false;
-                                }
-                            };
-                            
-                            const count = await forcePullFromCloud(localSet);
+                            const count = await forcePullFromCloud();
                             window._isAppForcePulling = false;
                             showToast(text(`成功覆盖了 ${count} 项本地数据，即将刷新以应用更改...`, `Overwrote ${count} local items. Refreshing to apply changes...`, `Перезаписано локальных элементов: ${count}. Обновление для применения изменений...`), 'success');
                             setTimeout(() => {
@@ -3405,7 +3409,7 @@ function ImportWorkModal({ chapters, totalWords, onClose, onImport, t }) {
     };
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="glass-panel" onClick={e => e.stopPropagation()} style={{
                 padding: '24px', maxWidth: 420, width: '90%', borderRadius: 'var(--radius-lg)',
                 display: 'flex', flexDirection: 'column', gap: 16,
@@ -3582,7 +3586,7 @@ function ChapterConflictModal({ conflicts, onClose, onConfirm, t }) {
     });
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="glass-panel" onClick={e => e.stopPropagation()} style={{
                 padding: '24px', maxWidth: 520, width: '90%', borderRadius: 'var(--radius-lg)',
                 display: 'flex', flexDirection: 'column', gap: 16,

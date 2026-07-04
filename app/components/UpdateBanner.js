@@ -5,6 +5,7 @@ import { Bell, RefreshCw, X, Download } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
 import { localizeApiError } from '../lib/api-error-i18n';
 import { tt } from '../lib/runtime-i18n';
+import { apiPath } from '../lib/api-base';
 
 // 自动更新进度的步骤标签按 step 号本地化（服务端发的 label 为中文兜底）
 export function stepLabel(sp) {
@@ -69,7 +70,7 @@ export default function UpdateBanner() {
 
         const checkUpdate = async () => {
             try {
-                const res = await fetch('/api/check-update', { cache: 'no-store' });
+                const res = await fetch(apiPath('/api/check-update'), { cache: 'no-store' });
                 if (!res.ok) return;
                 const data = await res.json();
 
@@ -125,7 +126,7 @@ export default function UpdateBanner() {
         setUpdateResult(null);
         setSourceProgress(null);
         try {
-            const res = await fetch('/api/update-source-stream', { method: 'POST' });
+            const res = await fetch(apiPath('/api/update-source-stream'), { method: 'POST' });
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';

@@ -107,6 +107,8 @@ export function onAuthChange(callback) {
 export async function signInWithEmail(email, password) {
     if (!auth) throw localizedError('Firebase 未配置', 'Firebase is not configured.', 'Firebase не настроен.');
     const result = await signInWithEmailAndPassword(auth, email, password);
+    // 互斥登录（一山不容二虎）：登了 Firebase 就把自建账号挤下线
+    import('./custom-auth').then(m => m.signOutCustom?.()).catch(() => {});
     return result.user;
 }
 
@@ -114,6 +116,7 @@ export async function signInWithEmail(email, password) {
 export async function signUpWithEmail(email, password) {
     if (!auth) throw localizedError('Firebase 未配置', 'Firebase is not configured.', 'Firebase не настроен.');
     const result = await createUserWithEmailAndPassword(auth, email, password);
+    import('./custom-auth').then(m => m.signOutCustom?.()).catch(() => {});
     return result.user;
 }
 
@@ -122,6 +125,7 @@ export async function signInWithGoogle() {
     if (!auth) throw localizedError('Firebase 未配置', 'Firebase is not configured.', 'Firebase не настроен.');
     const provider = new GoogleAuthProvider();
     const result = await signInWithPopup(auth, provider);
+    import('./custom-auth').then(m => m.signOutCustom?.()).catch(() => {});
     return result.user;
 }
 

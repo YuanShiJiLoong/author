@@ -23,6 +23,10 @@ export function getCloudServerUrl() {
             const cfg = JSON.parse(localStorage.getItem(SERVER_CONFIG_KEY) || 'null');
             if (cfg?.serverUrl) return String(cfg.serverUrl).replace(/\/+$/, '');
         } catch {}
+        // 桌面端（Electron）忽略构建期注入的默认服务器地址：即便官方桌面包不慎把
+        // NEXT_PUBLIC_AUTHOR_CLOUD_URL 编入，也不会自动"介入作者服务器"。桌面端如需云同步，
+        // 须由用户在上方显式填写自建地址（localStorage 覆盖）。仅官方网页版 /app（非 Electron）用内置默认。
+        if (window.electronAPI) return '';
     }
     return DEFAULT_SERVER_URL;
 }
@@ -115,6 +119,8 @@ function applyLoginResult(data) {
     saveSession({ user: data.user, tokens: data.tokens });
     saveCustomAccountToHistory(data.user);
     notify();
+    // 互斥登录（一山不容二虎）：登了自建账号就把旧版 Firebase 挤下线
+    import('./auth').then(m => m.signOut?.()).catch(() => {});
     return _currentCustomUser;
 }
 
@@ -181,18 +187,27 @@ async function forceLocalSignOut() {
 
 export function getAccessToken() { return _session?.accessToken || null; }
 
-async function refreshSession() {
-    const refreshToken = _session?.refreshToken;
-    if (!refreshToken) return false;
-    try {
-        const { res, data } = await postJson('/api/auth/refresh', { refreshToken, product: PRODUCT });
-        if (!res.ok || !data?.ok || !data.tokens) return false;
-        _session = data.tokens;
-        saveSession({ user: _currentCustomUser, tokens: _session });
-        return true;
-    } catch {
-        return false;
-    }
+// single-flight 去重：并发的刷新复用同一次请求。否则多个同步请求在 access 过期后同时 401，
+// 各自拿同一个「一次性」refreshToken 去刷新，rotation 下只有第一个成功、其余全失败 →
+// authorizedFetch 误判登录失效把用户踢下线（"每次都要重登"的根因）。
+let _refreshPromise = null;
+function refreshSession() {
+    if (_refreshPromise) return _refreshPromise;
+    _refreshPromise = (async () => {
+        const refreshToken = _session?.refreshToken;
+        if (!refreshToken) return false;
+        try {
+            const { res, data } = await postJson('/api/auth/refresh', { refreshToken, product: PRODUCT });
+            if (!res.ok || !data?.ok || !data.tokens) return false;
+            _session = data.tokens;
+            saveSession({ user: _currentCustomUser, tokens: _session });
+            return true;
+        } catch {
+            return false;
+        }
+    })();
+    _refreshPromise.finally(() => { _refreshPromise = null; });
+    return _refreshPromise;
 }
 
 // 带令牌的 fetch：遇 401 用 refresh 换新令牌重试一次；刷新失败则本地登出。

@@ -1,6 +1,7 @@
 'use client';
 
 import "./globals.css";
+import { BASE_PATH, apiPath } from './lib/api-base';
 import { useEffect, useState } from "react";
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/next';
@@ -36,15 +37,21 @@ export default function RootLayout({ children }) {
         <meta name="description" content="面向小说创作者的AI辅助写作工具，让创作更自由" />
         <link
           rel="stylesheet"
-          href="/katex/katex.min.css"
+          href={apiPath('/katex/katex.min.css')}
         />
+        <style dangerouslySetInnerHTML={{ __html: `:root{--brand-feather:url("${BASE_PATH}/brand/feather-logo.svg");--brand-wordmark:url("${BASE_PATH}/brand/author-wordmark.svg")}` }} />
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body suppressHydrationWarning>
         {children}
         <FirebaseAnalytics />
-        <Analytics />
-        <SpeedInsights />
+        {/* Vercel 统计仅在 Vercel 平台部署时有意义;其余部署(官方 /app、自托管、桌面)不加载其脚本 */}
+        {process.env.NEXT_PUBLIC_VERCEL_URL ? (
+          <>
+            <Analytics />
+            <SpeedInsights />
+          </>
+        ) : null}
       </body>
     </html>
   );

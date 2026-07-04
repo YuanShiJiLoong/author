@@ -3,6 +3,7 @@
 import { isSyncableKey } from './sync-key-policy';
 import { localizedError, tt } from './runtime-i18n';
 import { localizeApiError } from './api-error-i18n';
+import { apiPath } from './api-base';
 
 const SETTINGS_KEY = 'author-sync-settings';
 const SECRET_PREFIX = 'author-sync-secret-';
@@ -254,7 +255,7 @@ function assertWebDavConfig(config) {
 
 async function webdavProxy(action, config, extra = {}) {
     assertWebDavConfig(config);
-    const res = await fetch('/api/sync/webdav', {
+    const res = await fetch(apiPath('/api/sync/webdav'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -553,7 +554,7 @@ export async function createLanShare(minutes) {
     const settings = loadPortableSyncSettings();
     const ttlMinutes = Math.max(5, Math.min(120, Number(minutes || settings.lan.shareMinutes) || 30));
     const bundle = await createSyncSnapshot();
-    const res = await fetch('/api/sync/lan', {
+    const res = await fetch(apiPath('/api/sync/lan'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -576,7 +577,7 @@ export async function importLanShare(source) {
     }
     const url = /^https?:\/\//i.test(raw)
         ? raw
-        : `/api/sync/lan?token=${encodeURIComponent(raw)}`;
+        : apiPath(`/api/sync/lan?token=${encodeURIComponent(raw)}`);
     const res = await fetch(url, { method: 'GET', cache: 'no-store' });
     const snapshot = await res.json().catch(() => null);
     if (!res.ok || snapshot?.error) throw new Error(localizeApiError(snapshot, tt) || tt('读取局域网同步数据失败', 'Failed to read LAN sync data.', 'Не удалось прочитать данные синхронизации по локальной сети.'));

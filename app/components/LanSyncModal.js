@@ -12,7 +12,7 @@ export default function LanSyncModal() {
     if (!showLanSyncModal) return null;
     const close = () => setShowLanSyncModal(false);
     return (
-        <div className="login-modal-overlay" onClick={close}>
+        <div className="login-modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
             <div className="sync-config-modal" onClick={e => e.stopPropagation()}>
                 <button className="login-modal-close" onClick={close}><X size={18} /></button>
                 <div className="sync-config-header">

@@ -5,6 +5,7 @@ import { ClipboardList, Bot, Sparkles, XCircle, FolderOpen, Download, CheckCircl
 import { getProjectSettings } from '../lib/settings';
 import { useI18n } from '../lib/useI18n';
 import { resolveAiEndpoint } from '../lib/ai-provider-compat';
+import { aiFetch } from '../lib/ai-direct';
 import { localizeApiError } from '../lib/api-error-i18n';
 
 // 字段标签（用于展示摘要）
@@ -147,7 +148,7 @@ ${importedFields}
 
 请合并这两个版本，返回合并后的JSON对象：`;
 
-            const res = await fetch(apiEndpoint, {
+            const res = await aiFetch(apiEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -267,7 +268,7 @@ ${importedFields}
     };
 
     return (
-        <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1100 }}>
+        <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 1100 }}>
             <div className="glass-panel" onClick={e => e.stopPropagation()} style={{
                 padding: '24px', maxWidth: 600, width: '90%', borderRadius: 'var(--radius-lg)',
                 display: 'flex', flexDirection: 'column', gap: 16,

@@ -8,6 +8,7 @@ import { getChapters } from '../lib/storage';
 import { createPortal } from 'react-dom';
 import { promptInput } from '../lib/promptInput';
 import { resolveAiEndpoint } from '../lib/ai-provider-compat';
+import { aiFetch } from '../lib/ai-direct';
 import { localizeApiError } from '../lib/api-error-i18n';
 import {
     X, Maximize2, Minimize2, BookOpen, Users, MapPin, Globe, Gem, ClipboardList, Ruler,
@@ -1102,7 +1103,7 @@ export default function BookInfoPanel() {
                                                             `  "${f.key}": { "score": score, "feedback": "one-sentence comment", "suggestion": "revision advice, or keep the original if it is already strong" }`,
                                                             `  "${f.key}": { "score": оценка, "feedback": "комментарий одним предложением", "suggestion": "совет по улучшению или оставить как есть, если уже хорошо" }`
                                                         )).join(',\n') + '\n}';
-                                                        const res = await fetch(apiEndpoint, {
+                                                        const res = await aiFetch(apiEndpoint, {
                                                             method: 'POST', headers: { 'Content-Type': 'application/json' },
                                                             body: JSON.stringify({ systemPrompt: text('你是一位专业的网文编辑，只输出 JSON。', 'You are a professional fiction editor. Output JSON only.', 'Ты профессиональный редактор прозы. Выводи только JSON.'), userPrompt: prompt, apiConfig }),
                                                         });

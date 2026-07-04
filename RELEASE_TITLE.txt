@@ -1,1 +1,1 @@
-多语言报错与界面翻译全面补齐，移动端新增章节跳转与批量概要 | Full i18n for errors and UI, plus mobile chapter jump and batch synopsis
+自建账号云同步上线，隐私政策与服务条款全面更新 | Self-hosted account cloud sync, fully rewritten Terms and Privacy Policy

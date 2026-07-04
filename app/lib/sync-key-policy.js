@@ -60,8 +60,23 @@ const LOCAL_ONLY_PREFIXES = [
     'author-tts-voice-',
 ];
 
+// 历史脏数据防线：workId 段被 JSON 引号包裹（如 author-chapters-"work-default"）。
+// 早期版本曾误把序列化过一层的 workId 当原始值拼进存储键，产生这类畸形键。
+// 合法 workId（work-default / work-xxx / 时间戳 id）绝不会以引号开头或结尾。
+// 畸形键既不能上云、也不能被云端条目回灌到本地——否则会在本地↔云端之间循环复活。
+function isMalformedWorkKey(key) {
+    for (const prefix of SYNCABLE_PREFIXES) {
+        if (key.startsWith(prefix)) {
+            const workId = key.slice(prefix.length);
+            if (workId.startsWith('"') || workId.endsWith('"')) return true;
+        }
+    }
+    return false;
+}
+
 export function isSyncableKey(key) {
     if (!key || typeof key !== 'string') return false;
+    if (isMalformedWorkKey(key)) return false;
     if (LOCAL_ONLY_EXACT_KEYS.has(key)) return false;
     if (LOCAL_ONLY_PREFIXES.some(prefix => key.startsWith(prefix))) return false;
     if (key.includes('backup')) return false;

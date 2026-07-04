@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useI18n } from '../lib/useI18n';
 import { localizeApiError } from '../lib/api-error-i18n';
 import { stepLabel } from './UpdateBanner';
-import { REPO, LEGAL_LANGUAGES, legalDocUrl } from '../lib/constants';
+import { REPO, LEGAL_LANGUAGES, legalDocPath } from '../lib/constants';
 import { downloadDiagnosticReport, recordDiagnosticEvent } from '../lib/diagnostics';
+import { apiPath } from '../lib/api-base';
 
 const HELP_SECTIONS = [
     {
@@ -370,7 +371,7 @@ AI 生成的非标准字段会自动出现在 **✨ AI 生成的额外字段** �
 - 建议定期使用 💾 存档功能备份作品，或开启 **☁️ 云同步** 同步章节与设定集
 
 ### ⚠️ AI 功能的隐私须知
-使用 AI 功能时（续写、改写、对话等），你的 **API Key** 和 **发送给 AI 的文字内容** 会经过部署者的服务器转发给 AI 供应商。
+使用 AI 功能时（续写、改写、对话等），请求会**优先由浏览器直连 AI 供应商**（官方网页版默认开启）；仅在个别场景（不支持直连的供应商、配置了代理地址、启用联网搜索）下，你的 **API Key** 和 **发送给 AI 的文字内容** 才会经过部署者的服务器转发。
 
 如果你正在使用他人部署的公开实例：
 - 可以先**简单体验**功能
@@ -564,16 +565,16 @@ Author 是一个开源项目，采用 **AGPL-3.0** 协议。
 欢迎 Star ⭐、提 Issue、贡献代码！
 
 ### 📜 法律文档
-使用 Author 即表示您同意我们的隐私政策和服务条款：
+使用 Author 即表示您同意我们的隐私政策和服务条款（内置于应用，点击直接打开，无需联外网）：
 
-| 文档 | GitHub | Gitee 镜像（国内可达） |
-|------|--------|----------------------|
+| 文档 | 打开 |
+|------|------|
 ${LEGAL_LANGUAGES.map(l => [
-`| ${l.privacy} ${l.label.split(' ')[0]} | [GitHub](${legalDocUrl('github', 'PRIVACY', l.code)}) | [Gitee](${legalDocUrl('gitee', 'PRIVACY', l.code)}) |`,
-`| ${l.terms} ${l.label.split(' ')[0]} | [GitHub](${legalDocUrl('github', 'TERMS', l.code)}) | [Gitee](${legalDocUrl('gitee', 'TERMS', l.code)}) |`,
+`| ${l.privacy} ${l.label.split(' ')[0]} | [查看](${apiPath(legalDocPath('PRIVACY', l.code))}) |`,
+`| ${l.terms} ${l.label.split(' ')[0]} | [查看](${apiPath(legalDocPath('TERMS', l.code))}) |`,
 ].join('\n')).join('\n')}
 
-> 💡 如果 GitHub 访问受限，请使用 Gitee 镜像链接。法律文档也随桌面版安装包一同分发。
+> 💡 法律文档随应用一同分发，本地即可查看；源文件亦保存在代码仓库根目录。
     `,
     },
     {
@@ -1031,7 +1032,7 @@ If the app white-screens, freezes, or crashes:
 - Regularly archive your work, or enable **Cloud Sync** for chapters and lore.
 
 ### AI Privacy Notice
-When using AI features such as continuation, rewriting, and chat, your **API key** and **text sent to AI** pass through the deployment server before being forwarded to the AI provider.
+When using AI features such as continuation, rewriting, and chat, requests connect **directly from your browser to the AI provider** whenever possible (default on the official web version); only in a few cases (providers blocking direct browser access, a custom proxy URL, or web search) do your **API key** and **text sent to AI** pass through the deployment server.
 
 If you are using someone else's public deployment:
 - Try features briefly if needed.
@@ -1225,16 +1226,16 @@ GitHub: [github.com/YuanShiJiLoong/author](${REPO.github})
 Stars, issues, and contributions are welcome.
 
 ### Legal Documents
-By using Author, you agree to the privacy policy and terms of service:
+By using Author, you agree to the privacy policy and terms of service (bundled with the app — opens directly, no internet required):
 
-| Document | GitHub | Gitee Mirror |
-|----------|--------|--------------|
+| Document | Open |
+|----------|------|
 ${LEGAL_LANGUAGES.map(l => [
-`| ${l.privacy} ${l.label.split(' ')[0]} | [GitHub](${legalDocUrl('github', 'PRIVACY', l.code)}) | [Gitee](${legalDocUrl('gitee', 'PRIVACY', l.code)}) |`,
-`| ${l.terms} ${l.label.split(' ')[0]} | [GitHub](${legalDocUrl('github', 'TERMS', l.code)}) | [Gitee](${legalDocUrl('gitee', 'TERMS', l.code)}) |`,
+`| ${l.privacy} ${l.label.split(' ')[0]} | [View](${apiPath(legalDocPath('PRIVACY', l.code))}) |`,
+`| ${l.terms} ${l.label.split(' ')[0]} | [View](${apiPath(legalDocPath('TERMS', l.code))}) |`,
 ].join('\n')).join('\n')}
 
-> If GitHub is inaccessible, use the Gitee mirror. Legal documents are also distributed with the desktop installer.
+> Legal documents ship with the app and can be viewed locally; source files also live in the repository root.
         `,
     },
     {
@@ -1589,7 +1590,7 @@ Author использует prompt caching там, где провайдер п�
 - Регулярно архивируйте проект или включите Cloud Sync.
 
 ### Приватность ИИ
-При использовании ИИ API Key и текст проходят через сервер развертывания и отправляются провайдеру. На чужих публичных инстансах тестируйте осторожно и затем уничтожайте ключ.
+Запросы ИИ по возможности идут напрямую из браузера к провайдеру (по умолчанию в официальной веб-версии); лишь в отдельных случаях (провайдеры без прямого доступа, прокси, веб-поиск) API Key и текст проходят через сервер развертывания. На чужих публичных инстансах тестируйте осторожно и затем уничтожайте ключ.
         `,
     },
     {
@@ -1697,7 +1698,7 @@ Default следует настройке body font. Панель шрифтов
 Контент и API Key хранятся локально. Все данные можно экспортировать.
 
 ### Приватность
-ИИ-запросы проходят через сервер развертывания к провайдеру. Для серьезного использования лучше собственное развертывание.
+ИИ-запросы по возможности идут напрямую из браузера к провайдеру; в отдельных случаях — через сервер развертывания. Для серьезного использования лучше собственное развертывание.
 
 ### Стек
 Next.js + Tiptap + AI API (OpenAI-compatible / Gemini)
@@ -1708,11 +1709,13 @@ Author открыт по **AGPL-3.0**.
 GitHub: [github.com/YuanShiJiLoong/author](${REPO.github})
 
 ### Юридические документы
-| Документ | GitHub | Gitee |
-|----------|--------|-------|
+Документы встроены в приложение и открываются напрямую:
+
+| Документ | Открыть |
+|----------|---------|
 ${LEGAL_LANGUAGES.map(l => [
-`| ${l.privacy} ${l.label.split(' ')[0]} | [GitHub](${legalDocUrl('github', 'PRIVACY', l.code)}) | [Gitee](${legalDocUrl('gitee', 'PRIVACY', l.code)}) |`,
-`| ${l.terms} ${l.label.split(' ')[0]} | [GitHub](${legalDocUrl('github', 'TERMS', l.code)}) | [Gitee](${legalDocUrl('gitee', 'TERMS', l.code)}) |`,
+`| ${l.privacy} ${l.label.split(' ')[0]} | [Открыть](${apiPath(legalDocPath('PRIVACY', l.code))}) |`,
+`| ${l.terms} ${l.label.split(' ')[0]} | [Открыть](${apiPath(legalDocPath('TERMS', l.code))}) |`,
 ].join('\n')).join('\n')}
         `,
     },
@@ -1811,7 +1814,7 @@ export default function HelpPanel({ open, onClose }) {
                     return;
                 }
 
-                const res = await fetch('/api/app-version', { cache: 'no-store' });
+                const res = await fetch(apiPath('/api/app-version'), { cache: 'no-store' });
                 if (!res.ok) throw new Error('version api failed');
                 const data = await res.json();
                 if (!cancelled) {
@@ -1839,7 +1842,7 @@ export default function HelpPanel({ open, onClose }) {
         setUpdateResult(null);
         setUpdateDone(null);
         try {
-            const res = await fetch('/api/check-update', { cache: 'no-store' });
+            const res = await fetch(apiPath('/api/check-update'), { cache: 'no-store' });
             if (!res.ok) throw new Error('API error');
             const data = await res.json();
             if (data.hasUpdate && data.latest) {
@@ -1879,7 +1882,7 @@ export default function HelpPanel({ open, onClose }) {
         setUpdateDone(null);
         setSourceProgress(null);
         try {
-            const res = await fetch('/api/update-source-stream', { method: 'POST' });
+            const res = await fetch(apiPath('/api/update-source-stream'), { method: 'POST' });
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';

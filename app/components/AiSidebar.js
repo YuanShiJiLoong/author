@@ -17,6 +17,7 @@ import { FolderOpen, Plus, X, Pencil, Trash2, RefreshCw, GitBranch, CornerDownLe
 import { useI18n } from '../lib/useI18n';
 import { copyTextToClipboard } from '../lib/clipboard';
 import { resolveAiEndpoint } from '../lib/ai-provider-compat';
+import { aiFetch } from '../lib/ai-direct';
 import { localizeApiError } from '../lib/api-error-i18n';
 
 const INLINE_THINK_OPEN = '<think>';
@@ -1001,7 +1002,7 @@ export default function AiSidebar({ onInsertText }) {
             } : {}),
             ...(toolsPayload ? { tools: toolsPayload } : {}),
         };
-        const res = await fetch(apiEndpoint, {
+        const res = await aiFetch(apiEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody),

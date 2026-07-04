@@ -104,14 +104,12 @@ export function diffKeyToItems(key, value, now, prevItemState = {}) {
 export function mergeItemsIntoLocal(kind, localValue, items, prevItemState = {}) {
     const prev = prevItemState || {};
 
-    // works_index：整条替换（取 server_seq 最大的一条）
+    // works_index：完全覆盖——云端整份直接盖掉本地（“以最后上传的设备为准”，不合并、不保本地）。
+    // 用户要的是把最后上传那台的完整作品列表镜像下来：删掉的就该消失、不复活。
     if (kind === 'works_index') {
         const latest = items.reduce((a, b) => ((b.serverSeq || 0) >= (a ? (a.serverSeq || 0) : -1) ? b : a), null);
         if (!latest || latest.deleted) return { changed: false, value: localValue };
-        const localHash = fingerprint(localValue);
-        // 本地自上次同步改过 → 保本地（拿不准保本地）
-        if (prev._index?.hash && prev._index.hash !== localHash) return { changed: false, value: localValue };
-        if (fingerprint(latest.value) === localHash) return { changed: false, value: localValue };
+        if (fingerprint(latest.value) === fingerprint(localValue)) return { changed: false, value: localValue };
         return { changed: true, value: latest.value };
     }
 

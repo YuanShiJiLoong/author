@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, Check, Copy, Pause, Play, RefreshCw, Settings2, ShieldCheck, Square, Volume2, X } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
+import { apiPath } from '../lib/api-base';
 
 const RATE_OPTIONS = [0.75, 1, 1.25, 1.5, 2];
 const RATE_STORAGE_KEY = 'author-tts-rate';
@@ -418,7 +419,7 @@ export default function DesktopTtsControls({ editor, chapterId }) {
             while (runRef.current.id === runId && runRef.current.index < chunks.length) {
                 const controller = new AbortController();
                 abortRef.current = controller;
-                const response = await fetch('/api/tts', {
+                const response = await fetch(apiPath('/api/tts'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     cache: 'no-store',
@@ -601,7 +602,7 @@ export default function DesktopTtsControls({ editor, chapterId }) {
         }
         setConnectionState({ status: 'loading', message: text('正在连接并读取模型、音色…', 'Connecting and fetching models and voices…', 'Подключение и загрузка моделей и голосов…') });
         try {
-            const response = await fetch('/api/tts/discover', {
+            const response = await fetch(apiPath('/api/tts/discover'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 cache: 'no-store',

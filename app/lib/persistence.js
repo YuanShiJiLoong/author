@@ -9,6 +9,7 @@
 
 import { get, set, del } from 'idb-keyval';
 import { isSyncableKey } from './sync-key-policy';
+import { apiPath } from './api-base';
 
 // ==================== 用户ID管理 ====================
 
@@ -36,7 +37,7 @@ async function checkServerAvailable() {
     if (_serverAvailable !== null) return _serverAvailable;
     try {
         // 先尝试写入 __ping 以检测是否为只读环境（如 Vercel）
-        const res = await fetch('/api/storage', {
+        const res = await fetch(apiPath('/api/storage'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -52,7 +53,7 @@ async function checkServerAvailable() {
 
 async function serverGet(key) {
     if (_serverAvailable === false) throw new Error('Server storage disabled');
-    const res = await fetch(`/api/storage?key=${encodeURIComponent(key)}`, {
+    const res = await fetch(apiPath(`/api/storage?key=${encodeURIComponent(key)}`), {
         method: 'GET',
         credentials: 'include',
     });
@@ -66,7 +67,7 @@ async function serverGet(key) {
 
 async function serverSet(key, value) {
     if (_serverAvailable === false) throw new Error('Server storage disabled');
-    const res = await fetch('/api/storage', {
+    const res = await fetch(apiPath('/api/storage'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -83,7 +84,7 @@ async function serverSet(key, value) {
 
 async function serverDel(key) {
     if (_serverAvailable === false) throw new Error('Server storage disabled');
-    const res = await fetch(`/api/storage?key=${encodeURIComponent(key)}`, {
+    const res = await fetch(apiPath(`/api/storage?key=${encodeURIComponent(key)}`), {
         method: 'DELETE',
         credentials: 'include',
     });
@@ -353,6 +354,31 @@ export async function syncFromCloud() {
     const sync = await ensureFirebase();
     if (!sync || !isFirebaseSignedIn()) return 0;
     return await sync.pullAllFromCloud(persistGet, persistSet);
+}
+
+// 手动“从云端同步”：强制用云端覆盖本地（恢复误删、拉回全量）。单后端分流：优先自建，否则 Firebase。
+export async function forcePullFromCloud() {
+    const custom = await ensureCustomSync();
+    if (custom && isCustomSignedIn()) {
+        // 自建路径必须和下方 Firebase 路径一样设 bypass：否则 forcePull 内部的 persistSet 会命中
+        // 开头的 _isAppForcePulling 短路（persistSet 第 203 行），拉到的云端数据写不进本地，
+        // 却仍 restored++ 并推进游标 → 提示“成功覆盖 N 项”、刷新仍为空、游标被错误推进。
+        if (typeof window !== 'undefined') window._isForcePullingBypass = true;
+        try {
+            return await custom.forcePullFromCloud();
+        } finally {
+            if (typeof window !== 'undefined') window._isForcePullingBypass = false;
+        }
+    }
+    const sync = await ensureFirebase();
+    if (!sync || !isFirebaseSignedIn()) return 0;
+    // Firebase 路径：写本地时设 bypass 标志，防止 forcePull 覆盖又触发回推
+    const localSet = async (key, value) => {
+        if (typeof window !== 'undefined') window._isForcePullingBypass = true;
+        try { await persistSet(key, value); }
+        finally { if (typeof window !== 'undefined') window._isForcePullingBypass = false; }
+    };
+    return await sync.forcePullFromCloud(localSet);
 }
 
 async function collectSyncableKeysForCloudPush() {

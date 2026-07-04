@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { AlertTriangle, Download, RefreshCw, Trash2 } from 'lucide-react';
 import { downloadDiagnosticReport, initDiagnostics, recordDiagnosticEvent } from './lib/diagnostics';
 import { recoverFromChunkLoadError } from './lib/chunk-recovery';
+import { BASE_PATH } from './lib/api-base';
 
 export default function Error({ error, reset }) {
     useEffect(() => {
@@ -36,7 +37,7 @@ export default function Error({ error, reset }) {
         if (window.confirm('警告：这将会清除浏览器本地所有的缓存数据（包括未导出的作品）、设定和状态！\n通常只有在持续白屏且刷新无法恢复时才使用此操作。\n\n确定要清空并重置吗？')) {
             localStorage.clear();
             sessionStorage.clear();
-            window.location.href = '/';
+            window.location.href = `${BASE_PATH}/`;
         }
     };
 

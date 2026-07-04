@@ -9,6 +9,7 @@ import { getAllWorks, getSettingsNodes, getActiveWorkId } from './settings';
 import { localizedError, tt } from './runtime-i18n';
 import { localizeApiError } from './api-error-i18n';
 import { getChapters } from './storage';
+import { apiPath } from './api-base';
 
 const PROJECT_FILE_VERSION = 2;
 
@@ -525,7 +526,7 @@ async function parseViaApi(file) {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch('/api/parse-file', {
+    const response = await fetch(apiPath('/api/parse-file'), {
         method: 'POST',
         body: formData,
     });

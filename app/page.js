@@ -6,6 +6,7 @@ import { useAppStore } from './store/useAppStore';
 import { useI18n } from './lib/useI18n';
 import { Menu, Sparkles, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 import Tooltip from './components/ui/Tooltip';
+import BeianNotice from './components/BeianNotice';
 import {
   getChapters,
   createChapter,
@@ -22,6 +23,7 @@ import { buildContext, compileSystemPrompt, compileUserPrompt, getContextItems, 
 import { addTokenRecord } from './lib/token-stats';
 import { getProjectSettings, WRITING_MODES, getWritingMode, addSettingsNode, updateSettingsNode, deleteSettingsNode, getSettingsNodes, getActiveWorkId } from './lib/settings';
 import { resolveAiEndpoint } from './lib/ai-provider-compat';
+import { aiFetch } from './lib/ai-direct';
 import { localizeApiError } from './lib/api-error-i18n';
 import { tt } from './lib/runtime-i18n';
 import {
@@ -52,6 +54,9 @@ const AndroidDownloadMenu = dynamic(() => importWithChunkRecovery(() => import('
 const BookInfoPanel = dynamic(() => importWithChunkRecovery(() => import('./components/BookInfoPanel')), { ssr: false });
 const CloudSyncIndicator = dynamic(() => importWithChunkRecovery(() => import('./components/CloudSyncIndicator')), { ssr: false });
 const LoginModal = dynamic(() => importWithChunkRecovery(() => import('./components/LoginModal')), { ssr: false });
+const MigrationWizard = dynamic(() => importWithChunkRecovery(() => import('./components/MigrationWizard')), { ssr: false });
+const PolicyConsentGate = dynamic(() => importWithChunkRecovery(() => import('./components/PolicyConsentGate')), { ssr: false });
+const OpenSourceSyncNotice = dynamic(() => importWithChunkRecovery(() => import('./components/OpenSourceSyncNotice')), { ssr: false });
 const AccountModal = dynamic(() => importWithChunkRecovery(() => import('./components/AccountModal')), { ssr: false });
 const RegisterModal = dynamic(() => importWithChunkRecovery(() => import('./components/RegisterModal')), { ssr: false });
 const SyncMethodModal = dynamic(() => importWithChunkRecovery(() => import('./components/SyncMethodModal')), { ssr: false });
@@ -738,7 +743,7 @@ export default function Home() {
       const apiEndpoint = resolveAiEndpoint(apiConfig);
 
 
-      const res = await fetch(apiEndpoint, {
+      const res = await aiFetch(apiEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1004,6 +1009,9 @@ export default function Home() {
         </div>
       )}
 
+      {/* ===== 备案角标（仅官方部署渲染，开源版不显示） ===== */}
+      <BeianNotice className="beian-global" />
+
       {/* ===== 设定库弹窗 ===== */}
       <SettingsPanel />
       <CategorySettingsModal />
@@ -1016,6 +1024,9 @@ export default function Home() {
       {/* ===== 首次引导 ===== */}
       <TourOverlay onOpenHelp={() => setShowHelp(true)} />
       <LoginModal />
+      <MigrationWizard />
+      <PolicyConsentGate />
+      <OpenSourceSyncNotice />
       <AccountModal />
       <RegisterModal />
       <SyncMethodModal />

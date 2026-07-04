@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { X, Cloud, HardDrive, Wifi, ChevronRight } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
+import { isCustomServerConfigured } from '../lib/custom-auth';
+import BeianNotice from './BeianNotice';
 
 /**
  * 同步方式选择弹窗 — 右上角"同步方式"入口。
@@ -20,6 +22,11 @@ export default function SyncMethodModal() {
     } = useAppStore();
     const { text } = useI18n();
     const [signedIn, setSignedIn] = useState(false);
+    // 是否已配置同步服务器：开源 / 桌面 / 移动版默认无 → 账号同步项提示"官方网页版"。
+    const [serverConfigured] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        try { return isCustomServerConfigured(); } catch { return false; }
+    });
 
     // 账号同步的去向取决于是否已登录（自建账号）
     useEffect(() => {
@@ -54,7 +61,9 @@ export default function SyncMethodModal() {
         {
             key: 'account', icon: <Cloud size={20} />,
             title: text('账号同步', 'Account Sync', 'Синхронизация аккаунта'),
-            desc: text('登录账号，作品自动同步到云端，多设备通用', 'Sign in to auto-sync works to the cloud across devices', 'Войдите — произведения синхронизируются с облаком на всех устройствах'),
+            desc: serverConfigured
+                ? text('登录账号，作品自动同步到云端，多设备通用', 'Sign in to auto-sync works to the cloud across devices', 'Войдите — произведения синхронизируются с облаком на всех устройствах')
+                : text('官方云同步已上线，目前先在网页版提供，点此了解', 'Official cloud sync is live — currently on the web version; tap to learn more', 'Официальная синхронизация доступна — пока в веб-версии; нажмите для подробностей'),
             onClick: openAccount,
         },
         {
@@ -72,7 +81,7 @@ export default function SyncMethodModal() {
     ];
 
     return (
-        <div className="login-modal-overlay" onClick={close}>
+        <div className="login-modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
             <div className="sync-method-modal" onClick={e => e.stopPropagation()}>
                 <button className="login-modal-close" onClick={close}><X size={18} /></button>
                 <div className="sync-method-header">
@@ -91,6 +100,7 @@ export default function SyncMethodModal() {
                         </button>
                     ))}
                 </div>
+                <BeianNotice className="sync-method-beian" />
             </div>
         </div>
     );
