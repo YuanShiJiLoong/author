@@ -1,5 +1,12 @@
 ## v1.2.48 — 自建账号云同步上线，隐私政策与服务条款全面更新
 
+> **⚠️ 重要提示 / Important**
+>
+> - 国内服务器的账号云同步目前**仅在官方网页版**提供：**https://free.author2.com/app** —— 开源网页版、桌面版与安卓 App 暂不直连国内服务器（本地写作、WebDAV / 局域网同步一切照常）。
+> - 《用户服务协议》与《隐私政策》**内容已全面更新**（自 2026 年 7 月 5 日起生效）：登录、注册需勾选同意；已登录用户会收到一次确认提示。请务必阅读最新版本。
+> - Domestic (China-hosted) account cloud sync is currently available **only on the official web app**: **https://free.author2.com/app** — open-source web, desktop, and Android builds do not connect to the domestic server yet (local writing and WebDAV / LAN sync work as usual).
+> - The **Terms of Service and Privacy Policy have been fully updated** (effective July 5, 2026): sign-in and registration now require consent, and signed-in users will see a one-time confirmation. Please review the latest versions.
+
 ### 中文
 
 #### 桌面端 / Web
