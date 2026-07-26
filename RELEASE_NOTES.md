@@ -1,33 +1,34 @@
-## v1.2.48 — 自建账号云同步上线，隐私政策与服务条款全面更新
+## v1.2.49 — 旧版云同步 8 月 1 日停止服务，三端上线停服公告
 
 > **⚠️ 重要提示 / Important**
 >
-> - 国内服务器的账号云同步目前**仅在官方网页版**提供：**https://free.author2.com/app** —— 开源网页版、桌面版与安卓 App 暂不直连国内服务器（本地写作、WebDAV / 局域网同步一切照常）。
-> - 《用户服务协议》与《隐私政策》**内容已全面更新**（自 2026 年 7 月 5 日起生效）：登录、注册需勾选同意；已登录用户会收到一次确认提示。请务必阅读最新版本。
-> - Domestic (China-hosted) account cloud sync is currently available **only on the official web app**: **https://free.author2.com/app** — open-source web, desktop, and Android builds do not connect to the domestic server yet (local writing and WebDAV / LAN sync work as usual).
-> - The **Terms of Service and Privacy Policy have been fully updated** (effective July 5, 2026): sign-in and registration now require consent, and signed-in users will see a one-time confirmation. Please review the latest versions.
+> - **旧版云同步（Firebase / Google 登录）将于 2026 年 8 月 1 日停止服务**，届时存放在旧版云端的数据将**无法取回**。请在此之前完成迁移。
+> - **你的作品保存在本机，不会因此丢失**；WebDAV / 局域网同步同样不受影响。
+> - 账号云同步请前往官方网页版：**https://free.author2.com/app**
+> - **The legacy cloud sync (Firebase / Google sign-in) shuts down on August 1, 2026.** Data stored in the legacy cloud will no longer be retrievable — please migrate before then.
+> - **Your work is stored on this device and will not be lost**; WebDAV / LAN sync is unaffected.
+> - For account cloud sync, use the official web app: **https://free.author2.com/app**
 
 ### 中文
 
 #### 桌面端 / Web
 
-- 全新 Author 账号云同步（自建服务）：支持邮箱验证码注册与登录，替代旧版 Google Firebase 同步；旧账号可通过迁移向导完成数据迁移（登录旧账号取回数据 → 注册 / 登录新账号 → 上传，全程数据只增不删）。旧版 Firebase 同步计划于 2026 年 7 月底停止服务。
-- 官方网页版上线：国内用户的账号注册与云同步统一在官方网页版 `free.author2.com/app` 提供。开源 / 桌面版会显示一条可关闭的公告并引导前往；自托管用户仍可在登录窗口填写自己的服务器地址。
-- 隐私默认加固：开源与桌面构建不再内置任何同步服务器地址——未显式配置服务器时，应用不会连接任何后端。
-- 《用户服务协议》与《隐私政策》全面重写（自 2026 年 7 月 5 日起生效），覆盖中、英、俄、阿四种语言：明确 AI 客户端定位（不内置、不训练、不托管任何模型）、数据收集清单、未成年人保护、账号注销与数据导出等条款。
-- 登录与注册新增条款同意勾选；政策发生实质更新后，已登录用户会收到确认弹窗——同意后继续使用，不同意可退出登录并导出数据。
-- 法律文档改为应用内置页面：构建时自动从政策原文生成带排版的 HTML，点击即开、离线可读，不再依赖外部链接。
-- 官方网页版的 AI 请求默认由浏览器直接连接你选择的服务商（提示词与 API Key 不经过官方服务器）；仅代理、联网搜索或个别不支持直连的服务商会自动回落到服务器转发。
-- 修复：法律文档生成脚本的 markdown-it 依赖未声明；欢迎引导"云同步"卡片文字未居中；登录弹窗若干样式细节。
+- 新增旧版云同步停服公告：还登着旧版账号的用户启动时会看到一次弹窗，说明停服日期、云端数据将无法取回，以及本地作品不受影响；关闭后顶部保留常驻横幅并显示倒计时。进入最后 3 天与已停服两个阶段时会各再提醒一次，确保关键节点不会错过。
+- 停服公告只找云端可能还有数据的人（当前登着旧版账号，或曾登录过旧版且尚未启用新版账号）；已完成迁移与从未用过云同步的用户不会被打扰。
+- 迁移向导适配停服后场景：8 月 1 日之后旧版服务器已关闭，向导会自动跳过"登录旧版账号取回数据"这一步（那时必定失败），直接引导注册新版账号并整批上传本机作品。
+- 登录窗口的旧版入口新增停服倒计时提示，避免用户对着一个已经关闭的服务反复尝试登录。
+- 帮助文档「☁️ 云同步」章节按停服后的实际情况重写（中 / 英 / 俄三语）：完整保留 WebDAV 与局域网同步说明，账号云同步指向官方网页版；各版本同步能力对照表同步更新。
+- README（中 / 英 / 俄 / 阿四语）更正"桌面客户端内置 Firebase 同步"的旧表述；自部署用户配置自有 Firebase 的教程保持不变（自建项目不受本次停服影响）。
+- 卸载程序新增可选项「删除本地数据：作品、设置、登录状态」：默认不勾选，勾选后还会再确认一次并说明不可恢复；静默卸载时默认不删除。
+- 新增本地数据抢救脚本 `scripts/recover-indexeddb.py`：卸载或重装后应用内看不到作品、但数据文件仍在时，可离线解析 IndexedDB 并把章节正文与快照导出成 txt / html。脚本仅使用 Python 标准库，全程本地运行，不联网。
 
 #### Android 端
 
-- 登录页与云同步页新增引导：账号注册与国内云同步请前往官方网页版（App 暂时无法直接连接国内云同步服务器）；本地写作、WebDAV / 局域网同步不受影响。
-- 与桌面端一致的隐私默认：App 不再内置云同步服务器地址（自托管构建可用 `--dart-define=AUTHOR_CLOUD_URL` 注入）。
-- 新增政策更新确认弹窗：条款更新后，已登录用户需重新阅读并同意，不同意可退出登录。
-- 内置《用户服务协议》《隐私政策》同步更新为四语最新版本。
-- 修复云同步页"前往官方网页版"按钮文字被裁剪、卡片内开关水波纹被背景遮挡的问题。
-- Android 版本号更新为 `1.2.48+1248`。
+- 新增旧版云同步停服弹窗：还登着旧版账号的用户启动时提醒，含倒计时、停服后果与"本机作品不受影响"的说明；确认后本阶段不再打扰，进入最后 3 天与已停服阶段会各再提醒一次。
+- 同步页新增常驻停服警告卡，只要还登着旧版账号就一直显示，可一键前往迁移。
+- 登录页的旧版（Firebase 邮箱 / Google）入口顶部新增停服倒计时——这个入口在 8 月 1 日之后将无法登录成功。
+- 停服文案覆盖中 / 英 / 俄 / 阿四语，与桌面端口径一致。
+- Android 版本号更新为 `1.2.49+1249`。
 
 ---
 
@@ -35,20 +36,19 @@
 
 #### Desktop / Web
 
-- Brand-new Author account cloud sync (self-hosted service): register and sign in with email verification codes, replacing the legacy Google Firebase sync. Existing users can migrate via the built-in wizard (sign in to the old account to pull data → register / sign in to the new account → upload; data is only added, never deleted, throughout). Legacy Firebase sync is scheduled to shut down at the end of July 2026.
-- Official web app launched: for users in mainland China, account registration and cloud sync are now provided on the official web app at `free.author2.com/app`. Open-source and desktop builds show a dismissible notice guiding you there; self-hosters can still enter their own server address in the sign-in dialog.
-- Stronger privacy defaults: open-source and desktop builds no longer embed any sync server address — with no server explicitly configured, the app connects to no backend at all.
-- Fully rewritten Terms of Service and Privacy Policy (effective July 5, 2026) in Chinese, English, Russian, and Arabic: clarifying Author's role as a pure AI client (no built-in, trained, or hosted models), the data-collection inventory, minor protection, account deletion, and data export.
-- Sign-in and registration now require ticking a consent checkbox; after any material policy update, signed-in users see a confirmation dialog — agree to continue, or disagree to sign out and export your data.
-- Legal documents are now bundled in-app: nicely formatted HTML pages are generated from the policy sources at build time, open instantly, and work offline — no external links required.
-- On the official web app, AI requests connect directly from your browser to your chosen provider by default (prompts and API keys never touch the official server); only proxies, web search, or the few providers that block browser connections fall back to server relay automatically.
-- Fixes: undeclared markdown-it dependency of the legal-docs build script; off-center text on the onboarding "Cloud Sync" cards; assorted sign-in dialog style details.
+- Added a legacy cloud sync shutdown notice: users still signed in to the legacy account see a dialog on launch explaining the shutdown date, that cloud data will no longer be retrievable, and that local work is unaffected. After dismissing it, a persistent top banner with a countdown remains. The dialog reappears once when entering the final-3-days stage and once after the shutdown, so key moments are never missed.
+- The notice only targets people who may still have data in the legacy cloud (currently signed in to it, or previously signed in and not yet using the new account). Users who already migrated, or never used cloud sync, are never interrupted.
+- The migration wizard now handles the post-shutdown case: after August 1 the legacy server is gone, so the wizard skips the "sign in to the legacy account to pull data" step (which would always fail) and goes straight to creating a new account and uploading local work in one batch.
+- The legacy entry in the sign-in dialog now shows a shutdown countdown, so nobody keeps retrying against a service that has already closed.
+- The help center's "Cloud Sync" chapter was rewritten for the post-shutdown reality (Chinese / English / Russian): WebDAV and LAN sync documentation is kept in full, account cloud sync points to the official web app, and the per-edition capability table was updated accordingly.
+- READMEs (Chinese / English / Russian / Arabic) corrected the outdated "desktop client includes built-in Firebase sync" claim. Instructions for self-hosters configuring their own Firebase project are unchanged — private projects are unaffected by this shutdown.
+- The uninstaller gained an optional "Delete local data: works, settings, sign-in" step: unchecked by default, with a second confirmation spelling out that it cannot be undone, and never deleting anything during a silent uninstall.
+- Added a local data recovery script, `scripts/recover-indexeddb.py`: when works are missing in the app after an uninstall or reinstall but the data files are still on disk, it parses IndexedDB offline and exports chapters and snapshots as txt / html. It uses only the Python standard library and never touches the network.
 
 #### Android
 
-- New guidance on the sign-in and cloud-sync pages: please use the official web app for account registration and China-hosted cloud sync (the mobile app cannot connect to the domestic sync server yet); local writing and WebDAV / LAN sync are unaffected.
-- Same privacy default as desktop: the app no longer embeds a cloud sync server address (self-hosted builds can inject one via `--dart-define=AUTHOR_CLOUD_URL`).
-- Added a policy-update confirmation dialog: after terms are updated, signed-in users must review and agree again, or sign out.
-- Bundled Terms of Service and Privacy Policy updated to the latest four-language versions.
-- Fixed the clipped "Open the web app" button text on the cloud-sync page and switch ink ripples being hidden by the card background.
-- Android is now version `1.2.48+1248`.
+- Added the legacy cloud sync shutdown dialog on launch for users still signed in to the legacy account, with a countdown, the consequences of the shutdown, and a clear note that work on the device is unaffected. Once acknowledged it stays quiet for that stage, reappearing once for the final-3-days stage and once after shutdown.
+- The sync page now shows a persistent shutdown warning card for as long as the legacy account remains signed in, with a one-tap route to migration.
+- The legacy (Firebase email / Google) entry on the sign-in page now carries a shutdown countdown — that entry will stop working after August 1.
+- Shutdown copy is available in Chinese, English, Russian, and Arabic, matching the desktop wording.
+- Android version bumped to `1.2.49+1249`.

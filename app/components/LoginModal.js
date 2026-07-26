@@ -8,6 +8,7 @@ import { useAuthAction } from '../lib/useAuthAction';
 import { apiPath, OFFICIAL_APP_URL } from '../lib/api-base';
 import { isCustomServerConfigured, setCloudServerUrl } from '../lib/custom-auth';
 import { legalDocPath, setAgreedPolicyVersion } from '../lib/constants';
+import { getFirebaseShutdownInfo } from '../lib/firebase-shutdown';
 import BeianNotice from './BeianNotice';
 import GoogleIcon from './icons/GoogleIcon';
 import WechatIcon from './icons/WechatIcon';
@@ -193,6 +194,11 @@ export default function LoginModal() {
                         <div className="login-modal-header">
                             <h2 className="login-modal-title">{t('loginModal.firebaseTitle')}</h2>
                             <p className="login-modal-desc">{t('loginModal.firebaseDesc')}</p>
+                        </div>
+
+                        {/* 这个入口 2026-08-01 起就是死路，登录前先说清楚 */}
+                        <div className="migration-deadline">
+                            {getFirebaseShutdownInfo().stage === 'ended' ? t('migration.deadlineEnded') : t('migration.deadline')}
                         </div>
 
                         <button className="login-modal-submit-btn" onClick={() => { setShowLoginModal(false); setShowMigrationWizard(true); }}>

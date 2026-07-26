@@ -156,7 +156,7 @@ npm start
 
 ### ☁️ 同步配置（自部署用户）
 
-> 💡 **提示：** 桌面客户端（Windows/macOS）支持内置 Firebase 同步、可选 WebDAV 同步和临时局域网迁移。如果你觉得配置 Firebase 过于繁琐，可以直接使用桌面端的 **偏好设置 → 云同步** 配置 WebDAV 或局域网同步。
+> 💡 **提示：** 桌面客户端（Windows/macOS）支持可选的 WebDAV 同步和临时局域网迁移，在 **偏好设置 → 云同步** 中配置即可。旧版内置云同步（Firebase / Google 登录）已于 2026 年 8 月 1 日停止服务；账号云同步现由官方网页版提供：https://free.author2.com/app 。
 
 如果你坚持通过源码或 Vercel 自部署，并希望开启 Firebase 多端同步，需按照以下步骤配置你自己的 Firebase 数据库。WebDAV 和局域网同步可在应用内单独配置。
 

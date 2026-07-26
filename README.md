@@ -154,7 +154,7 @@ npm start
 
 ### ☁️ Sync Setup (Self-Deploy)
 
-> 💡 **Tip:** The desktop client (Windows/macOS) supports built-in Firebase sync, optional WebDAV sync, and temporary LAN transfer. If you find configuring Firebase too tedious, use the desktop client and choose **Preferences → Cloud Sync** for WebDAV or LAN options.
+> 💡 **Tip:** The desktop client (Windows/macOS) supports optional WebDAV sync and temporary LAN transfer — open **Preferences → Cloud Sync** to set either up. The legacy built-in cloud sync (Firebase / Google sign-in) shut down on August 1, 2026; account-based cloud sync is now provided by the official web app at https://free.author2.com/app.
 
 If you insist on self-deploying via source code or Vercel and want Firebase multi-device sync, follow these steps to configure your own Firebase database. WebDAV and LAN sync can be configured in the app without Firebase.
 

@@ -320,7 +320,7 @@ AI 生成的非标准字段会自动出现在 **✨ AI 生成的额外字段** �
 | 💾 | **存档** — 将整个项目（所有章节 + 设定集）导出为 JSON 文件；不包含 API 配置和 AI 对话 |
 | 📥 | **导入作品** — 从文件导入章节（支持多种格式） |
 | 📤 | **导出** — 点击弹出下拉菜单，可导出本章（TXT/Markdown/DOCX/EPUB/PDF）或打开「导出更多」批量选择 |
-| ☁️ | **云同步** — 登录后实时同步数据到云端（详见「☁️ 云同步」章节） |
+| ☁️ | **云同步** — WebDAV / 局域网同步与账号登录入口（详见「☁️ 云同步」章节） |
 | ⚙️ | **更多** — API 配置、偏好设置、帮助、社区 |
 
 ### 多格式导入
@@ -348,7 +348,7 @@ AI 生成的非标准字段会自动出现在 **✨ AI 生成的额外字段** �
 
 ### 桌面客户端 (Electron)
 如果你使用的是 Windows 桌面客户端：
-- **内置官方云同步服务器**，无需手动配置 Firebase
+- 支持 **WebDAV / 局域网同步**；账号云同步请前往官方网页版 https://free.author2.com/app
 - 支持一键检查更新和自动安装
 - 数据存储在系统用户目录中，不受浏览器清理影响
 - 调试日志位于 \`%APPDATA%\\author-app\\author-debug.log\`
@@ -514,13 +514,13 @@ AI 聊天侧栏中的回复支持完整的 Markdown 渲染，包括代码块、�
 - 📄 **分页视图** — 类 Word/Google Docs 的白纸分页排版
 - 🌙 **深色模式** — 护眼的暗色主题
 - 💾 **本地优先** — 所有数据存储在本地，隐私安全
-- ☁️ **云同步** — 可选的多设备实时同步，登录即用
+- ☁️ **云同步** — WebDAV / 局域网多设备同步；账号云同步见官方网页版
 - 🧠 **向量化检索 (RAG)** — 大设定集智能检索，告别"AI 遗忘"
 - 🔍 **联网搜索** — AI 对话时一键联网获取实时信息
 - ✨ **一键排版** — 自动清理空格空段，标准化格式
 - 📦 **存档/读档** — 一键导出/导入完整项目
-- 📱 **移动端** — Android 原生应用，支持 Google 登录云同步
-- 🖥️ **桌面客户端** — Windows 安装包，内置官方云同步服务器
+- 📱 **移动端** — Android 原生应用，支持 WebDAV / 局域网同步
+- 🖥️ **桌面客户端** — Windows 安装包，支持 WebDAV / 局域网同步
 
 ### 数据安全
 - 所有创作内容存储在你的浏览器本地
@@ -583,14 +583,21 @@ ${LEGAL_LANGUAGES.map(l => [
         content: `
 ## 多设备云同步
 
-Author 支持 Firebase、WebDAV 和局域网临时分享三种同步方式，让你在不同设备上无缝切换创作。同步范围采用隐私优先 allowlist。
+Author 支持 WebDAV 与局域网临时分享两种同步方式，让你在不同设备上无缝切换创作。同步范围采用隐私优先 allowlist。
 
-### 快速开始
-1. 点击左下角导航栏的 **☁️ 同步** 图标
-2. 使用 **Google 账号** 登录
-3. 登录后数据将 **自动同步** 到云端
+> ⚠️ **旧版云同步（Firebase / Google 登录）已于 2026 年 8 月 1 日停止服务**，存放在旧版云端的数据不再可取回。本地写作数据、WebDAV 与局域网同步均不受影响。
 
-也可以在 **偏好设置 → 云同步** 中启用 WebDAV，填写坚果云、123 云盘或自建 NAS/Nextcloud 的 WebDAV 地址；局域网同步适合同一 Wi-Fi 下临时迁移数据。
+### 快速开始（WebDAV）
+1. 打开 **偏好设置 → 云同步**
+2. 启用 **WebDAV**，填写坚果云、123 云盘或自建 NAS / Nextcloud 的地址
+3. 保存后即可在多台设备之间同步
+
+局域网同步适合同一 Wi-Fi 下临时迁移数据，不需要任何账号。
+
+### 账号云同步
+国内服务器的账号云同步目前仅在官方网页版提供：**https://free.author2.com/app**
+
+开源网页版、桌面版与安卓 App 不内置官方服务器地址；自部署用户可在登录界面填写自己的服务器地址。
 
 ### 同步范围
 | 数据类型 | 是否同步 |
@@ -606,18 +613,16 @@ Author 支持 Firebase、WebDAV 和局域网临时分享三种同步方式，让
 ### 账号管理
 - 点击右上角 **头像** 可查看当前登录状态
 - 支持切换账号、退出登录
-- 多个 Google 账号可管理不同项目
 
-### 桌面客户端 vs 自部署
-| 特性 | 桌面客户端 | 自部署 (Vercel/源码) |
-|------|:---------:|:------------------:|
-| Firebase 同步 | ✓ 内置 | 需配置 Firebase |
-| WebDAV 同步 | ✓ 可选 | ✓ 可选 |
-| 局域网同步 | ✓ 可选 | ✓ 可选 |
-| 配置难度 | 无需配置 | 需创建 Firebase 项目 |
-| 数据归属 | Firebase 或用户自选 WebDAV | 自建 Firebase 或用户自选 WebDAV |
+### 各版本的同步能力
+| 特性 | 桌面客户端 | 官方网页版 | 自部署 (Docker/源码) |
+|------|:---------:|:---------:|:------------------:|
+| WebDAV 同步 | ✓ 可选 | ✓ 可选 | ✓ 可选 |
+| 局域网同步 | ✓ 可选 | ✓ 可选 | ✓ 可选 |
+| 账号云同步 | 前往官方网页版 | ✓ 内置 | 可填写自建服务器地址 |
+| 数据归属 | 本机 / 用户自选 WebDAV | 官方服务器 | 自建服务器 / 用户自选 WebDAV |
 
-> 💡 桌面客户端已内置官方云同步服务器，无需额外配置 Firebase，登录即用。
+> 💡 桌面版与安卓 App 不内置官方服务器地址；需要账号云同步请前往 **https://free.author2.com/app**。
 
 ### 冲突处理
 同步采用 **最后写入优先** 策略。建议同一时间只在一台设备上编辑，避免覆盖。
@@ -981,7 +986,7 @@ Editor content is **auto-saved in real time** to browser localStorage. No manual
 | Save | **Archive**: export the full project as JSON; API config and AI chat are not included |
 | Import | **Import Work**: import chapters from files |
 | Export | Export current chapter as TXT / Markdown / DOCX / EPUB / PDF, or open **More Export** for batch selection |
-| Cloud | **Cloud Sync** after sign-in |
+| Cloud | **Cloud Sync**: WebDAV / LAN sync and account sign-in |
 | More | API config, preferences, help, community |
 
 ### Multi-format Import
@@ -1009,7 +1014,7 @@ The More Export modal supports batch selection by group. Content can be exported
 
 ### Desktop Client (Electron)
 On the Windows desktop client:
-- Built-in official cloud sync server; no manual Firebase setup.
+- Supports **WebDAV / LAN sync**; for account cloud sync use https://free.author2.com/app
 - One-click update check and automatic installation.
 - Data is stored in the system user directory, not affected by browser cleanup.
 - Debug log: \`%APPDATA%\\author-app\\author-debug.log\`
@@ -1175,13 +1180,13 @@ These settings affect editor reading comfort only. They do not change body text,
 - **Paged view**: Word / Google Docs-like white paper layout.
 - **Dark mode**: eye-friendly dark theme.
 - **Local-first**: data is stored locally for privacy.
-- **Cloud sync**: optional multi-device sync after sign-in.
+- **Cloud sync**: WebDAV / LAN multi-device sync; account sync on the official web app.
 - **Vector retrieval (RAG)**: intelligent retrieval for large lore databases.
 - **Web search**: AI chat can fetch real-time information.
 - **Auto format**: clean spaces and empty paragraphs.
 - **Archive / load**: import/export full projects.
-- **Mobile**: native Android app with Google-login cloud sync.
-- **Desktop**: Windows installer with built-in official cloud sync server.
+- **Mobile**: native Android app with WebDAV / LAN sync.
+- **Desktop**: Windows installer with WebDAV / LAN sync.
 
 ### Data Safety
 - Creative content is stored locally in your browser.
@@ -1244,14 +1249,21 @@ ${LEGAL_LANGUAGES.map(l => [
         content: `
 ## Multi-device Cloud Sync
 
-Author supports Firebase, WebDAV, and temporary LAN sharing so you can switch between devices. Sync uses a privacy-first allowlist.
+Author supports WebDAV and temporary LAN sharing so you can switch between devices. Sync uses a privacy-first allowlist.
 
-### Quick Start
-1. Click the **Cloud Sync** icon in the lower-left navigation.
-2. Sign in with a **Google account**.
-3. After login, data syncs to the cloud automatically.
+> ⚠️ **The legacy cloud sync (Firebase / Google sign-in) shut down on August 1, 2026.** Data stored in the legacy cloud can no longer be retrieved. Local writing data, WebDAV, and LAN sync are unaffected.
 
-You can also enable WebDAV in **Preferences -> Cloud Sync** and fill in a WebDAV address from Jianguoyun, 123 cloud drive, NAS, or Nextcloud. LAN sync is suitable for temporary migration on the same Wi-Fi.
+### Quick Start (WebDAV)
+1. Open **Preferences -> Cloud Sync**.
+2. Enable **WebDAV** and fill in an address from Jianguoyun, 123 cloud drive, NAS, or Nextcloud.
+3. Save, and your devices stay in sync.
+
+LAN sync is suitable for temporary migration on the same Wi-Fi and needs no account at all.
+
+### Account Cloud Sync
+Account-based cloud sync is currently available only on the official web app: **https://free.author2.com/app**
+
+The open-source web build, the desktop client, and the Android app do not ship an official server address; self-hosted users can enter their own server address on the sign-in screen.
 
 ### Sync Scope
 | Data Type | Synced |
@@ -1267,18 +1279,16 @@ AI chats, snapshots, API config, token stats, and local preferences stay on the 
 ### Account Management
 - Click the **avatar** in the upper-right corner to view login status.
 - Supports account switching and logout.
-- Multiple Google accounts can manage different projects.
 
-### Desktop Client vs Self-hosted
-| Feature | Desktop Client | Self-hosted (Vercel / source) |
-|---------|:--:|:--:|
-| Firebase sync | Built in | Requires Firebase setup |
-| WebDAV sync | Optional | Optional |
-| LAN sync | Optional | Optional |
-| Setup difficulty | No setup | Create Firebase project |
-| Data ownership | Firebase or your WebDAV | Your Firebase or WebDAV |
+### Sync Capabilities by Edition
+| Feature | Desktop Client | Official Web App | Self-hosted (Docker / source) |
+|---------|:--:|:--:|:--:|
+| WebDAV sync | Optional | Optional | Optional |
+| LAN sync | Optional | Optional | Optional |
+| Account cloud sync | Use the official web app | Built in | Enter your own server address |
+| Data ownership | This device / your WebDAV | Official server | Your server / your WebDAV |
 
-The desktop client includes the official cloud sync server. No extra Firebase setup is needed.
+The desktop and Android builds do not ship an official server address. For account cloud sync, use **https://free.author2.com/app**.
 
 ### Conflict Handling
 Sync uses a **last write wins** strategy. Edit on one device at a time when possible to avoid overwriting.
@@ -1575,7 +1585,7 @@ Author использует prompt caching там, где провайдер п�
 Экспорт текущей главы доступен в TXT / Markdown / DOCX / EPUB / PDF. **More Export** позволяет выбрать несколько глав, формат и вариант: body или annotated.
 
 ### Desktop Client
-В Windows-клиенте есть встроенный официальный сервер синхронизации, автообновление, хранение данных вне браузера и лог \`%APPDATA%\\author-app\\author-debug.log\`.
+В Windows-клиенте есть синхронизация по WebDAV и локальной сети, автообновление, хранение данных вне браузера и лог \`%APPDATA%\\author-app\\author-debug.log\`. Синхронизация с аккаунтом — в официальном веб-приложении https://free.author2.com/app
 
 ### Диагностика
 При белом экране, зависании или crash:
@@ -1725,14 +1735,21 @@ ${LEGAL_LANGUAGES.map(l => [
         content: `
 ## Синхронизация между устройствами
 
-Author поддерживает Firebase, WebDAV и временный LAN-share. Синхронизация использует privacy-first allowlist.
+Author поддерживает WebDAV и временный LAN-share. Синхронизация использует privacy-first allowlist.
 
-### Быстрый старт
-1. Нажмите **Cloud Sync** в нижней левой навигации.
-2. Войдите через **Google account**.
-3. После входа данные синхронизируются автоматически.
+> ⚠️ **Старая облачная синхронизация (Firebase / вход через Google) отключена 1 августа 2026 года.** Данные из старого облака получить уже нельзя. Локальные тексты, WebDAV и LAN-синхронизация не затронуты.
 
-WebDAV включается в **Preferences -> Cloud Sync**. LAN подходит для временной миграции в одной Wi-Fi сети.
+### Быстрый старт (WebDAV)
+1. Откройте **Preferences -> Cloud Sync**.
+2. Включите **WebDAV** и укажите адрес Jianguoyun, 123 cloud drive, NAS или Nextcloud.
+3. Сохраните — устройства будут синхронизироваться.
+
+LAN подходит для временной миграции в одной Wi-Fi сети и не требует аккаунта.
+
+### Синхронизация аккаунта
+Синхронизация с аккаунтом сейчас доступна только в официальном веб-приложении: **https://free.author2.com/app**
+
+Открытая веб-сборка, десктоп-клиент и Android-приложение не содержат адреса официального сервера; при самостоятельном размещении адрес своего сервера вводится на экране входа.
 
 ### Что синхронизируется
 | Данные | Sync |
@@ -1743,12 +1760,12 @@ WebDAV включается в **Preferences -> Cloud Sync**. LAN подходи
 | Снимки | ✗ локально |
 | API keys / preferences | ✗ локально |
 
-### Desktop vs Self-hosted
-| Функция | Desktop | Self-hosted |
-|--------|:--:|:--:|
-| Firebase | встроено | нужна настройка |
-| WebDAV | опционально | опционально |
-| LAN | опционально | опционально |
+### Возможности синхронизации по версиям
+| Функция | Desktop | Официальный веб | Self-hosted |
+|--------|:--:|:--:|:--:|
+| WebDAV | опционально | опционально | опционально |
+| LAN | опционально | опционально | опционально |
+| Синхронизация аккаунта | в официальном веб-приложении | встроено | свой адрес сервера |
 
 Конфликты решаются стратегией **last write wins**. Лучше редактировать одновременно только на одном устройстве.
         `,

@@ -22,6 +22,10 @@ export default function OpenSourceSyncNotice() {
                 if (localStorage.getItem(DISMISS_KEY)) return;
                 const { isCustomServerConfigured } = await import('../lib/custom-auth');
                 if (isCustomServerConfigured()) return;
+                // 受旧版停服影响的用户改看 FirebaseShutdownNotice（同一件事的紧急版本，
+                // 且两条通告条都固定在顶部同一位置，同时出现会叠在一起）
+                const { isAffectedByFirebaseShutdown } = await import('../lib/firebase-shutdown');
+                if (await isAffectedByFirebaseShutdown()) return;
                 setShow(true);
             } catch { /* 检测失败不打扰 */ }
         })();

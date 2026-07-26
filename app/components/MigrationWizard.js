@@ -7,6 +7,7 @@ import { useI18n } from '../lib/useI18n';
 import { apiPath, OFFICIAL_APP_URL } from '../lib/api-base';
 import { isCustomServerConfigured } from '../lib/custom-auth';
 import { legalDocPath, setAgreedPolicyVersion } from '../lib/constants';
+import { getFirebaseShutdownInfo } from '../lib/firebase-shutdown';
 import GoogleIcon from './icons/GoogleIcon';
 
 /**
@@ -35,6 +36,9 @@ export default function MigrationWizard() {
         if (typeof window === 'undefined') return false;
         try { return isCustomServerConfigured(); } catch { return false; }
     });
+
+    // 旧版是否已停服：停服后登录与云端拉取必定失败，intro 要跳过整个旧版环节
+    const [fbEnded] = useState(() => getFirebaseShutdownInfo().stage === 'ended');
 
     // 自建账号表单
     const [isRegister, setIsRegister] = useState(true);
@@ -213,7 +217,7 @@ export default function MigrationWizard() {
                             <p className="login-modal-desc">{serverConfigured ? t('migration.introDesc') : t('migration.webOnlyIntro')}</p>
                         </div>
 
-                        <div className="migration-deadline">{t('migration.deadline')}</div>
+                        <div className="migration-deadline">{fbEnded ? t('migration.deadlineEnded') : t('migration.deadline')}</div>
 
                         {!serverConfigured ? (
                             /* 开源 / 桌面版：官方服务器未内置，就地注册上传会失败 → 引导去官方网页版完成迁移 */
@@ -229,15 +233,25 @@ export default function MigrationWizard() {
                             </>
                         ) : (
                             <>
-                                <div className="migration-steps">
-                                    <div className="migration-step"><span className="migration-step-num">1</span><span>{t('migration.stepPull')}</span></div>
-                                    <div className="migration-step"><span className="migration-step-num">2</span><span>{t('migration.stepAccount')}</span></div>
-                                    <div className="migration-step"><span className="migration-step-num">3</span><span>{t('migration.stepUpload')}</span></div>
-                                </div>
+                                {!fbEnded && (
+                                    <div className="migration-steps">
+                                        <div className="migration-step"><span className="migration-step-num">1</span><span>{t('migration.stepPull')}</span></div>
+                                        <div className="migration-step"><span className="migration-step-num">2</span><span>{t('migration.stepAccount')}</span></div>
+                                        <div className="migration-step"><span className="migration-step-num">3</span><span>{t('migration.stepUpload')}</span></div>
+                                    </div>
+                                )}
 
                                 {error && <div className="login-modal-error"><XCircle size={13} /> {error}</div>}
 
-                                {fbUser ? (
+                                {fbEnded ? (
+                                    /* 旧版已停服：登录与云端拉取必定失败，直接注册新账号上传本机数据 */
+                                    <>
+                                        <p className="migration-hint">{t('migration.endedHint')}</p>
+                                        <button className="login-modal-submit-btn" onClick={() => startMigration({ skipPull: true })} disabled={loading}>
+                                            {t('migration.skipPull')}
+                                        </button>
+                                    </>
+                                ) : fbUser ? (
                                     <>
                                         <div className="migration-fbuser">
                                             <ShieldCheck size={14} />

@@ -57,6 +57,7 @@ const LoginModal = dynamic(() => importWithChunkRecovery(() => import('./compone
 const MigrationWizard = dynamic(() => importWithChunkRecovery(() => import('./components/MigrationWizard')), { ssr: false });
 const PolicyConsentGate = dynamic(() => importWithChunkRecovery(() => import('./components/PolicyConsentGate')), { ssr: false });
 const OpenSourceSyncNotice = dynamic(() => importWithChunkRecovery(() => import('./components/OpenSourceSyncNotice')), { ssr: false });
+const FirebaseShutdownNotice = dynamic(() => importWithChunkRecovery(() => import('./components/FirebaseShutdownNotice')), { ssr: false });
 const AccountModal = dynamic(() => importWithChunkRecovery(() => import('./components/AccountModal')), { ssr: false });
 const RegisterModal = dynamic(() => importWithChunkRecovery(() => import('./components/RegisterModal')), { ssr: false });
 const SyncMethodModal = dynamic(() => importWithChunkRecovery(() => import('./components/SyncMethodModal')), { ssr: false });
@@ -1026,6 +1027,7 @@ export default function Home() {
       <LoginModal />
       <MigrationWizard />
       <PolicyConsentGate />
+      <FirebaseShutdownNotice />
       <OpenSourceSyncNotice />
       <AccountModal />
       <RegisterModal />

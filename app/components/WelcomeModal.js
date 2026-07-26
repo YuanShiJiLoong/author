@@ -143,7 +143,7 @@ export default function WelcomeModal() {
                                 <div className="welcome-cloud-feature-icon">☁️</div>
                                 <div>
                                     <h4>{text('自动备份', 'Auto Backup', 'Авто-резервирование')}</h4>
-                                    <p>{text('作品安全存储在云端', 'Your manuscripts are safely stored in the cloud', 'Рукописи надёжно хранятся в облаке')}</p>
+                                    <p>{text('可备份到账号云端或你自己的 WebDAV', 'Back up to your account or your own WebDAV', 'Резервирование в аккаунт или ваш WebDAV')}</p>
                                 </div>
                             </div>
 

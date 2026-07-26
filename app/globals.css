@@ -9692,6 +9692,87 @@ h5.chat-md-heading {
 }
 .sync-notice-dismiss:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 
+/* ===== 旧版（Firebase）云同步停服公告 =====
+   弹窗压在普通弹窗之上、政策同意闸之下（法律闸优先）；横幅沿用通告条骨架换警示色。 */
+.fb-shutdown-overlay {
+  z-index: 20000;
+}
+.fb-shutdown-icon {
+  color: #d97706;
+}
+.fb-shutdown-countdown {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 14px 0 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(217, 119, 6, 0.1);
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  text-align: center;
+}
+.fb-shutdown-countdown b {
+  font-size: 17px;
+  color: #d97706;
+}
+.fb-shutdown-countdown span {
+  font-size: 12px;
+  color: var(--text-secondary, #8a8f98);
+}
+.fb-shutdown-countdown.is-ended {
+  background: rgba(127, 127, 127, 0.1);
+  border-color: rgba(127, 127, 127, 0.3);
+}
+.fb-shutdown-countdown.is-ended b {
+  color: var(--text-secondary, #8a8f98);
+}
+.fb-shutdown-points {
+  margin: 12px 2px 16px;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-secondary, #8a8f98);
+}
+.fb-shutdown-points li {
+  position: relative;
+  margin-bottom: 6px;
+  padding-left: 16px;
+}
+.fb-shutdown-points li::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+}
+.fb-shutdown-points li.is-warn { color: #d97706; }
+.fb-shutdown-points li.is-safe { color: #16a34a; }
+.fb-shutdown-ack-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary, #8a8f98);
+}
+.fb-shutdown-ack-btn:hover {
+  background: rgba(127, 127, 127, 0.12);
+}
+.fb-shutdown-banner {
+  background: rgba(120, 53, 15, 0.95);
+  border: 1px solid rgba(217, 119, 6, 0.5);
+}
+.fb-shutdown-banner .sync-notice-icon { color: #fbbf24; opacity: 1; }
+.fb-shutdown-banner .sync-notice-go { color: #fcd34d; }
+
 .login-modal {
   position: relative;
   width: 420px;
