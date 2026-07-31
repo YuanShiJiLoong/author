@@ -46,8 +46,10 @@ export async function POST(request) {
         return NextResponse.json({ text });
     } catch (err) {
         console.error('parse-file error:', err);
+        // 不把解析库的原始错误/堆栈/文件路径回传前端，避免内部信息泄露；
+        // 仅返回稳定文案 + code，前端用 localizeApiError 按 code 本地化展示
         return NextResponse.json(
-            { error: `解析失败：${err.message}`, code: 'PARSE_FAILED', detail: err.message },
+            { error: '解析失败', code: 'PARSE_FAILED' },
             { status: 500 }
         );
     }
