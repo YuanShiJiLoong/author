@@ -1,1 +1,1 @@
-加强数据安全并优化手机端体验 | Improved data safety and the mobile web experience
+加强数据安全并优化网页兼容性 | Improved data safety and web compatibility

@@ -10,6 +10,7 @@
 import { get, set, del } from 'idb-keyval';
 import { isSyncableKey } from './sync-key-policy';
 import { apiPath } from './api-base';
+import { IS_OFFICIAL_WEB } from './deployment-target';
 
 // ==================== 用户ID管理 ====================
 
@@ -31,7 +32,8 @@ function ensureUserId() {
 
 // ==================== 服务端存储 ====================
 
-let _serverAvailable = null; // null = 未检测, true/false = 检测结果
+// 官网使用带认证的 Author Cloud，不探测仅供可信自托管使用的文件接口。
+let _serverAvailable = IS_OFFICIAL_WEB ? false : null; // null = 未检测, true/false = 检测结果
 
 async function checkServerAvailable() {
     if (_serverAvailable !== null) return _serverAvailable;

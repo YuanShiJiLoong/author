@@ -1,4 +1,8 @@
-## v1.2.51 — 加强数据安全并优化手机端体验
+## v1.2.51 — 加强数据安全并优化网页兼容性
+
+> 补充修复：修复子路径部署时模型供应商图标无法显示的问题，并避免官方网页版探测不适用的自托管文件接口。
+
+> Follow-up fix: provider icons now load correctly from subpath deployments, and the official web app no longer probes the self-hosted file endpoint that it does not use.
 
 ### 中文
 

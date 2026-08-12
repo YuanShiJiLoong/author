@@ -7,6 +7,7 @@ import { getProjectSettings, saveProjectSettings, getChatApiConfig } from '../li
 import { PROVIDERS, getProviderLabel } from './SettingsPanel';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
+import { apiPath } from '../lib/api-base';
 
 // Provider icon filename mapping
 const PROVIDER_ICON_MAP = {
@@ -42,7 +43,7 @@ function MiniProviderIcon({ provider, model, size = 22 }) {
     const iconName = getProviderIconName(provider, model);
     return (
         <img
-            src={`/provider-icons/${iconName}.png`}
+            src={apiPath(`/provider-icons/${iconName}.png`)}
             alt=""
             width={size}
             height={size}
