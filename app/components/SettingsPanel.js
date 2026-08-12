@@ -42,6 +42,7 @@ import SettingsTree from './SettingsTree';
 import { useI18n } from '../lib/useI18n';
 import { localizeApiError } from '../lib/api-error-i18n';
 import { apiPath } from '../lib/api-base';
+import { testAiConnection } from '../lib/ai-direct';
 import SettingsItemEditor from './SettingsItemEditor';
 import { getModeRolePrompt } from '../lib/context-engine';
 import { downloadFile, downloadBlob } from '../lib/project-io';
@@ -2090,6 +2091,7 @@ function ApiConfigForm({ data, onChange }) {
             ...data,
             providerConfigs: configs,
             provider: providerKey,
+            providerType,
             apiKey: saved.apiKey || '',
             baseUrl: isCustomTarget ? (saved.baseUrl || '') : (saved.baseUrl || getBaseUrl(providerType, provider.supportedFormats ? defaultFormat : undefined)),
             model: saved.model || (isCustomTarget ? '' : (provider.models[0] || '')),
@@ -2121,8 +2123,7 @@ function ApiConfigForm({ data, onChange }) {
         setTestStatus('loading');
         try {
             const pType = instanceCfg?.providerType || data.provider;
-            const res = await fetch(apiPath('/api/ai/test'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiConfig: { ...data, provider: pType } }) });
-            setTestStatus(await res.json());
+            setTestStatus(await testAiConnection({ ...data, provider: pType, providerType: pType }));
         } catch { setTestStatus({ success: false, error: t('apiConfig.networkError') }); }
     };
 

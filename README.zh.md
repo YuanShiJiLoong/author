@@ -148,6 +148,19 @@ npm run build
 npm start
 ```
 
+### 开源版本与官方网页版的边界
+
+本仓库默认构建为开源 / 自部署版本。`NEXT_PUBLIC_BASE_PATH` 只控制子路径挂载，不能用来识别官网。
+
+Author 官方腾讯云网页版在部署环境中额外设置：
+
+```env
+NEXT_PUBLIC_DEPLOYMENT_TARGET=official-web
+NEXT_PUBLIC_BASE_PATH=/app
+```
+
+官网备案、域名、云服务地址和部署凭据由腾讯云部署环境提供，不应写入或提交到开源源码。公共编辑器、模型兼容和数据处理修复仍应进入本仓库；仅官网需要的运营、合规及托管行为必须通过 `IS_OFFICIAL_WEB` 边界启用。
+
 ### 部署到 Vercel
 
 > 💡 **⚠️ 注意：** 通过 Vercel 部署的版本默认**没有**配置 Firebase 云同步。你可以自行配置 Firebase，也可以在应用内使用 WebDAV/局域网同步。如果只想低成本使用多设备同步，请**直接下载客户端**。

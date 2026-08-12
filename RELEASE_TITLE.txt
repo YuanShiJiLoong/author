@@ -1,1 +1,1 @@
-旧版云同步 8 月 1 日停止服务，三端上线停服公告与迁移引导 | Legacy cloud sync shuts down Aug 1: shutdown notices and migration guidance across all platforms
+修复 DeepSeek 连接测试 404并明确官网部署边界 | Fixed DeepSeek connection-test 404s and clarified the official deployment boundary

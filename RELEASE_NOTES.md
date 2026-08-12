@@ -1,34 +1,20 @@
-## v1.2.49 — 旧版云同步 8 月 1 日停止服务，三端上线停服公告
-
-> **⚠️ 重要提示 / Important**
->
-> - **旧版云同步（Firebase / Google 登录）将于 2026 年 8 月 1 日停止服务**，届时存放在旧版云端的数据将**无法取回**。请在此之前完成迁移。
-> - **你的作品保存在本机，不会因此丢失**；WebDAV / 局域网同步同样不受影响。
-> - 账号云同步请前往官方网页版：**https://free.author2.com/app**
-> - **The legacy cloud sync (Firebase / Google sign-in) shuts down on August 1, 2026.** Data stored in the legacy cloud will no longer be retrievable — please migrate before then.
-> - **Your work is stored on this device and will not be lost**; WebDAV / LAN sync is unaffected.
-> - For account cloud sync, use the official web app: **https://free.author2.com/app**
+## v1.2.50 — 修复 DeepSeek 连接测试 404，并明确官网部署边界
 
 ### 中文
 
 #### 桌面端 / Web
 
-- 新增旧版云同步停服公告：还登着旧版账号的用户启动时会看到一次弹窗，说明停服日期、云端数据将无法取回，以及本地作品不受影响；关闭后顶部保留常驻横幅并显示倒计时。进入最后 3 天与已停服两个阶段时会各再提醒一次，确保关键节点不会错过。
-- 停服公告只找云端可能还有数据的人（当前登着旧版账号，或曾登录过旧版且尚未启用新版账号）；已完成迁移与从未用过云同步的用户不会被打扰。
-- 迁移向导适配停服后场景：8 月 1 日之后旧版服务器已关闭，向导会自动跳过"登录旧版账号取回数据"这一步（那时必定失败），直接引导注册新版账号并整批上传本机作品。
-- 登录窗口的旧版入口新增停服倒计时提示，避免用户对着一个已经关闭的服务反复尝试登录。
-- 帮助文档「☁️ 云同步」章节按停服后的实际情况重写（中 / 英 / 俄三语）：完整保留 WebDAV 与局域网同步说明，账号云同步指向官方网页版；各版本同步能力对照表同步更新。
-- README（中 / 英 / 俄 / 阿四语）更正"桌面客户端内置 Firebase 同步"的旧表述；自部署用户配置自有 Firebase 的教程保持不变（自建项目不受本次停服影响）。
-- 卸载程序新增可选项「删除本地数据：作品、设置、登录状态」：默认不勾选，勾选后还会再确认一次并说明不可恢复；静默卸载时默认不删除。
-- 新增本地数据抢救脚本 `scripts/recover-indexeddb.py`：卸载或重装后应用内看不到作品、但数据文件仍在时，可离线解析 IndexedDB 并把章节正文与快照导出成 txt / html。脚本仅使用 Python 标准库，全程本地运行，不联网。
+- 修复切换 AI 供应商后顶层 `providerType` 可能残留为旧供应商的问题。此前可能出现 `provider: deepseek`、`providerType: claude` 的矛盾配置，导致 DeepSeek 测试连接误走 Anthropic `/v1/messages` 接口并显示 404。
+- DeepSeek 使用默认地址 `https://api.deepseek.com` 即可连接，不再需要通过添加 `/anthropic` 后缀绕过错误协议分支。
+- 供应商切换时同步更新 `provider` 与 `providerType`；测试请求也会携带一致的供应商类型，服务端对旧浏览器配置增加兼容处理。
+- 官方网页版的 DeepSeek 连接测试优先使用与实际对话一致的浏览器直连链路；自定义代理、桌面端、普通自部署或直连失败时仍使用原有服务端测试路由。
+- 连接探测改为最小请求，不再为 DeepSeek V4 强制附加思考模式参数，避免非必要参数干扰基础连通性判断。
+- 新增显式 `official-web` 构建目标。`NEXT_PUBLIC_BASE_PATH` 只负责子路径路由，不再被用来推断部署身份；开源、桌面和普通自部署版本默认行为不变。
+- 中、英、俄、阿四种 README 与开源边界文档同步说明公共源码、官网私有配置及部署职责，防止备案、云服务配置或私有部署资产混入开源仓库。
 
 #### Android 端
 
-- 新增旧版云同步停服弹窗：还登着旧版账号的用户启动时提醒，含倒计时、停服后果与"本机作品不受影响"的说明；确认后本阶段不再打扰，进入最后 3 天与已停服阶段会各再提醒一次。
-- 同步页新增常驻停服警告卡，只要还登着旧版账号就一直显示，可一键前往迁移。
-- 登录页的旧版（Firebase 邮箱 / Google）入口顶部新增停服倒计时——这个入口在 8 月 1 日之后将无法登录成功。
-- 停服文案覆盖中 / 英 / 俄 / 阿四语，与桌面端口径一致。
-- Android 版本号更新为 `1.2.49+1249`。
+- 同步版本号为 `1.2.50+1250`；本次没有 Android 功能改动。
 
 ---
 
@@ -36,19 +22,14 @@
 
 #### Desktop / Web
 
-- Added a legacy cloud sync shutdown notice: users still signed in to the legacy account see a dialog on launch explaining the shutdown date, that cloud data will no longer be retrievable, and that local work is unaffected. After dismissing it, a persistent top banner with a countdown remains. The dialog reappears once when entering the final-3-days stage and once after the shutdown, so key moments are never missed.
-- The notice only targets people who may still have data in the legacy cloud (currently signed in to it, or previously signed in and not yet using the new account). Users who already migrated, or never used cloud sync, are never interrupted.
-- The migration wizard now handles the post-shutdown case: after August 1 the legacy server is gone, so the wizard skips the "sign in to the legacy account to pull data" step (which would always fail) and goes straight to creating a new account and uploading local work in one batch.
-- The legacy entry in the sign-in dialog now shows a shutdown countdown, so nobody keeps retrying against a service that has already closed.
-- The help center's "Cloud Sync" chapter was rewritten for the post-shutdown reality (Chinese / English / Russian): WebDAV and LAN sync documentation is kept in full, account cloud sync points to the official web app, and the per-edition capability table was updated accordingly.
-- READMEs (Chinese / English / Russian / Arabic) corrected the outdated "desktop client includes built-in Firebase sync" claim. Instructions for self-hosters configuring their own Firebase project are unchanged — private projects are unaffected by this shutdown.
-- The uninstaller gained an optional "Delete local data: works, settings, sign-in" step: unchecked by default, with a second confirmation spelling out that it cannot be undone, and never deleting anything during a silent uninstall.
-- Added a local data recovery script, `scripts/recover-indexeddb.py`: when works are missing in the app after an uninstall or reinstall but the data files are still on disk, it parses IndexedDB offline and exports chapters and snapshots as txt / html. It uses only the Python standard library and never touches the network.
+- Fixed stale top-level `providerType` values after switching AI providers. A mismatched configuration such as `provider: deepseek` with `providerType: claude` could previously route a DeepSeek connection test to the Anthropic `/v1/messages` endpoint and surface a 404.
+- DeepSeek now works with the default `https://api.deepseek.com` base URL; adding an `/anthropic` suffix is no longer needed as a workaround for the wrong protocol branch.
+- Provider changes now synchronize both `provider` and `providerType`; connection tests send a consistent provider type, and the server tolerates legacy browser configurations.
+- On the official web app, DeepSeek connection tests prefer the same browser-direct path used by real conversations. Custom proxies, desktop builds, ordinary self-hosted deployments, and direct-connect failures continue to use the existing server-side test route.
+- Connection probes now use a minimal request and no longer force a thinking-mode parameter for DeepSeek V4, keeping basic connectivity checks free of unrelated options.
+- Added an explicit `official-web` build target. `NEXT_PUBLIC_BASE_PATH` now represents subpath routing only and is no longer treated as deployment identity; open-source, desktop, and ordinary self-hosted defaults remain unchanged.
+- Updated the Chinese, English, Russian, and Arabic READMEs and the open-core boundary documentation to separate shared source code from official private configuration and deployment responsibilities.
 
 #### Android
 
-- Added the legacy cloud sync shutdown dialog on launch for users still signed in to the legacy account, with a countdown, the consequences of the shutdown, and a clear note that work on the device is unaffected. Once acknowledged it stays quiet for that stage, reappearing once for the final-3-days stage and once after shutdown.
-- The sync page now shows a persistent shutdown warning card for as long as the legacy account remains signed in, with a one-tap route to migration.
-- The legacy (Firebase email / Google) entry on the sign-in page now carries a shutdown countdown — that entry will stop working after August 1.
-- Shutdown copy is available in Chinese, English, Russian, and Arabic, matching the desktop wording.
-- Android version bumped to `1.2.49+1249`.
+- Synchronized the version to `1.2.50+1250`; this release contains no Android feature changes.

@@ -1,18 +1,19 @@
 'use client';
 
 // ==================== AI 直连层(直连优先,代发兜底) ====================
-// 官方网页版(basePath 子路径部署)默认启用:浏览器直接调用用户配置的 AI 服务商
+// 官方网页版(显式 official-web 构建目标)默认启用:浏览器直接调用用户配置的 AI 服务商
 // (实测智谱/DeepSeek/Moonshot/硅基流动/OpenAI/Gemini/Anthropic 均放行浏览器跨域),
 // 提示词与 API Key 不经过官方服务器;直连失败(跨域/网络)自动回落到本应用的
 // 服务端代理路由(apiPath 补 basePath 前缀)。
-// 开源/桌面/本地开发(无 basePath)默认仍走本地代理,行为与历史版本完全一致。
+// 开源/桌面/普通自部署默认仍走自身服务端代理,行为与历史版本完全一致。
 // localStorage 'author-ai-direct' = '1' / '0' 可强制开 / 关(调试与逃生开关)。
 //
 // ⚠️ 直连的请求拼装与 SSE 协议转换必须与 app/api/ai/route.js 保持一致(那边是唯一
 // 真相源):上游 OpenAI 流 → 应用简化协议 {thinking}/{text}/{usage}/{grounding}/[DONE]。
 // 直连遇到非 2xx 不在客户端翻译错误,直接回落代发,由服务端产出带 code 的本地化错误。
 
-import { apiPath, BASE_PATH } from './api-base';
+import { apiPath } from './api-base';
+import { IS_OFFICIAL_WEB } from './deployment-target';
 import { rotateKey } from './keyRotator';
 import { applyContentSafety } from './content-safety';
 
@@ -65,7 +66,7 @@ function buildBaseParams({ model, maxTokens, temperature, topP, reasoningEffort 
 
 // ===== 开关与资格判断 =====
 
-/** 是否直连优先:官方子路径部署默认开;localStorage 可强制开/关。 */
+/** 是否直连优先:官方网页版构建默认开;localStorage 可强制开/关。 */
 export function preferDirectAi() {
     if (typeof window === 'undefined') return false;
     try {
@@ -73,7 +74,7 @@ export function preferDirectAi() {
         if (flag === '1') return true;
         if (flag === '0') return false;
     } catch { /* ignore */ }
-    return Boolean(BASE_PATH);
+    return IS_OFFICIAL_WEB;
 }
 
 /** 本次请求能否直连:仅 OpenAI 兼容族、未配自定义代理、未用服务端搜索循环、配置齐全、非已知跨域封锁的服务商。 */
@@ -243,4 +244,69 @@ export async function aiFetch(endpoint, init = {}) {
         // 跨域 / 网络失败 → 回落服务端代发
     }
     return proxyRequest();
+}
+
+/**
+ * 测试 AI 连接。官方网页版构建中的 DeepSeek 优先从浏览器直连，
+ * 与实际对话链路保持一致；桌面版、自定义代理及直连失败时仍走服务端测试路由。
+ */
+export async function testAiConnection(apiConfig) {
+    const normalizedConfig = apiConfig || {};
+    const proxyRequest = async () => {
+        const response = await fetch(apiPath('/api/ai/test'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ apiConfig: normalizedConfig }),
+        });
+        return response.json();
+    };
+
+    const baseUrl = String(normalizedConfig.baseUrl || '').trim();
+    const model = normalizedConfig.model || 'deepseek-v4-pro';
+    // DeepSeek 预设没有格式切换；忽略旧配置中可能残留的 anthropic 标记。
+    const useAnthropicFormat = normalizedConfig.provider === 'claude'
+        || (normalizedConfig.apiFormat === 'anthropic' && normalizedConfig.provider !== 'deepseek');
+    const canTestDirect = preferDirectAi()
+        && !normalizedConfig.proxyUrl
+        && !useAnthropicFormat
+        && normalizedConfig.apiKey
+        && baseUrl
+        && isDeepSeekRequest(normalizedConfig, baseUrl, model);
+
+    if (!canTestDirect) return proxyRequest();
+
+    try {
+        const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${rotateKey(normalizedConfig.apiKey)}`,
+            },
+            body: JSON.stringify({
+                model,
+                messages: [{ role: 'user', content: '说"连接成功"' }],
+                max_tokens: 20,
+            }),
+        });
+        const responseText = await response.text();
+        let data = null;
+        try { data = JSON.parse(responseText); } catch { /* 上游可能返回纯文本 */ }
+
+        if (!response.ok) {
+            const upstreamError = data?.error?.message || data?.message || responseText.trim();
+            return upstreamError
+                ? { success: false, error: upstreamError }
+                : { success: false, error: `连接失败(${response.status})`, code: 'CONN_FAILED', status: response.status };
+        }
+
+        return {
+            success: true,
+            message: '✅ DeepSeek 连接成功！',
+            model,
+            reply: String(data?.choices?.[0]?.message?.content || '').trim(),
+        };
+    } catch {
+        // 浏览器跨域或网络失败时，回落到原有服务端代发测试。
+        return proxyRequest();
+    }
 }

@@ -146,6 +146,19 @@ npm run build
 npm start
 ```
 
+### Open-Source and Official Web Deployment Boundary
+
+This repository builds the open-source/self-hosted edition by default. `NEXT_PUBLIC_BASE_PATH` only controls subpath mounting and must not be used to identify the official website.
+
+The official Author web app on Tencent Cloud additionally sets these values in its private deployment environment:
+
+```env
+NEXT_PUBLIC_DEPLOYMENT_TARGET=official-web
+NEXT_PUBLIC_BASE_PATH=/app
+```
+
+Official registration details, domains, cloud-service endpoints, and deployment credentials are supplied by the private Tencent Cloud deployment and must not be committed to the open-source repository. Shared editor, model compatibility, and data-processing fixes remain in this repository; operational, compliance, and hosted behavior needed only by the official website must be enabled through the `IS_OFFICIAL_WEB` boundary.
+
 ### Deploy to Vercel
 
 > 💡 **⚠️ Note:** The version deployed via Vercel does **not** have Firebase cloud sync configured by default. You can either configure Firebase yourself or use the in-app WebDAV/LAN sync options. If you just want multi-device synchronization with minimal setup, please **download the client directly**.

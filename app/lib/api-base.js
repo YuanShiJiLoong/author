@@ -1,10 +1,11 @@
 // ==================== 内部 API 基址 ====================
-// 子路径部署（如官方 free.author2.com/app，basePath=/app）时，客户端 fetch('/api/...')
+// 子路径部署（如 https://example.com/app，basePath=/app）时，客户端 fetch('/api/...')
 // 不会自动带上 basePath 前缀，会打到根路径 404。所以所有对本应用内部 API 路由的调用
 // 都经此工具补前缀。
 //
-// 开源分发：NEXT_PUBLIC_BASE_PATH 留空 → apiPath 原样返回，行为与现在完全一致，不接任何服务器。
-// 官方 /app 版：构建时 NEXT_PUBLIC_BASE_PATH=/app → 自动补成 '/app/api/...'。
+// 根路径部署：NEXT_PUBLIC_BASE_PATH 留空 → apiPath 原样返回。
+// 任意子路径部署：构建时设置 NEXT_PUBLIC_BASE_PATH=/app → 自动补成 '/app/api/...'。
+// 注意：BASE_PATH 只是路由配置，不代表这是 Author 官方网站。
 
 export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || '';
 

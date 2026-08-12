@@ -15,7 +15,9 @@ export async function POST(request) {
         const { apiConfig } = await request.json();
         let { apiKey, baseUrl, model, provider, providerType, apiFormat, proxyUrl } = apiConfig || {};
         apiKey = rotateKey(apiKey);
-        provider = providerType || provider;
+        // 调用方传入的 provider 已解析为实际供应商类型，应优先于可能由旧版
+        // 浏览器配置残留的 providerType（例如 provider=deepseek/providerType=claude）。
+        provider = provider || providerType;
 
         if (!apiKey) {
             return NextResponse.json({ success: false, error: '请先填入 API Key', code: 'NO_API_KEY' }, { status: 400 });
@@ -23,7 +25,11 @@ export async function POST(request) {
         if (!baseUrl) {
             return NextResponse.json({ success: false, error: '请先填写兼容 API 地址', code: 'NO_BASE_URL_COMPAT' }, { status: 400 });
         }
-        if (provider === 'claude' || apiFormat === 'anthropic') {
+        // DeepSeek 预设只暴露 OpenAI 兼容格式；旧版浏览器配置可能残留
+        // apiFormat="anthropic"，不能因此把默认地址误拼成 /v1/messages。
+        const useAnthropicFormat = provider === 'claude'
+            || (apiFormat === 'anthropic' && provider !== 'deepseek');
+        if (useAnthropicFormat) {
             return await testClaudeCompatible(apiKey, baseUrl, model, proxyUrl);
         }
         return await testOpenAICompatible(apiKey, baseUrl, model, proxyUrl, provider);
@@ -37,7 +43,6 @@ async function testOpenAICompatible(apiKey, baseUrl, model, proxyUrl, provider) 
     const isDeepSeek = isDeepSeekProvider(provider, baseUrl, model);
     const base = String(baseUrl || '').replace(/\/+$/, '');
     const selectedModel = model || (isDeepSeek ? 'deepseek-v4-pro' : 'gpt-4o-mini');
-    const isDeepSeekV4 = DEEPSEEK_V4_MODELS.has(selectedModel.trim().toLowerCase());
 
     const response = await proxyFetch(`${base}/chat/completions`, {
         method: 'POST',
@@ -49,7 +54,6 @@ async function testOpenAICompatible(apiKey, baseUrl, model, proxyUrl, provider) 
             model: selectedModel,
             messages: [{ role: 'user', content: '说"连接成功"' }],
             max_tokens: 20,
-            ...(isDeepSeekV4 ? { thinking: { type: 'disabled' } } : {}),
         }),
     }, proxyUrl);
 

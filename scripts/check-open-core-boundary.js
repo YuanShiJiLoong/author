@@ -10,6 +10,7 @@ const forbiddenPrefixes = [
   'reader/',
   'reader-mobile/',
   'reader-cloud/',
+  'author-official-deploy/',
 ];
 
 const forbiddenExact = new Set([
@@ -17,6 +18,7 @@ const forbiddenExact = new Set([
   'reader',
   'reader-mobile',
   'reader-cloud',
+  'author-official-deploy',
 ]);
 
 const forbiddenExtensions = new Set([

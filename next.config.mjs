@@ -6,7 +6,7 @@ const { version } = JSON.parse(readFileSync('./package.json', 'utf-8'));
 const nextConfig = {
   output: 'standalone',
   devIndicators: false,
-  // 子路径部署（官方 free.author2.com/app）时由构建时 env 注入；开源分发留空 = 根路径、行为不变。
+  // 通用子路径部署配置；仅描述路由挂载位置，不用于识别 Author 官方网站。
   basePath: process.env.NEXT_PUBLIC_BASE_PATH || undefined,
   env: {
     NEXT_PUBLIC_APP_VERSION: version,

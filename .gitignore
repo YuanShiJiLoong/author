@@ -89,6 +89,7 @@ mcp_config.json
 
 # closed-source product workspaces (private repos — NEVER commit here)
 /author-pro
+/author-official-deploy
 /reader
 /reader-mobile
 /reader-cloud
