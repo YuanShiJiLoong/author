@@ -3,16 +3,37 @@ import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
 
-// 数据持久化 API — 将所有用户数据存储到本地文件系统
-// 每个用户有独立的目录（通过 userId cookie 隔离）
+export const runtime = 'nodejs';
 
-const DATA_ROOT = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+// 文件系统存储只适用于受信任的单用户自托管实例。Cookie 中的 userId 不是身份认证，
+// 因此公开或多用户部署必须保持默认关闭，改用浏览器本地存储或带认证的云同步。
+const DATA_ROOT_VALUE = process.env.DATA_DIR?.trim();
+const DATA_ROOT = DATA_ROOT_VALUE ? path.resolve(DATA_ROOT_VALUE) : null;
+const FILE_STORAGE_ENABLED = /^(1|true)$/i.test(process.env.AUTHOR_ENABLE_FILE_STORAGE || '') && DATA_ROOT !== null;
+const ORPHAN_ADOPTION_ENABLED = /^(1|true)$/i.test(process.env.AUTHOR_ALLOW_ORPHAN_STORAGE_ADOPTION || '');
+const MAX_STORAGE_REQUEST_BYTES = 5 * 1024 * 1024;
+
+class StorageRequestError extends Error {
+    constructor(message, status = 400) {
+        super(message);
+        this.status = status;
+    }
+}
+
+function json(data, init = {}) {
+    const headers = new Headers(init.headers);
+    headers.set('Cache-Control', 'no-store');
+    return NextResponse.json(data, { ...init, headers });
+}
+
+function disabledResponse() {
+    return json({ error: 'Server file storage is disabled' }, { status: 403 });
+}
 
 // 从请求中提取或创建用户ID
 function getUserId(request) {
-    // 优先从 cookie 读取
     const cookies = request.headers.get('cookie') || '';
-    const match = cookies.match(/author-uid=([a-zA-Z0-9_-]+)/);
+    const match = cookies.match(/(?:^|;\s*)author-uid=([a-zA-Z0-9_-]{1,128})(?:;|$)/);
     if (match) return match[1];
     return null;
 }
@@ -28,22 +49,43 @@ async function ensureDir(dirPath) {
 
 // key → 文件路径映射（防止路径穿越）
 function resolveFilePath(userId, key) {
-    // 仅允许字母、数字、连字符、下划线、斜杠、点
-    const safeKey = key.replace(/[^a-zA-Z0-9\-_./]/g, '');
-    if (!safeKey || safeKey.includes('..')) {
-        throw new Error('Invalid storage key');
+    if (typeof key !== 'string' || key.length === 0 || key.length > 512) {
+        throw new StorageRequestError('Invalid storage key');
+    }
+    // 不静默清洗字符，避免两个不同 key 被映射到同一文件。
+    if (!/^[a-zA-Z0-9\-_./]+$/.test(key) || key.includes('..')) {
+        throw new StorageRequestError('Invalid storage key');
     }
     const userDir = path.join(DATA_ROOT, userId);
-    const filePath = path.join(userDir, safeKey + '.json');
+    const filePath = path.join(userDir, key + '.json');
 
     // 安全检查：确保路径在用户目录内
     const resolvedPath = path.resolve(filePath);
     const resolvedUserDir = path.resolve(userDir);
-    if (!resolvedPath.startsWith(resolvedUserDir)) {
-        throw new Error('Path traversal detected');
+    const relativePath = path.relative(resolvedUserDir, resolvedPath);
+    if (relativePath === '..' || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
+        throw new StorageRequestError('Invalid storage path');
     }
 
-    return filePath;
+    return resolvedPath;
+}
+
+async function readStorageBody(request) {
+    const contentLength = Number(request.headers.get('content-length') || 0);
+    if (Number.isFinite(contentLength) && contentLength > MAX_STORAGE_REQUEST_BYTES) {
+        throw new StorageRequestError('Storage request is too large', 413);
+    }
+
+    const raw = await request.text();
+    if (Buffer.byteLength(raw, 'utf8') > MAX_STORAGE_REQUEST_BYTES) {
+        throw new StorageRequestError('Storage request is too large', 413);
+    }
+
+    try {
+        return JSON.parse(raw);
+    } catch {
+        throw new StorageRequestError('Invalid JSON body');
+    }
 }
 
 // 安全读取 JSON 文件（带重试，防止读到写入一半的数据）
@@ -113,42 +155,45 @@ async function atomicWriteJson(filePath, value) {
 
 // GET /api/storage?key=xxx — 读取数据
 export async function GET(request) {
+    if (!FILE_STORAGE_ENABLED) return disabledResponse();
     try {
         const userId = getUserId(request);
         if (!userId) {
-            return NextResponse.json({ error: 'No user ID' }, { status: 401 });
+            return json({ error: 'No user ID' }, { status: 401 });
         }
 
         const { searchParams } = new URL(request.url);
         const key = searchParams.get('key');
         if (!key) {
-            return NextResponse.json({ error: 'Missing key parameter' }, { status: 400 });
+            return json({ error: 'Missing key parameter' }, { status: 400 });
         }
 
         const filePath = resolveFilePath(userId, key);
 
         try {
             const data = await safeReadJson(filePath);
-            return NextResponse.json({ data });
+            return json({ data });
         } catch (e) {
             if (e.code === 'ENOENT') {
-                // 尝试自动领养：当前用户目录为空但 data/ 下有其他用户数据
-                // 用于跨电脑拷贝项目目录后 cookie userId 不同的场景
-                const adopted = await tryAdoptOrphanData(userId);
+                // 旧数据领养具有跨用户风险，只允许受信任的管理员显式临时启用。
+                const adopted = ORPHAN_ADOPTION_ENABLED && await tryAdoptOrphanData(userId);
                 if (adopted) {
                     // 领养成功，重试读取
                     try {
                         const data2 = await safeReadJson(filePath);
-                        return NextResponse.json({ data: data2 });
+                        return json({ data: data2 });
                     } catch { }
                 }
-                return NextResponse.json({ data: null });
+                return json({ data: null });
             }
             throw e;
         }
     } catch (error) {
+        if (error instanceof StorageRequestError) {
+            return json({ error: error.message }, { status: error.status });
+        }
         console.error('Storage GET error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return json({ error: 'Storage operation failed' }, { status: 500 });
     }
 }
 
@@ -204,15 +249,16 @@ async function tryAdoptOrphanData(currentUserId) {
 
 // POST /api/storage — 写入数据 { key, value }
 export async function POST(request) {
+    if (!FILE_STORAGE_ENABLED) return disabledResponse();
     try {
         const userId = getUserId(request);
         if (!userId) {
-            return NextResponse.json({ error: 'No user ID' }, { status: 401 });
+            return json({ error: 'No user ID' }, { status: 401 });
         }
 
-        const { key, value } = await request.json();
+        const { key, value } = await readStorageBody(request);
         if (!key) {
-            return NextResponse.json({ error: 'Missing key' }, { status: 400 });
+            return json({ error: 'Missing key' }, { status: 400 });
         }
 
         const filePath = resolveFilePath(userId, key);
@@ -221,25 +267,29 @@ export async function POST(request) {
         // 原子写入：先写临时文件，再重命名，防止并发读取到半截数据
         await atomicWriteJson(filePath, value);
 
-        return NextResponse.json({ ok: true });
+        return json({ ok: true });
     } catch (error) {
+        if (error instanceof StorageRequestError) {
+            return json({ error: error.message }, { status: error.status });
+        }
         console.error('Storage POST error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return json({ error: 'Storage operation failed' }, { status: 500 });
     }
 }
 
 // DELETE /api/storage?key=xxx — 删除数据
 export async function DELETE(request) {
+    if (!FILE_STORAGE_ENABLED) return disabledResponse();
     try {
         const userId = getUserId(request);
         if (!userId) {
-            return NextResponse.json({ error: 'No user ID' }, { status: 401 });
+            return json({ error: 'No user ID' }, { status: 401 });
         }
 
         const { searchParams } = new URL(request.url);
         const key = searchParams.get('key');
         if (!key) {
-            return NextResponse.json({ error: 'Missing key parameter' }, { status: 400 });
+            return json({ error: 'Missing key parameter' }, { status: 400 });
         }
 
         const filePath = resolveFilePath(userId, key);
@@ -250,9 +300,12 @@ export async function DELETE(request) {
             if (e.code !== 'ENOENT') throw e;
         }
 
-        return NextResponse.json({ ok: true });
+        return json({ ok: true });
     } catch (error) {
+        if (error instanceof StorageRequestError) {
+            return json({ error: error.message }, { status: error.status });
+        }
         console.error('Storage DELETE error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return json({ error: 'Storage operation failed' }, { status: 500 });
     }
 }

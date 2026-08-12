@@ -42,6 +42,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV HOSTNAME="0.0.0.0"
+ENV DATA_DIR="/app/data"
 
 # 从构建产物复制 standalone + static + public
 COPY --from=builder /app/public ./public

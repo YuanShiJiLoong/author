@@ -1,14 +1,14 @@
 /**
  * 旧版（Firebase）云同步停服 —— 日期、倒计时阶段与受影响判断集中在这里。
  *
- * 北京时间 2026-08-01 00:00 起旧版云端彻底关停：届时登录与云端拉取均失效，
+ * 北京时间 2026-08-15 00:00 起旧版云端彻底关停：届时登录与云端拉取均失效，
  * 云端数据不再可取回。本地写作数据存于 IndexedDB，不受影响；
  * WebDAV / 局域网同步同样不受影响。
  */
 
 // 改这个日期时，三语文案里写死的日期也要一起改：
 // locales/*.json 的 fbShutdown.title、migration.deadline、migration.deadlineEnded
-export const FIREBASE_SHUTDOWN_DATE = '2026-08-01';
+export const FIREBASE_SHUTDOWN_DATE = '2026-08-15';
 
 /** 停服倒计时的三个阶段：'soon'(>3 天) → 'final'(≤3 天) → 'ended'(已停服)。 */
 export function getFirebaseShutdownInfo(now = new Date()) {

@@ -86,8 +86,6 @@ I watched the versatility of these models being gutted. I don't want us to live 
 
 Just install and start writing. All features work out of the box.
 
-> Author 1.3+, Author Pro, Reader, and Reader Mobile are separate commercial product lines and are not distributed from this open-source repository.
-
 > 💡 To build the desktop app from source: `npm run build && npx electron-builder --win`
 
 ### 🐛 Troubleshooting / Debug Logs
@@ -146,18 +144,15 @@ npm run build
 npm start
 ```
 
-### Open-Source and Official Web Deployment Boundary
+### Subpath Deployment
 
-This repository builds the open-source/self-hosted edition by default. `NEXT_PUBLIC_BASE_PATH` only controls subpath mounting and must not be used to identify the official website.
-
-The official Author web app on Tencent Cloud additionally sets these values in its private deployment environment:
+Set `NEXT_PUBLIC_BASE_PATH` only when mounting your self-hosted app below the domain root. For example:
 
 ```env
-NEXT_PUBLIC_DEPLOYMENT_TARGET=official-web
 NEXT_PUBLIC_BASE_PATH=/app
 ```
 
-Official registration details, domains, cloud-service endpoints, and deployment credentials are supplied by the private Tencent Cloud deployment and must not be committed to the open-source repository. Shared editor, model compatibility, and data-processing fixes remain in this repository; operational, compliance, and hosted behavior needed only by the official website must be enabled through the `IS_OFFICIAL_WEB` boundary.
+Keep real domains, registration values, service endpoints, credentials, and operator configuration in your own deployment environment rather than committing them to the repository.
 
 ### Deploy to Vercel
 
@@ -167,7 +162,7 @@ Official registration details, domains, cloud-service endpoints, and deployment 
 
 ### ☁️ Sync Setup (Self-Deploy)
 
-> 💡 **Tip:** The desktop client (Windows/macOS) supports optional WebDAV sync and temporary LAN transfer — open **Preferences → Cloud Sync** to set either up. The legacy built-in cloud sync (Firebase / Google sign-in) shut down on August 1, 2026; account-based cloud sync is now provided by the official web app at https://free.author2.com/app.
+> 💡 **Tip:** The desktop client (Windows/macOS) supports optional WebDAV sync and temporary LAN transfer — open **Preferences → Cloud Sync** to set either up. The legacy built-in cloud sync (Firebase / Google sign-in) will shut down on August 15, 2026; please migrate before then. Account-based cloud sync is now provided by the official web app at https://free.author2.com/app.
 
 If you insist on self-deploying via source code or Vercel and want Firebase multi-device sync, follow these steps to configure your own Firebase database. WebDAV and LAN sync can be configured in the app without Firebase.
 
@@ -511,7 +506,7 @@ This project is licensed under [AGPL-3.0](LICENSE).
 - ⚠️ Original copyright notice must be preserved
 - ❌ Closed-source commercial use is NOT allowed
 
-This repository is the Author 1.2.x open core. See [Author Open Core Boundary](OPEN_CORE_BOUNDARY.md) for the public/private product boundary and release rules.
+See [Public Repository Safety Boundary](OPEN_CORE_BOUNDARY.md) for the material that must remain outside public source and releases.
 
 ---
 

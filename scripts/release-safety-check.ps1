@@ -44,8 +44,18 @@ function Match-GitOutput {
         [string]$Pattern
     )
 
-    $output = & git @GitArgs
+    $output = Invoke-RepoGit $GitArgs
     return @($output | Select-String -Pattern $Pattern -CaseSensitive:$false)
+}
+
+function Invoke-RepoGit {
+    param([string[]]$GitArgs)
+
+    $output = @(& git -c "safe.directory=$($repoRoot.Path)" @GitArgs)
+    if ($LASTEXITCODE -ne 0) {
+        throw "git command failed: git $($GitArgs -join ' ')"
+    }
+    return $output
 }
 
 function Get-CurrentDiffLines {
@@ -99,7 +109,7 @@ if ($stagedMobile.Count -gt 0) {
     Add-Failure "Staged mobile/private assets found:`n$($stagedMobile -join "`n")"
 }
 
-$trackedDocs = @(& git ls-files docs)
+$trackedDocs = @(Invoke-RepoGit @('ls-files', 'docs'))
 if ($trackedDocs.Count -gt 0) {
     Add-Failure "Tracked docs/ files found:`n$($trackedDocs -join "`n")"
 }
@@ -110,8 +120,8 @@ if ($sensitiveTracked.Count -gt 0) {
     Add-Warning "Tracked files matched the sensitive-name review pattern:`n$($sensitiveTracked -join "`n")"
 }
 
-$diffOutput = @(& git diff -- . ':(exclude)package-lock.json' ':(exclude)scripts/release-safety-check.ps1')
-$stagedDiffOutput = @(& git diff --cached -- . ':(exclude)package-lock.json' ':(exclude)scripts/release-safety-check.ps1')
+$diffOutput = @(Invoke-RepoGit @('diff', '--', '.', ':(exclude)package-lock.json', ':(exclude)scripts/release-safety-check.ps1'))
+$stagedDiffOutput = @(Invoke-RepoGit @('diff', '--cached', '--', '.', ':(exclude)package-lock.json', ':(exclude)scripts/release-safety-check.ps1'))
 $allDiffOutput = Get-CurrentDiffLines (@($diffOutput) + @($stagedDiffOutput))
 
 $highConfidenceSecretPattern = 'sk-[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9._~+/=-]{20,}|(api[_-]?key|secret[_-]?key|private[_-]?key|firebase[_-]?api|password|credential|token)\s*[:=]\s*["''][A-Za-z0-9._~+/=:@-]{16,}["'']'
@@ -126,12 +136,12 @@ if ($sensitiveDiffKeywords.Count -gt 0) {
     Add-Warning "Diff contains low-confidence sensitive keywords. Manual semantic review is required:`n$($sensitiveDiffKeywords -join "`n")"
 }
 
-$staged = @(& git diff --cached --name-only)
+$staged = @(Invoke-RepoGit @('diff', '--cached', '--name-only'))
 if ($staged.Count -gt 0) {
     Add-Warning "Staged files are present:`n$($staged -join "`n")"
 }
 
-$status = @(& git status --short)
+$status = @(Invoke-RepoGit @('status', '--short'))
 if ($status.Count -gt 0) {
     Write-Host 'Working tree changes:'
     $status | ForEach-Object { Write-Host "  $_" }

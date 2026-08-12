@@ -1,20 +1,18 @@
-## v1.2.50 — 修复 DeepSeek 连接测试 404，并明确官网部署边界
+## v1.2.51 — 加强数据安全并优化手机端体验
 
 ### 中文
 
 #### 桌面端 / Web
 
-- 修复切换 AI 供应商后顶层 `providerType` 可能残留为旧供应商的问题。此前可能出现 `provider: deepseek`、`providerType: claude` 的矛盾配置，导致 DeepSeek 测试连接误走 Anthropic `/v1/messages` 接口并显示 404。
-- DeepSeek 使用默认地址 `https://api.deepseek.com` 即可连接，不再需要通过添加 `/anthropic` 后缀绕过错误协议分支。
-- 供应商切换时同步更新 `provider` 与 `providerType`；测试请求也会携带一致的供应商类型，服务端对旧浏览器配置增加兼容处理。
-- 官方网页版的 DeepSeek 连接测试优先使用与实际对话一致的浏览器直连链路；自定义代理、桌面端、普通自部署或直连失败时仍使用原有服务端测试路由。
-- 连接探测改为最小请求，不再为 DeepSeek V4 强制附加思考模式参数，避免非必要参数干扰基础连通性判断。
-- 新增显式 `official-web` 构建目标。`NEXT_PUBLIC_BASE_PATH` 只负责子路径路由，不再被用来推断部署身份；开源、桌面和普通自部署版本默认行为不变。
-- 中、英、俄、阿四种 README 与开源边界文档同步说明公共源码、官网私有配置及部署职责，防止备案、云服务配置或私有部署资产混入开源仓库。
+- 旧版云同步（Firebase / Google 登录）将于 2026 年 8 月 15 日停止服务；应用内迁移提醒、帮助页和多语言 README 已同步更新，请在停服前完成数据迁移。本地写作数据、WebDAV 与局域网同步不受影响。
+- 优化手机网页底部备案栏，只常驻展示必要备案信息，减少小屏幕上的换行与内容遮挡。
+- 加强自部署文件存储安全：默认关闭未经认证的服务端文件存储，启用时必须显式配置独立数据目录，并增加路径、请求大小和缓存控制保护。
+- 生产构建现在会自动检查运行包，避免把本地数据、环境文件、日志或工作目录带入安装包和服务端产物。
+- 完善子路径部署与自托管说明，并修复 Windows 特殊仓库所有权环境下发版预检可能误报的问题。
 
 #### Android 端
 
-- 同步版本号为 `1.2.50+1250`；本次没有 Android 功能改动。
+- 同步版本号为 `1.2.51+1251`；本次没有 Android 功能改动。
 
 ---
 
@@ -22,14 +20,12 @@
 
 #### Desktop / Web
 
-- Fixed stale top-level `providerType` values after switching AI providers. A mismatched configuration such as `provider: deepseek` with `providerType: claude` could previously route a DeepSeek connection test to the Anthropic `/v1/messages` endpoint and surface a 404.
-- DeepSeek now works with the default `https://api.deepseek.com` base URL; adding an `/anthropic` suffix is no longer needed as a workaround for the wrong protocol branch.
-- Provider changes now synchronize both `provider` and `providerType`; connection tests send a consistent provider type, and the server tolerates legacy browser configurations.
-- On the official web app, DeepSeek connection tests prefer the same browser-direct path used by real conversations. Custom proxies, desktop builds, ordinary self-hosted deployments, and direct-connect failures continue to use the existing server-side test route.
-- Connection probes now use a minimal request and no longer force a thinking-mode parameter for DeepSeek V4, keeping basic connectivity checks free of unrelated options.
-- Added an explicit `official-web` build target. `NEXT_PUBLIC_BASE_PATH` now represents subpath routing only and is no longer treated as deployment identity; open-source, desktop, and ordinary self-hosted defaults remain unchanged.
-- Updated the Chinese, English, Russian, and Arabic READMEs and the open-core boundary documentation to separate shared source code from official private configuration and deployment responsibilities.
+- Legacy cloud sync (Firebase / Google sign-in) will shut down on August 15, 2026. Migration notices, help content, and multilingual READMEs now use the same deadline. Local writing data, WebDAV, and LAN sync are unaffected.
+- Improved the mobile web footer so only required registration links remain persistently visible, reducing wrapping and obstruction on small screens.
+- Hardened self-hosted file storage: unauthenticated server-side storage is disabled by default, enabling it requires an explicit external data directory, and requests now receive stronger path, size, and cache protections.
+- Production builds now verify their runtime bundle automatically so local data, environment files, logs, and workspace directories are not included in installers or server artifacts.
+- Clarified subpath and self-hosting documentation, and fixed release preflight failures on Windows repositories with special ownership settings.
 
 #### Android
 
-- Synchronized the version to `1.2.50+1250`; this release contains no Android feature changes.
+- Synchronized the version to `1.2.51+1251`; this release contains no Android feature changes.

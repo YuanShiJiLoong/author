@@ -88,8 +88,6 @@
 
 安装即用，所有功能开箱即得。
 
-> Author 1.3+、Author Pro、Reader 与 Reader Mobile 属于独立商业产品线，不从本开源仓库分发。
-
 > 💡 从源码构建桌面应用：`npm run build && npx electron-builder --win`
 
 ### 🐛 常见问题排查 / Debug 日志
@@ -148,18 +146,15 @@ npm run build
 npm start
 ```
 
-### 开源版本与官方网页版的边界
+### 子路径部署
 
-本仓库默认构建为开源 / 自部署版本。`NEXT_PUBLIC_BASE_PATH` 只控制子路径挂载，不能用来识别官网。
-
-Author 官方腾讯云网页版在部署环境中额外设置：
+仅当你的自部署应用挂载在域名子路径时设置 `NEXT_PUBLIC_BASE_PATH`。例如：
 
 ```env
-NEXT_PUBLIC_DEPLOYMENT_TARGET=official-web
 NEXT_PUBLIC_BASE_PATH=/app
 ```
 
-官网备案、域名、云服务地址和部署凭据由腾讯云部署环境提供，不应写入或提交到开源源码。公共编辑器、模型兼容和数据处理修复仍应进入本仓库；仅官网需要的运营、合规及托管行为必须通过 `IS_OFFICIAL_WEB` 边界启用。
+真实域名、备案信息、服务地址、凭据和运维配置应只保存在你自己的部署环境中，不要提交到本仓库。
 
 ### 部署到 Vercel
 
@@ -169,7 +164,7 @@ NEXT_PUBLIC_BASE_PATH=/app
 
 ### ☁️ 同步配置（自部署用户）
 
-> 💡 **提示：** 桌面客户端（Windows/macOS）支持可选的 WebDAV 同步和临时局域网迁移，在 **偏好设置 → 云同步** 中配置即可。旧版内置云同步（Firebase / Google 登录）已于 2026 年 8 月 1 日停止服务；账号云同步现由官方网页版提供：https://free.author2.com/app 。
+> 💡 **提示：** 桌面客户端（Windows/macOS）支持可选的 WebDAV 同步和临时局域网迁移，在 **偏好设置 → 云同步** 中配置即可。旧版内置云同步（Firebase / Google 登录）将于 2026 年 8 月 15 日停止服务，请在此之前完成迁移；账号云同步现由官方网页版提供：https://free.author2.com/app 。
 
 如果你坚持通过源码或 Vercel 自部署，并希望开启 Firebase 多端同步，需按照以下步骤配置你自己的 Firebase 数据库。WebDAV 和局域网同步可在应用内单独配置。
 
@@ -576,7 +571,7 @@ Author 支持从多种格式导入设定集：**JSON / Markdown / TXT / DOCX / P
 - ⚠️ 必须保留原始版权声明
 - ❌ 不可闭源后用于商业用途
 
-本仓库是 Author 1.2.x 开源核心。公开/闭源产品边界与发版规则见 [Author Open Core Boundary](OPEN_CORE_BOUNDARY.md)。
+不得进入公开源码与 Release 的材料见 [公开仓库安全边界](OPEN_CORE_BOUNDARY.md)。
 
 ---
 

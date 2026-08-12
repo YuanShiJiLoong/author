@@ -196,7 +196,7 @@ export default function LoginModal() {
                             <p className="login-modal-desc">{t('loginModal.firebaseDesc')}</p>
                         </div>
 
-                        {/* 这个入口 2026-08-01 起就是死路，登录前先说清楚 */}
+                        {/* 这个入口 2026-08-15 起就是死路，登录前先说清楚 */}
                         <div className="migration-deadline">
                             {getFirebaseShutdownInfo().stage === 'ended' ? t('migration.deadlineEnded') : t('migration.deadline')}
                         </div>

@@ -585,7 +585,7 @@ ${LEGAL_LANGUAGES.map(l => [
 
 Author 支持 WebDAV 与局域网临时分享两种同步方式，让你在不同设备上无缝切换创作。同步范围采用隐私优先 allowlist。
 
-> ⚠️ **旧版云同步（Firebase / Google 登录）已于 2026 年 8 月 1 日停止服务**，存放在旧版云端的数据不再可取回。本地写作数据、WebDAV 与局域网同步均不受影响。
+> ⚠️ **旧版云同步（Firebase / Google 登录）将于 2026 年 8 月 15 日停止服务**，届时存放在旧版云端的数据将无法取回，请尽快迁移。本地写作数据、WebDAV 与局域网同步均不受影响。
 
 ### 快速开始（WebDAV）
 1. 打开 **偏好设置 → 云同步**
@@ -1251,7 +1251,7 @@ ${LEGAL_LANGUAGES.map(l => [
 
 Author supports WebDAV and temporary LAN sharing so you can switch between devices. Sync uses a privacy-first allowlist.
 
-> ⚠️ **The legacy cloud sync (Firebase / Google sign-in) shut down on August 1, 2026.** Data stored in the legacy cloud can no longer be retrieved. Local writing data, WebDAV, and LAN sync are unaffected.
+> ⚠️ **The legacy cloud sync (Firebase / Google sign-in) shuts down on August 15, 2026.** Data stored in the legacy cloud will no longer be retrievable, so please migrate soon. Local writing data, WebDAV, and LAN sync are unaffected.
 
 ### Quick Start (WebDAV)
 1. Open **Preferences -> Cloud Sync**.
@@ -1737,7 +1737,7 @@ ${LEGAL_LANGUAGES.map(l => [
 
 Author поддерживает WebDAV и временный LAN-share. Синхронизация использует privacy-first allowlist.
 
-> ⚠️ **Старая облачная синхронизация (Firebase / вход через Google) отключена 1 августа 2026 года.** Данные из старого облака получить уже нельзя. Локальные тексты, WebDAV и LAN-синхронизация не затронуты.
+> ⚠️ **Старая облачная синхронизация (Firebase / вход через Google) будет отключена 15 августа 2026 года.** После отключения данные из старого облака получить будет нельзя, поэтому перенесите их заранее. Локальные тексты, WebDAV и LAN-синхронизация не затронуты.
 
 ### Быстрый старт (WebDAV)
 1. Откройте **Preferences -> Cloud Sync**.

@@ -1,1 +1,1 @@
-修复 DeepSeek 连接测试 404并明确官网部署边界 | Fixed DeepSeek connection-test 404s and clarified the official deployment boundary
+加强数据安全并优化手机端体验 | Improved data safety and the mobile web experience

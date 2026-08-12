@@ -6,6 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..")
+$gitSafeDir = $repoRoot.Path
 $workflowPath = Join-Path $repoRoot ".agent\workflows\release.md"
 
 function Write-Section {
@@ -22,7 +23,10 @@ if (-not (Test-Path -LiteralPath $workflowPath -PathType Leaf)) {
 }
 
 try {
-  $gitRoot = (& git -C $repoRoot rev-parse --show-toplevel).Trim()
+  $gitRoot = (& git -c "safe.directory=$gitSafeDir" -C $repoRoot rev-parse --show-toplevel).Trim()
+  if ($LASTEXITCODE -ne 0) {
+    throw "git rev-parse failed with exit code $LASTEXITCODE"
+  }
 } catch {
   Write-Error "Not inside a git repository: $repoRoot"
   exit 1
@@ -70,7 +74,11 @@ if ($MobileOnlyHotfix) {
 }
 
 Write-Section "Git status summary"
-& git -C $repoRoot status --short --branch
+& git -c "safe.directory=$gitSafeDir" -C $repoRoot status --short --branch
+if ($LASTEXITCODE -ne 0) {
+  Write-Error "Unable to read git status for: $repoRoot"
+  exit 1
+}
 
 Write-Host ""
 Write-Host "Preflight complete. Continue only after the workflow has been read and the release mode is confirmed."

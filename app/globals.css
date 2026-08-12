@@ -10204,6 +10204,26 @@ h5.chat-md-heading {
   pointer-events: auto; /* 链接本身可点 */
 }
 
+/* 手机端只常驻展示两项法定备案号，避免公司版权信息换行后遮住编辑区。 */
+@media (max-width: 640px) {
+  .beian-global {
+    bottom: max(2px, env(safe-area-inset-bottom));
+    max-width: calc(100vw - 8px);
+    padding: 2px 6px;
+    gap: 4px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    font-size: 9px;
+    line-height: 1.2;
+  }
+  .beian-global > span:first-child {
+    display: none;
+  }
+  .beian-global .beian-gongan-icon {
+    height: 12px;
+  }
+}
+
 /* ==================== 未配置服务器时的官方网页版引导（登录弹窗 / 迁移向导共用） ==================== */
 .login-modal-official-btn {
   display: flex;

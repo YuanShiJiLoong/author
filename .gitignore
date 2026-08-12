@@ -87,12 +87,8 @@ mcp_config.json
 /mobile_ios
 *.dart
 
-# closed-source product workspaces (private repos — NEVER commit here)
-/author-pro
-/author-official-deploy
-/reader
-/reader-mobile
-/reader-cloud
+# local non-public workspaces — never commit from this repository
+/author-*
 
 # mobile UI mockups & design artifacts (private)
 home_screen.html

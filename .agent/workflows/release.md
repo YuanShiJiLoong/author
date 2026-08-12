@@ -73,7 +73,7 @@ git ls-files | findstr /i "secret credential key\.pem env\.local plan 方案 计
 除 `.env.example`、`README` 类说明文档、源码中合理使用的文件外，不应有任何敏感文件。**发现可疑文件必须逐个核实。** 如果是临时计划、草稿、内部说明，优先移入 `docs/`，不要临时往 `.gitignore` 里追加过宽规则。
 
 // turbo
-6. **【关键】移动端私有资产泄漏扫描**（此项目的移动端为闭源私有仓库，绝对不可泄露到本开源仓库）：
+6. **【关键】移动端非公开资产泄漏扫描**（移动端源码不属于本公开仓库，绝对不可混入）：
 ```bash
 git ls-files | findstr /i "\.dart mobile flutter home_screen pubspec\.yaml podfile stitch"
 ```
@@ -188,11 +188,13 @@ cd ..
 
 18. **桌面端 Release 创建成功后**，触发移动端 CI 构建 APK 并上传到同一 Release：
 ```bash
-gh workflow run "Android APK to Author 1.2 Public Release" --repo YuanShiJiLoong/author-mobile -f release_tag=vX.Y.Z
+cd mobile
+gh workflow run "Android APK to Author 1.2 Public Release" -f release_tag=vX.Y.Z
+cd ..
 ```
 - CI 会从 `pubspec.yaml` 读取 versionCode（如 1228），构建签名 APK
 - 构建完成后自动上传 `author-mobile-vX.Y.Z.apk` + `author-mobile-latest.apk` 到公开 Release
-- 移动端构建进度：https://github.com/YuanShiJiLoong/author-mobile/actions
+- 移动端构建进度：进入本地 `mobile` 工作目录后运行 `gh run list`
 
 ## 构建完成后
 
@@ -229,6 +231,6 @@ cd ..
 - **版本号来源**：桌面端读取 `package.json` 的 `version` 字段，移动端读取 `mobile/pubspec.yaml` 的 `version` 字段。两者的版本号（X.Y.Z 部分）必须与 git tag 一致。
 - **移动端 versionCode 规则**：`major × 1000 + minor × 100 + patch`，如 `1.2.28` → `1228`。CI workflow 从 pubspec.yaml 读取此值，本地和 CI 构建保持一致。
 - **敏感文件**：`docs/`、`.env`、`firebase-debug.log` 等均被 `.gitignore` 忽略，不会进入 git 仓库和 Release 的 Source code 包。临时计划、草稿、内部说明优先统一放入 `docs/`，不要依赖过宽的名字匹配规则（如 `*secret*`、`*credential*`）来兜底。
-- **移动端隔离**：`/mobile` 目录、`*.dart` 文件、`home_screen.html` 等移动端私有资产均被 `.gitignore` 忽略。每次发版前的第 5 步会强制扫描确认无泄漏。此项目的移动端为独立闭源仓库，绝不可混入开源代码。
+- **移动端隔离**：`/mobile` 目录、`*.dart` 文件、`home_screen.html` 等移动端非公开资产均被 `.gitignore` 忽略。每次发版前的第 5 步会强制扫描确认无泄漏，绝不可混入开源代码。
 - **Docker 安全**：Docker 使用多阶段构建，最终镜像只含构建产物（`.next/standalone`），不含源码和配置文件。
 - **如果构建失败**：去 Actions 页面查看日志，修复后用 `git tag -f vX.Y.Z && git push origin vX.Y.Z -f` 强制更新 tag 重新触发。

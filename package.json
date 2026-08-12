@@ -1,6 +1,6 @@
 {
   "name": "author-app",
-  "version": "1.2.50",
+  "version": "1.2.51",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -9,11 +9,12 @@
     "dev": "next dev",
     "prebuild": "npm run sync:legal",
     "build": "next build",
+    "postbuild": "node scripts/check-standalone-safety.js",
     "start": "next start",
     "lint": "eslint",
-    "check:open-core-boundary": "git ls-files -z | node scripts/check-open-core-boundary.js --stdin",
+    "check:open-core-boundary": "node scripts/check-open-core-boundary.js",
     "electron:dev": "npm run dev & npx electron . --dev",
-    "electron:build": "node -e \"const fs=require('fs');['dist','.next'].forEach(d=>{if(fs.existsSync(d)){fs.rmSync(d,{recursive:true,force:true})}})\" && npm run sync:legal && npx next build && npx electron-builder --win",
+    "electron:build": "node -e \"const fs=require('fs');['dist','.next'].forEach(d=>{if(fs.existsSync(d)){fs.rmSync(d,{recursive:true,force:true})}})\" && npm run build && npx electron-builder --win",
     "electron:start": "npx electron ."
   },
   "dependencies": {
