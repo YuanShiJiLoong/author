@@ -3,6 +3,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+if (process.env.VERCEL === '1') {
+  console.log('Standalone safety check skipped: Vercel uses its native Next.js build output.');
+  process.exit(0);
+}
+
 const standaloneRoot = path.resolve('.next', 'standalone');
 
 if (!fs.existsSync(standaloneRoot)) {

@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 
 const { version } = JSON.parse(readFileSync('./package.json', 'utf-8'));
 const isOfficialWebBuild = process.env.NEXT_PUBLIC_DEPLOYMENT_TARGET === 'official-web';
+const isVercelBuild = process.env.VERCEL === '1';
 
 const officialWebSecurityHeaders = [
   { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
@@ -33,7 +34,9 @@ const officialWebSecurityHeaders = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  // Vercel uses its native Next.js build output. Standalone remains enabled
+  // for Electron, Docker, and self-hosted deployments.
+  output: isVercelBuild ? undefined : 'standalone',
   poweredByHeader: false,
   devIndicators: false,
   // 通用子路径部署配置；仅描述路由挂载位置，不用于识别 Author 官方网站。
