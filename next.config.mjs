@@ -1,15 +1,49 @@
 import { readFileSync } from 'fs';
 
 const { version } = JSON.parse(readFileSync('./package.json', 'utf-8'));
+const isOfficialWebBuild = process.env.NEXT_PUBLIC_DEPLOYMENT_TARGET === 'official-web';
+
+const officialWebSecurityHeaders = [
+  { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'Referrer-Policy', value: 'no-referrer' },
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
+  {
+    key: 'Content-Security-Policy',
+    value: [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+      "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      "connect-src 'self' https: wss:",
+      "media-src 'self' data: blob: https:",
+      "worker-src 'self' blob:",
+      "frame-src 'self' https://accounts.google.com https://*.firebaseapp.com",
+      "manifest-src 'self'",
+      'upgrade-insecure-requests',
+    ].join('; '),
+  },
+];
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  poweredByHeader: false,
   devIndicators: false,
   // 通用子路径部署配置；仅描述路由挂载位置，不用于识别 Author 官方网站。
   basePath: process.env.NEXT_PUBLIC_BASE_PATH || undefined,
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
+  },
+  async headers() {
+    if (!isOfficialWebBuild) return [];
+    return [{ source: '/:path*', headers: officialWebSecurityHeaders }];
   },
   // pdf-parse / word-extractor 仅在服务端 API 路由中使用，标记为外部包避免打包解析
   serverExternalPackages: ['pdf-parse', 'word-extractor'],

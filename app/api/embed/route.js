@@ -4,20 +4,10 @@ export const runtime = 'nodejs';
 
 import { proxyFetch } from '../../lib/proxy-fetch';
 import { rotateKey } from '../../lib/keyRotator';
-
-function readErrorDetail(errorText) {
-    try {
-        const parsed = JSON.parse(errorText);
-        const detail = parsed?.error?.message || parsed?.errors?.message || parsed?.error || parsed?.errors || parsed?.message;
-        if (!detail) return errorText;
-        return typeof detail === 'string' ? detail : JSON.stringify(detail);
-    } catch {
-        return errorText;
-    }
-}
+import { isOutboundRequestBlocked, safeUpstreamDetail } from '../../lib/server-security.mjs';
 
 async function embeddingErrorResponse(response, { provider, model }) {
-    const detail = readErrorDetail(await response.text());
+    const detail = safeUpstreamDetail(await response.text(), 300);
     let hint = '';
     let hintCode = '';
 
@@ -153,9 +143,10 @@ export async function POST(request) {
         }
         return invalidEmbeddingResponse(provider, embedModelName);
     } catch (error) {
-        console.error('Embedding API Error:', error?.message || error);
-        // 上游/JS 原文优先；为空时回退中文文案并加 code 供前端本地化
-        if (error?.message) return Response.json({ error: error.message }, { status: 500 });
+        console.error('Embedding API Error:', error?.code || error?.name || 'UNKNOWN');
+        if (isOutboundRequestBlocked(error)) {
+            return Response.json({ error: error.message, code: error.code }, { status: 400 });
+        }
         return Response.json({ error: 'Embedding 请求失败', code: 'EMBED_REQUEST_FAILED' }, { status: 500 });
     }
 }

@@ -1,22 +1,18 @@
-## v1.2.51 — 加强数据安全并优化网页兼容性
-
-> 补充修复：修复子路径部署时模型供应商图标无法显示的问题，并避免官方网页版探测不适用的自托管文件接口。
-
-> Follow-up fix: provider icons now load correctly from subpath deployments, and the official web app no longer probes the self-hosted file endpoint that it does not use.
+## v1.2.52 — 安全与稳定性更新
 
 ### 中文
 
 #### 桌面端 / Web
 
-- 旧版云同步（Firebase / Google 登录）将于 2026 年 8 月 15 日停止服务；应用内迁移提醒、帮助页和多语言 README 已同步更新，请在停服前完成数据迁移。本地写作数据、WebDAV 与局域网同步不受影响。
-- 优化手机网页底部备案栏，只常驻展示必要备案信息，减少小屏幕上的换行与内容遮挡。
-- 加强自部署文件存储安全：默认关闭未经认证的服务端文件存储，启用时必须显式配置独立数据目录，并增加路径、请求大小和缓存控制保护。
-- 生产构建现在会自动检查运行包，避免把本地数据、环境文件、日志或工作目录带入安装包和服务端产物。
-- 完善子路径部署与自托管说明，并修复 Windows 特殊仓库所有权环境下发版预检可能误报的问题。
+- 加强外部 API 地址校验，阻止异常连接访问本机、内网或其他非公网资源。
+- 改进模型、嵌入、语音、搜索和 WebDAV 请求的错误处理，减少连接信息出现在日志或错误提示中。
+- 官方网页端仅允许安全的公网 API 地址；支持的 AI 服务仍优先由浏览器直连，自定义代理继续在桌面端和自部署环境使用。
+- 文档解析新增 50 MB 单文件限制，降低超大文件造成页面或服务异常的风险。
+- 加强桌面端窗口导航、权限和嵌入内容隔离，并升级基础组件以修复已知安全问题。
 
 #### Android 端
 
-- 同步版本号为 `1.2.51+1251`；本次没有 Android 功能改动。
+- 同步版本号为 `1.2.52+1252`；本次没有 Android 功能改动。
 
 ---
 
@@ -24,12 +20,12 @@
 
 #### Desktop / Web
 
-- Legacy cloud sync (Firebase / Google sign-in) will shut down on August 15, 2026. Migration notices, help content, and multilingual READMEs now use the same deadline. Local writing data, WebDAV, and LAN sync are unaffected.
-- Improved the mobile web footer so only required registration links remain persistently visible, reducing wrapping and obstruction on small screens.
-- Hardened self-hosted file storage: unauthenticated server-side storage is disabled by default, enabling it requires an explicit external data directory, and requests now receive stronger path, size, and cache protections.
-- Production builds now verify their runtime bundle automatically so local data, environment files, logs, and workspace directories are not included in installers or server artifacts.
-- Clarified subpath and self-hosting documentation, and fixed release preflight failures on Windows repositories with special ownership settings.
+- Strengthened external API address validation to block abnormal connections to local, private-network, or other non-public resources.
+- Improved error handling for model, embedding, speech, search, and WebDAV requests so connection details are less likely to appear in logs or error messages.
+- The official web app now accepts only safe public API addresses. Supported AI services still prefer direct browser connections, while custom proxies remain available in desktop and self-hosted environments.
+- Added a 50 MB per-file limit for document parsing to reduce failures caused by excessively large uploads.
+- Hardened desktop window navigation, permissions, and embedded-content isolation, and upgraded core components to address known security issues.
 
 #### Android
 
-- Synchronized the version to `1.2.51+1251`; this release contains no Android feature changes.
+- Synchronized the version to `1.2.52+1252`; this release contains no Android feature changes.

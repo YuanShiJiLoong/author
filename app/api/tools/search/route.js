@@ -1,9 +1,11 @@
 // 统一搜索 API — 支持 Google Custom Search / Bing Search / Tavily
 // 供 Function Calling 搜索循环调用
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 import { rotateKey } from '../../../lib/keyRotator';
+import { proxyFetch } from '../../../lib/proxy-fetch';
+import { isOutboundRequestBlocked } from '../../../lib/server-security.mjs';
 
 export async function POST(request) {
     try {
@@ -24,7 +26,7 @@ export async function POST(request) {
 
             case 'tavily': {
                 const tavilyBase = (searchConfig.baseUrl || 'https://api.tavily.com').replace(/\/$/, '');
-                const res = await fetch(`${tavilyBase}/search`, {
+                const res = await proxyFetch(`${tavilyBase}/search`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -35,8 +37,8 @@ export async function POST(request) {
                     }),
                 });
                 if (!res.ok) {
-                    const err = await res.text();
-                    console.error('Tavily Search error:', res.status, err);
+                    await res.body?.cancel().catch(() => {});
+                    console.error('Tavily Search error:', res.status);
                     return Response.json({ error: `Tavily 搜索失败 (${res.status})` }, { status: res.status });
                 }
                 const data = await res.json();
@@ -50,7 +52,7 @@ export async function POST(request) {
 
             case 'exa': {
                 const exaBase = (searchConfig.baseUrl || 'https://api.exa.ai').replace(/\/$/, '');
-                const res = await fetch(`${exaBase}/search`, {
+                const res = await proxyFetch(`${exaBase}/search`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -64,8 +66,8 @@ export async function POST(request) {
                     }),
                 });
                 if (!res.ok) {
-                    const err = await res.text();
-                    console.error('Exa Search error:', res.status, err);
+                    await res.body?.cancel().catch(() => {});
+                    console.error('Exa Search error:', res.status);
                     return Response.json({ error: `Exa 搜索失败 (${res.status})` }, { status: res.status });
                 }
                 const data = await res.json();
@@ -83,7 +85,10 @@ export async function POST(request) {
 
         return Response.json({ results });
     } catch (error) {
-        console.error('搜索接口错误:', error);
+        console.error('搜索接口错误:', error?.code || error?.name || 'UNKNOWN');
+        if (isOutboundRequestBlocked(error)) {
+            return Response.json({ error: error.message, code: error.code }, { status: 400 });
+        }
         return Response.json({ error: '搜索请求失败' }, { status: 500 });
     }
 }

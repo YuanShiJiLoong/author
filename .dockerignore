@@ -1,6 +1,10 @@
 node_modules
 .next
 dist
+.tmp
+.playwright-cli
+_standalone
+local-clients-v*
 .git
 .gitignore
 *.md

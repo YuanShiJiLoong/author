@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 
 import { proxyFetch } from '../../lib/proxy-fetch';
+import { isOutboundRequestBlocked, safeUpstreamDetail } from '../../lib/server-security.mjs';
 
 const GEMINI_MODEL = 'gemini-3.1-flash-tts-preview';
 
@@ -45,17 +46,7 @@ function wavFromPcm(pcm) {
 }
 
 async function upstreamError(response) {
-    const raw = await response.text();
-    let detail = '';
-    try {
-        const parsed = JSON.parse(raw);
-        detail = parsed?.error?.message || parsed?.message || '';
-    } catch {
-        detail = raw;
-    }
-    return String(detail || `HTTP ${response.status}`)
-        .replace(/(?:sk-|key[=:\s]*)[A-Za-z0-9_.-]{8,}/gi, '[已隐藏密钥]')
-        .slice(0, 500);
+    return safeUpstreamDetail(await response.text(), 500) || `HTTP ${response.status}`;
 }
 
 function audioResponse(buffer, contentType) {
@@ -181,6 +172,7 @@ export async function POST(request) {
         if (provider === 'anthropic-custom' || provider === 'custom') return await requestCustom(input, config, apiKey, provider);
         return errorResponse('不支持的 TTS 音源类型');
     } catch (error) {
-        return errorResponse(error?.message || 'TTS 请求失败', 500);
+        if (isOutboundRequestBlocked(error)) return errorResponse(error.message, 400);
+        return errorResponse('TTS 请求失败', 500);
     }
 }

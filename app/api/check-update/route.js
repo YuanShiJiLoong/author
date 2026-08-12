@@ -92,9 +92,9 @@ export async function GET() {
             { current: currentVersion, latest: latestVersion, hasUpdate, isSourceDeploy },
             { headers: { 'Cache-Control': 'public, max-age=3600' } } // 成功缓存 1 小时
         );
-    } catch (err) {
+    } catch {
         return NextResponse.json(
-            { error: '检查更新失败', code: 'CHECK_UPDATE_FAILED', details: err.message },
+            { error: '检查更新失败', code: 'CHECK_UPDATE_FAILED' },
             { status: 500 }
         );
     }

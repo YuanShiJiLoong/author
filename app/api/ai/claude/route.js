@@ -7,6 +7,7 @@ export const maxDuration = 120;
 import { applyContentSafety } from '../../../lib/content-safety';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
+import { isOutboundRequestBlocked, redactSensitiveText, safeUpstreamDetail } from '../../../lib/server-security.mjs';
 
 // Anthropic 格式的搜索工具定义
 const WEB_SEARCH_TOOL = {
@@ -133,7 +134,7 @@ export async function POST(request) {
 
             if (!round1Res.ok) {
                 const errorText = await round1Res.text();
-                console.error('Claude 兼容 Function Calling 第1轮错误:', round1Res.status, errorText);
+                console.error('Claude 兼容 Function Calling 第1轮错误:', round1Res.status);
                 return errorResponse(round1Res.status, errorText);
             }
 
@@ -168,7 +169,7 @@ export async function POST(request) {
                                 allSources.push({ title: r.title, uri: r.url });
                             }
                         } catch (searchErr) {
-                            console.error('搜索执行失败:', searchErr.message);
+                            console.error('搜索执行失败:', searchErr?.code || searchErr?.name || 'UNKNOWN');
                             toolResults.push({
                                 type: 'tool_result',
                                 tool_use_id: toolBlock.id,
@@ -197,7 +198,7 @@ export async function POST(request) {
 
                 if (!round2Res.ok) {
                     const errorText = await round2Res.text();
-                    console.error('Claude 兼容 Function Calling 第2轮错误:', round2Res.status, errorText);
+                    console.error('Claude 兼容 Function Calling 第2轮错误:', round2Res.status);
                     return errorResponse(round2Res.status, errorText);
                 }
 
@@ -252,14 +253,20 @@ export async function POST(request) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Claude 兼容 API 错误:', response.status, errorText);
+            console.error('Claude 兼容 API 错误:', response.status);
             return errorResponse(response.status, errorText);
         }
 
         return streamClaudeResponse(response);
 
     } catch (error) {
-        console.error('Claude 兼容接口错误:', error);
+        console.error('Claude 兼容接口错误:', error?.code || error?.name || 'UNKNOWN');
+        if (isOutboundRequestBlocked(error)) {
+            return new Response(
+                JSON.stringify({ error: error.message, code: error.code }),
+                { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+            );
+        }
         return new Response(
             JSON.stringify({ error: '网络连接失败，请检查 API 地址是否正确', code: 'NETWORK_ERROR_CHECK' }),
             { status: 500, headers: { 'Content-Type': 'application/json' } }
@@ -281,7 +288,7 @@ function errorResponse(status, errorText = '') {
     if (!code && errorText) {
         try {
             const errObj = JSON.parse(errorText);
-            const msg = errObj?.error?.message || '';
+            const msg = safeUpstreamDetail(errObj?.error?.message || '', 300);
             const upstreamCode = errObj?.error?.code || '';
             if (upstreamCode === 'insufficient_user_quota' || msg.includes('额度') || msg.includes('quota')) {
                 errMsg = 'API 账户余额不足，请充值后重试'; code = 'AI_INSUFFICIENT_QUOTA';
@@ -388,7 +395,7 @@ function streamClaudeResponse(response, sources = null) {
                     }
                 }
             } catch (err) {
-                console.error('Claude Stream 读取错误:', err.message);
+                console.error('Claude Stream 读取错误:', redactSensitiveText(err?.message || err, 200));
             } finally {
                 controller.close();
                 reader.releaseLock();

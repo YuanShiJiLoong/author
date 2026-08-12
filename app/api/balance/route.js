@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../lib/proxy-fetch';
 import { rotateKey } from '../../lib/keyRotator';
+import { isOutboundRequestBlocked } from '../../lib/server-security.mjs';
 
 export const runtime = 'nodejs';
 
@@ -48,9 +49,10 @@ export async function POST(request) {
             code: 'BALANCE_UNSUPPORTED',
         });
     } catch (error) {
-        console.error('Balance query error:', error);
-        // 上游/JS 原文优先保留；为空时回退中文文案并加 code 供前端本地化
-        if (error?.message) return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error('Balance query error:', error?.code || error?.name || 'UNKNOWN');
+        if (isOutboundRequestBlocked(error)) {
+            return NextResponse.json({ error: error.message, code: error.code }, { status: 400 });
+        }
         return NextResponse.json({ error: '查询失败', code: 'BALANCE_QUERY_FAILED' }, { status: 500 });
     }
 }

@@ -7,6 +7,7 @@ export const maxDuration = 120;
 import { applyContentSafety } from '../../../lib/content-safety';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
+import { isOutboundRequestBlocked, redactSensitiveText, safeUpstreamDetail } from '../../../lib/server-security.mjs';
 
 export async function POST(request) {
     try {
@@ -71,7 +72,7 @@ export async function POST(request) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Gemini API错误:', response.status, errorText);
+            console.error('Gemini API错误:', response.status);
 
             let errMsg = '';
             let code = '';
@@ -79,8 +80,8 @@ export async function POST(request) {
             if (response.status === 400) {
                 try {
                     const errObj = JSON.parse(errorText);
-                    detail = errObj?.error?.message || errorText;
-                } catch { detail = errorText; }
+                    detail = safeUpstreamDetail(errObj?.error?.message || errorText, 300);
+                } catch { detail = safeUpstreamDetail(errorText, 300); }
                 errMsg = `Gemini 请求错误：${detail}`; code = 'AI_SERVICE_ERROR';
             } else if (response.status === 401 || response.status === 403) {
                 errMsg = 'API Key 无效或无权限，请检查你的 Gemini API Key'; code = 'INVALID_KEY';
@@ -182,7 +183,7 @@ export async function POST(request) {
                     // 发送结束信号
                     controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                 } catch (err) {
-                    console.error('Gemini Stream 读取错误:', err.message);
+                    console.error('Gemini Stream 读取错误:', redactSensitiveText(err?.message || err, 200));
                 } finally {
                     controller.close();
                     reader.releaseLock();
@@ -199,7 +200,13 @@ export async function POST(request) {
         });
 
     } catch (error) {
-        console.error('Gemini 接口错误:', error);
+        console.error('Gemini 接口错误:', error?.code || error?.name || 'UNKNOWN');
+        if (isOutboundRequestBlocked(error)) {
+            return new Response(
+                JSON.stringify({ error: error.message, code: error.code }),
+                { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+            );
+        }
         return new Response(
             JSON.stringify({ error: '网络连接失败，请检查 API 地址是否正确', code: 'NETWORK_ERROR_CHECK' }),
             { status: 500, headers: { 'Content-Type': 'application/json' } }

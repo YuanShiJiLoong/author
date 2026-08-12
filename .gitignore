@@ -70,6 +70,7 @@ next-env.d.ts
 
 # release/build scratch — installers, update metadata, patches (publish via GitHub Releases, never commit)
 .tmp/
+.playwright-cli/
 
 # sensitive config
 mcp_config.json

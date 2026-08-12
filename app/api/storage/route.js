@@ -192,7 +192,7 @@ export async function GET(request) {
         if (error instanceof StorageRequestError) {
             return json({ error: error.message }, { status: error.status });
         }
-        console.error('Storage GET error:', error);
+        console.error('Storage GET error:', error?.code || error?.name || 'UNKNOWN');
         return json({ error: 'Storage operation failed' }, { status: 500 });
     }
 }
@@ -272,7 +272,7 @@ export async function POST(request) {
         if (error instanceof StorageRequestError) {
             return json({ error: error.message }, { status: error.status });
         }
-        console.error('Storage POST error:', error);
+        console.error('Storage POST error:', error?.code || error?.name || 'UNKNOWN');
         return json({ error: 'Storage operation failed' }, { status: 500 });
     }
 }
@@ -305,7 +305,7 @@ export async function DELETE(request) {
         if (error instanceof StorageRequestError) {
             return json({ error: error.message }, { status: error.status });
         }
-        console.error('Storage DELETE error:', error);
+        console.error('Storage DELETE error:', error?.code || error?.name || 'UNKNOWN');
         return json({ error: 'Storage operation failed' }, { status: 500 });
     }
 }

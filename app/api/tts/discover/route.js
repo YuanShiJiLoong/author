@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 
 import { proxyFetch } from '../../../lib/proxy-fetch';
+import { isOutboundRequestBlocked, safeUpstreamDetail } from '../../../lib/server-security.mjs';
 
 const OPENAI_COMMON_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'];
 const GEMINI_COMMON_VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Aoede', 'Leda', 'Orus', 'Zephyr'];
@@ -114,14 +115,7 @@ function preferSpeechModels(models) {
 
 async function responseDetail(response) {
     const text = await response.text().catch(() => '');
-    try {
-        const data = JSON.parse(text);
-        return String(data?.error?.message || data?.message || `HTTP ${response.status}`).slice(0, 300);
-    } catch {
-        return String(text || `HTTP ${response.status}`)
-            .replace(/(?:sk-|key[=:\s]*)[A-Za-z0-9_.-]{8,}/gi, '[已隐藏密钥]')
-            .slice(0, 300);
-    }
+    return safeUpstreamDetail(text, 300) || `HTTP ${response.status}`;
 }
 
 function failureDetail(status, statusText, detail) {
@@ -169,7 +163,8 @@ async function fetchCandidates(urls, headers, proxyUrl, kind) {
             const items = normalizeCandidates(data, kind);
             if (items.length > 0) return { ok: true, items, endpoint: url };
         } catch (error) {
-            lastDetail = error?.name === 'TimeoutError' ? '连接超时' : String(error?.message || '连接失败').slice(0, 200);
+            if (isOutboundRequestBlocked(error)) throw error;
+            lastDetail = error?.name === 'TimeoutError' ? '连接超时' : '连接失败';
             failures.push({ kind: 'network', status: 0, detail: lastDetail });
         }
     }
@@ -239,6 +234,7 @@ export async function POST(request) {
             voiceSource: discoveredVoices.length > 0 ? 'endpoint' : (knownVoices.length > 0 ? 'known' : 'none'),
         }, { headers: { 'Cache-Control': 'no-store' } });
     } catch (error) {
-        return jsonError(error?.message || 'TTS 连接失败', 500);
+        if (isOutboundRequestBlocked(error)) return jsonError(error.message, 400);
+        return jsonError('TTS 连接失败', 500);
     }
 }

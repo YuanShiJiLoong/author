@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { proxyFetch } from '../../../lib/proxy-fetch';
+import { isOutboundRequestBlocked, redactSensitiveText } from '../../../lib/server-security.mjs';
 
 export const runtime = 'nodejs';
 
@@ -126,7 +128,7 @@ async function proxyWebDav({ action, path, body, config }, options = {}) {
         headers.Depth = '0';
     }
 
-    const response = await fetch(url, {
+    const response = await proxyFetch(url, {
         method,
         headers,
         body: requestBody,
@@ -154,7 +156,7 @@ async function proxyWebDav({ action, path, body, config }, options = {}) {
             return { ok: true, status: response.status };
         }
         if (response.status === 409) {
-            const exists = await fetch(url, {
+            const exists = await proxyFetch(url, {
                 method: 'PROPFIND',
                 headers: {
                     ...headers,
@@ -199,6 +201,9 @@ export async function POST(request) {
         }
         return NextResponse.json(result);
     } catch (error) {
-        return NextResponse.json({ error: error.message || 'WebDAV 请求失败' }, { status: 400 });
+        if (isOutboundRequestBlocked(error)) {
+            return NextResponse.json({ error: error.message, code: error.code }, { status: 400 });
+        }
+        return NextResponse.json({ error: redactSensitiveText(error?.message || 'WebDAV 请求失败', 200) }, { status: 400 });
     }
 }

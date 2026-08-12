@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
+import { isOutboundRequestBlocked, safeUpstreamDetail } from '../../../lib/server-security.mjs';
 
 // 通用模型列表拉取 — OpenAI 兼容 / Claude 兼容 / Gemini 原生
 export async function POST(request) {
@@ -30,7 +31,10 @@ export async function POST(request) {
         return await fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider, proxyUrl);
 
     } catch (error) {
-        console.error('拉取模型列表错误:', error);
+        console.error('拉取模型列表错误:', error?.code || error?.name || 'UNKNOWN');
+        if (isOutboundRequestBlocked(error)) {
+            return NextResponse.json({ error: error.message, code: error.code }, { status: 400 });
+        }
         return NextResponse.json(
             { error: '网络连接失败，请检查 API 地址', code: 'NETWORK_ERROR' },
             { status: 500 }
@@ -216,7 +220,7 @@ async function handleFetchError(response) {
     let errMsg = `拉取失败(${response.status})`;
     try {
         const errObj = JSON.parse(errorText);
-        errMsg = errObj?.error?.message || errMsg;
+        errMsg = safeUpstreamDetail(errObj?.error?.message || errMsg, 300);
     } catch { /* ignore */ }
     return NextResponse.json(
         { error: errMsg },

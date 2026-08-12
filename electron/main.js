@@ -333,6 +333,28 @@ ipcMain.handle('secure-store-delete', async (event, key) => {
 function createWindow() {
     Menu.setApplicationMenu(null);
 
+    const isTrustedAppUrl = (rawUrl) => {
+        try {
+            const parsed = new URL(rawUrl);
+            return parsed.protocol === 'http:'
+                && ['localhost', '127.0.0.1'].includes(parsed.hostname)
+                && Number(parsed.port || 80) === actualPort;
+        } catch {
+            return false;
+        }
+    };
+
+    const openExternalHttpUrl = (rawUrl) => {
+        try {
+            const parsed = new URL(rawUrl);
+            if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+            shell.openExternal(parsed.toString()).catch(err => log(`[OpenExternal] ${err?.message || err}`));
+            return true;
+        } catch {
+            return false;
+        }
+    };
+
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,
@@ -344,6 +366,9 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
+            sandbox: true,
+            webviewTag: false,
+            navigateOnDragDrop: false,
         },
         autoHideMenuBar: false,
         backgroundColor: '#faf8f5',
@@ -407,12 +432,18 @@ function createWindow() {
     });
 
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        if (url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
-            shell.openExternal(url);
-            return { action: 'deny' };
-        }
-        return { action: 'allow' };
+        if (!isTrustedAppUrl(url)) openExternalHttpUrl(url);
+        return { action: 'deny' };
     });
+
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        if (isTrustedAppUrl(url)) return;
+        event.preventDefault();
+        openExternalHttpUrl(url);
+    });
+
+    mainWindow.webContents.on('will-attach-webview', event => event.preventDefault());
+    mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
 
     mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
         const levelNames = ['verbose', 'info', 'warning', 'error'];
@@ -916,6 +947,9 @@ function createSplashWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: true,
+            webviewTag: false,
+            navigateOnDragDrop: false,
         },
     });
 

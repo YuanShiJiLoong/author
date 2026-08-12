@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import os from 'os';
 import crypto from 'crypto';
+import { isOfficialWebServer } from '../../../lib/server-security.mjs';
 
 export const runtime = 'nodejs';
 
@@ -16,6 +17,13 @@ function withCors(response) {
     response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
     response.headers.set('Cache-Control', 'no-store');
     return response;
+}
+
+function disabledOnOfficialWeb() {
+    return withCors(NextResponse.json(
+        { error: '局域网临时分享仅在桌面端或自部署环境可用', code: 'LAN_SYNC_LOCAL_ONLY' },
+        { status: 403 },
+    ));
 }
 
 function pruneExpiredShares() {
@@ -60,10 +68,12 @@ function validateSnapshot(bundle) {
 }
 
 export async function OPTIONS() {
+    if (isOfficialWebServer()) return disabledOnOfficialWeb();
     return withCors(new NextResponse(null, { status: 204 }));
 }
 
 export async function POST(request) {
+    if (isOfficialWebServer()) return disabledOnOfficialWeb();
     try {
         pruneExpiredShares();
         const payload = await request.json();
@@ -88,12 +98,13 @@ export async function POST(request) {
             urls: buildUrls(request.url, token),
             entryCount: bundle.entries.length,
         }));
-    } catch (error) {
-        return withCors(NextResponse.json({ error: error.message || '创建局域网分享失败' }, { status: 400 }));
+    } catch {
+        return withCors(NextResponse.json({ error: '创建局域网分享失败' }, { status: 400 }));
     }
 }
 
 export async function GET(request) {
+    if (isOfficialWebServer()) return disabledOnOfficialWeb();
     try {
         pruneExpiredShares();
         const { searchParams } = new URL(request.url);
@@ -104,7 +115,7 @@ export async function GET(request) {
 
         const share = shares.get(token);
         return withCors(NextResponse.json(share.bundle));
-    } catch (error) {
-        return withCors(NextResponse.json({ error: error.message || '读取局域网分享失败' }, { status: 500 }));
+    } catch {
+        return withCors(NextResponse.json({ error: '读取局域网分享失败' }, { status: 500 }));
     }
 }

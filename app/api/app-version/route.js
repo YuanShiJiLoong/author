@@ -10,9 +10,9 @@ export async function GET() {
             { version: pkg.version || '' },
             { headers: { 'Cache-Control': 'public, max-age=3600' } }
         );
-    } catch (err) {
+    } catch {
         return NextResponse.json(
-            { error: '无法读取当前版本号', code: 'CANNOT_READ_VERSION', details: err.message },
+            { error: '无法读取当前版本号', code: 'CANNOT_READ_VERSION' },
             { status: 500 }
         );
     }

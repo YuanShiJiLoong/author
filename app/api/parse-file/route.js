@@ -6,10 +6,13 @@
  */
 
 import { NextResponse } from 'next/server';
+import { redactSensitiveText } from '@/app/lib/server-security.mjs';
 
 // 提高 body 大小限制，避免大 PDF/DOC 文件上传时返回 413
 export const maxDuration = 60; // 秒
 export const dynamic = 'force-dynamic';
+
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 export async function POST(request) {
     try {
@@ -18,6 +21,10 @@ export async function POST(request) {
 
         if (!file || typeof file === 'string') {
             return NextResponse.json({ error: '未提供文件', code: 'NO_FILE' }, { status: 400 });
+        }
+
+        if (file.size > MAX_FILE_BYTES) {
+            return NextResponse.json({ error: '文件体积过大', code: 'FILE_TOO_LARGE' }, { status: 413 });
         }
 
         const fileName = file.name.toLowerCase();
@@ -45,9 +52,9 @@ export async function POST(request) {
         }
         return NextResponse.json({ text });
     } catch (err) {
-        console.error('parse-file error:', err);
+        console.error('parse-file error:', redactSensitiveText(err?.message || err, 200));
         return NextResponse.json(
-            { error: `解析失败：${err.message}`, code: 'PARSE_FAILED', detail: err.message },
+            { error: '解析失败', code: 'PARSE_FAILED' },
             { status: 500 }
         );
     }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { proxyFetch } from '../../../lib/proxy-fetch';
 import { rotateKey } from '../../../lib/keyRotator';
+import { isOutboundRequestBlocked, safeUpstreamDetail } from '../../../lib/server-security.mjs';
 
 const DEEPSEEK_V4_MODELS = new Set(['deepseek-v4-pro', 'deepseek-v4-flash']);
 
@@ -34,7 +35,10 @@ export async function POST(request) {
         }
         return await testOpenAICompatible(apiKey, baseUrl, model, proxyUrl, provider);
     } catch (error) {
-        console.warn('API 测试连接失败:', error?.message || error);
+        console.warn('API 测试连接失败:', error?.code || error?.name || 'UNKNOWN');
+        if (isOutboundRequestBlocked(error)) {
+            return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: 400 });
+        }
         return NextResponse.json({ success: false, error: '网络连接失败，请检查兼容 API 地址或代理设置', code: 'NETWORK_ERROR_PROXY' });
     }
 }
@@ -99,7 +103,7 @@ async function connectionError(response) {
     const errorText = await response.text();
     let upstream = null;
     try {
-        upstream = JSON.parse(errorText)?.error?.message || null;
+        upstream = safeUpstreamDetail(JSON.parse(errorText)?.error?.message || '', 300) || null;
     } catch { }
     // 上游原文（多为英文）保留、不加 code；仅在回退到自带中文文案时加 code 供前端本地化
     if (upstream) return NextResponse.json({ success: false, error: upstream });
