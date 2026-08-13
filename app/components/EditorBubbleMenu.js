@@ -7,14 +7,13 @@ import {
     Heading1, Heading2, Heading3,
     Highlighter, RemoveFormatting, Sparkles, MessageSquareText
 } from 'lucide-react';
-import { promptForRemark } from './RemarkMark';
 import { useI18n } from '../lib/useI18n';
 
 /**
  * 气泡菜单 — 选中文字时在选区上方浮现的格式工具栏
  * 手动实现（不依赖 @tiptap/extension-bubble-menu）
  */
-export default function EditorBubbleMenu({ editor }) {
+export default function EditorBubbleMenu({ editor, onRemark }) {
     const [visible, setVisible] = useState(false);
     const [pos, setPos] = useState({ x: 0, y: 0 });
     const menuRef = useRef(null);
@@ -134,7 +133,7 @@ export default function EditorBubbleMenu({ editor }) {
                 <button className={btnClass(editor.isActive('highlight'))} onClick={execCmd(() => editor.chain().focus().toggleHighlight().run())} title={text('高亮', 'Highlight', 'Выделение')}>
                     <Highlighter size={15} />
                 </button>
-                <button className={btnClass(editor.isActive('remark'))} onClick={execCmd(() => promptForRemark(editor))} title={text('备注 / 批注', 'Note / Comment', 'Заметка / комментарий')}>
+                <button className={btnClass(editor.isActive('remark'))} onClick={execCmd(() => { setVisible(false); onRemark?.(); })} title={text('备注 / 批注', 'Note / Comment', 'Заметка / комментарий')}>
                     <MessageSquareText size={15} />
                 </button>
             </div>

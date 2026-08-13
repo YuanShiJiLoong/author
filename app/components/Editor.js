@@ -23,7 +23,8 @@ import { SearchHighlightExtension } from './SearchHighlightExtension';
 import { CursorAidExtension } from './CursorAidExtension';
 import GhostMark from './GhostMark';
 import AiDiffDeleteMark from './AiDiffDeleteMark';
-import RemarkMark, { promptForRemark } from './RemarkMark';
+import RemarkMark from './RemarkMark';
+import RemarkDialog from './RemarkDialog';
 import EditorBubbleMenu from './EditorBubbleMenu';
 import { createSlashExtension, SlashCommandMenu } from './SlashCommands';
 import { useEffect, useCallback, useRef, useState, useMemo, useId, forwardRef, useImperativeHandle } from 'react';
@@ -38,6 +39,8 @@ import ModelPicker from './ModelPicker';
 import { PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
 import DesktopTtsControls from './DesktopTtsControls';
+import { applyRemarkText, getRemarkEditState } from '../lib/remark-actions';
+import { getRemarkNotePlacement } from '../lib/remark-layout';
 
 // ==================== 虚拟分页常量 ====================
 const PAGE_HEIGHT = 1056; // A4 纸 @ 96dpi
@@ -281,6 +284,9 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
 
     // 搜索栏
     const [findBarVisible, setFindBarVisible] = useState(false);
+
+    // 应用内批注编辑框（Electron 不依赖 window.prompt）
+    const [remarkDraft, setRemarkDraft] = useState(null);
 
     // 页边距状态（从 localStorage 读取）
     const [margins, setMargins] = useState(() => {
@@ -764,6 +770,20 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
         return () => document.removeEventListener('keydown', handler);
     }, []);
 
+    const openRemarkDialog = useCallback(() => {
+        setRemarkDraft(getRemarkEditState(editor));
+    }, [editor]);
+
+    const closeRemarkDialog = useCallback(() => {
+        setRemarkDraft(null);
+        requestAnimationFrame(() => editor?.commands.focus());
+    }, [editor]);
+
+    const saveRemark = useCallback((value) => {
+        applyRemarkText(editor, remarkDraft, value);
+        setRemarkDraft(null);
+    }, [editor, remarkDraft]);
+
     if (!editor) return (
         <div className="editor-container" style={{ flex: 1, background: 'var(--bg-canvas)' }} />
     );
@@ -781,6 +801,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
                 onToggleSpecialChapter={onToggleSpecialChapter}
                 onSplitChapter={handleSplitChapter}
                 onMergeNextChapter={handleMergeNextChapter}
+                onRemark={openRemarkDialog}
             />
             <div
                 ref={containerRef}
@@ -869,7 +890,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
                     >
                         <div ref={contentCallbackRef}>
                             <EditorContent editor={editor} />
-                            <EditorBubbleMenu editor={editor} />
+                            <EditorBubbleMenu editor={editor} onRemark={openRemarkDialog} />
                             {slashRange && (
                                 <SlashCommandMenu
                                     editor={editor}
@@ -885,6 +906,9 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
             <FindBar editor={editor} visible={findBarVisible} onClose={() => setFindBarVisible(false)} />
             <InlineAI editor={editor} onAiRequest={onAiRequest} onArchiveGeneration={onArchiveGeneration} contextItems={contextItems} contextSelection={contextSelection} setContextSelection={setContextSelection} />
             <StatusBar editor={editor} pageCount={pageCount} chapterId={chapterId} />
+            {remarkDraft && (
+                <RemarkDialog draft={remarkDraft} onClose={closeRemarkDialog} onSave={saveRemark} />
+            )}
         </>
     );
 });
@@ -904,8 +928,17 @@ function RemarkLayer({ editor, workspaceRef, contentRef }) {
         }
 
         const workspaceRect = workspace.getBoundingClientRect();
+        const container = workspace.parentElement;
+        const containerRect = container?.getBoundingClientRect() || workspaceRect;
         const pageWidth = workspace.clientWidth;
-        const noteLeft = pageWidth + 22;
+        let visibleLeft = containerRect.left;
+        let visibleRight = containerRect.right;
+        const appLayout = workspace.closest('.app-layout');
+        if (appLayout?.classList.contains('ai-open') && appLayout.classList.contains('ai-overlay')) {
+            const aiSidebar = appLayout.querySelector('.ai-sidebar:not(.collapsed)');
+            const aiRect = aiSidebar?.getBoundingClientRect();
+            if (aiRect?.width > 0) visibleRight = Math.min(visibleRight, aiRect.left);
+        }
         const remarksById = new Map();
 
         root.querySelectorAll('.remark-mark[data-remark-id]').forEach(el => {
@@ -933,19 +966,23 @@ function RemarkLayer({ editor, workspaceRef, contentRef }) {
         const nextItems = Array.from(remarksById.values())
             .sort((a, b) => a.anchorY - b.anchorY)
             .map((item, index) => {
-                const estimatedHeight = Math.min(120, 42 + Math.ceil(item.text.length / 18) * 18);
+                const placement = getRemarkNotePlacement({
+                    anchorX: item.anchorX,
+                    pageWidth,
+                    workspaceLeft: workspaceRect.left,
+                    visibleLeft,
+                    visibleRight,
+                });
+                const charsPerLine = Math.max(10, Math.floor((placement.noteWidth - 46) / 7));
+                const estimatedHeight = Math.min(120, 42 + Math.ceil(item.text.length / charsPerLine) * 18);
                 const noteTop = Math.max(8, item.anchorY - 18, previousBottom + 8);
                 previousBottom = noteTop + estimatedHeight;
-                const lineLeft = Math.min(item.anchorX + 6, pageWidth + 8);
-                const lineWidth = Math.max(16, noteLeft - lineLeft - 6);
                 return {
                     ...item,
+                    ...placement,
                     index: index + 1,
                     noteTop,
-                    noteLeft,
-                    lineLeft,
                     lineTop: item.anchorY,
-                    lineWidth,
                 };
             });
 
@@ -972,6 +1009,13 @@ function RemarkLayer({ editor, workspaceRef, contentRef }) {
         const observer = new ResizeObserver(schedule);
         if (workspaceRef.current) observer.observe(workspaceRef.current);
         if (contentRef.current) observer.observe(contentRef.current);
+        if (workspaceRef.current?.parentElement) observer.observe(workspaceRef.current.parentElement);
+        const appLayout = workspaceRef.current?.closest('.app-layout');
+        const aiSidebar = appLayout?.querySelector('.ai-sidebar');
+        if (aiSidebar) observer.observe(aiSidebar);
+
+        const layoutObserver = new MutationObserver(schedule);
+        if (appLayout) layoutObserver.observe(appLayout, { attributes: true, attributeFilter: ['class', 'style'] });
 
         return () => {
             if (frame) cancelAnimationFrame(frame);
@@ -979,6 +1023,7 @@ function RemarkLayer({ editor, workspaceRef, contentRef }) {
             editor.off('transaction', schedule);
             window.removeEventListener('resize', schedule);
             observer.disconnect();
+            layoutObserver.disconnect();
         };
     }, [contentRef, editor, refresh, workspaceRef]);
 
@@ -988,19 +1033,22 @@ function RemarkLayer({ editor, workspaceRef, contentRef }) {
         <div className="remark-layer" aria-hidden="true">
             {items.map(item => (
                 <div key={item.id} className="remark-layer-item">
+                    {item.lineWidth > 0 && (
+                        <div
+                            className={`remark-line${item.lineAnchor === 'right' ? ' anchor-right' : ''}`}
+                            style={{
+                                left: item.lineLeft,
+                                top: item.lineTop,
+                                width: item.lineWidth,
+                            }}
+                        />
+                    )}
                     <div
-                        className="remark-line"
-                        style={{
-                            left: item.lineLeft,
-                            top: item.lineTop,
-                            width: item.lineWidth,
-                        }}
-                    />
-                    <div
-                        className="remark-note"
+                        className={`remark-note${item.compact ? ' compact' : ''}`}
                         style={{
                             left: item.noteLeft,
                             top: item.noteTop,
+                            width: item.noteWidth,
                         }}
                     >
                         <span className="remark-note-index">{item.index}</span>
@@ -2219,7 +2267,7 @@ const FONT_FAMILIES = [
 const FONT_SIZES = [12, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32];
 
 // ==================== 工具栏 ====================
-function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = false, onToggleSpecialChapter, onSplitChapter, onMergeNextChapter }) {
+function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = false, onToggleSpecialChapter, onSplitChapter, onMergeNextChapter, onRemark }) {
     const { t, text } = useI18n();
     const [showFontColor, setShowFontColor] = useState(false);
     const [showBgColor, setShowBgColor] = useState(false);
@@ -2456,7 +2504,7 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                 <button className={`toolbar-btn ${editor.isActive('strike') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleStrike().run()} title={text('删除线', 'Strikethrough', 'Зачёркивание')} style={{ textDecoration: 'line-through' }}>S</button>
                 <button className={`toolbar-btn ${editor.isActive('superscript') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleSuperscript().run()} title={text('上标', 'Superscript', 'Верхний индекс')} style={{ fontSize: 11 }}>X²</button>
                 <button className={`toolbar-btn ${editor.isActive('subscript') ? 'active' : ''}`} onClick={() => editor.chain().focus().toggleSubscript().run()} title={text('下标', 'Subscript', 'Нижний индекс')} style={{ fontSize: 11 }}>X₂</button>
-                <button className={`toolbar-btn ${editor.isActive('remark') ? 'active' : ''}`} onClick={() => promptForRemark(editor)} title={text('备注 / 批注', 'Note / Comment', 'Заметка / комментарий')}>
+                <button className={`toolbar-btn ${editor.isActive('remark') ? 'active' : ''}`} onClick={onRemark} title={text('备注 / 批注', 'Note / Comment', 'Заметка / комментарий')}>
                     <MessageSquareText size={16} />
                 </button>
             </div>

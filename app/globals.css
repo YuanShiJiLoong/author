@@ -1871,6 +1871,11 @@ body.resizing .main-content {
   border: 1px solid var(--bg-editor);
 }
 
+.remark-line.anchor-right::before {
+  left: auto;
+  right: -4px;
+}
+
 .remark-note {
   position: absolute;
   width: 196px;
@@ -1887,6 +1892,11 @@ body.resizing .main-content {
   font-size: 12px;
   line-height: 1.5;
   text-indent: 0;
+}
+
+.remark-note.compact {
+  background: color-mix(in srgb, var(--bg-card) 96%, var(--warning, #c58b2a));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
 }
 
 .remark-note-index {
@@ -1913,8 +1923,83 @@ body.resizing .main-content {
   -webkit-box-orient: vertical;
 }
 
-@media (max-width: 1180px) {
-  .remark-layer {
+.remark-dialog-overlay {
+  z-index: 10020;
+  padding: 16px;
+}
+
+.remark-dialog {
+  max-width: 520px;
+}
+
+.remark-dialog-title-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--accent);
+}
+
+.remark-dialog-title-row h2 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.remark-dialog-hint {
+  margin: 18px 0 22px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.remark-dialog-selection {
+  margin: 16px 0 10px;
+  padding: 9px 12px;
+  border-left: 3px solid var(--warning, #c58b2a);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--warning, #c58b2a) 8%, var(--bg-secondary));
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.remark-dialog-input {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.remark-dialog-actions {
+  align-items: center;
+}
+
+.remark-dialog-actions-spacer {
+  flex: 1;
+}
+
+.remark-dialog-delete {
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 36%, var(--border-light));
+}
+
+.remark-dialog-delete:hover {
+  color: #fff;
+  border-color: var(--error);
+  background: var(--error);
+}
+
+@media (max-width: 560px) {
+  .remark-dialog {
+    width: 100%;
+    padding: 18px;
+  }
+
+  .remark-dialog-actions {
+    flex-wrap: wrap;
+  }
+
+  .remark-dialog-actions-spacer {
     display: none;
   }
 }
