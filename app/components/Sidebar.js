@@ -22,6 +22,7 @@ import { resolveAiEndpoint } from '../lib/ai-provider-compat';
 import { aiFetch } from '../lib/ai-direct';
 import { localizeApiError } from '../lib/api-error-i18n';
 import { tt } from '../lib/runtime-i18n';
+import { buildChapterSynopsisPrompts, buildMergedSynopsisPrompts, buildMultiChapterSynopsisPrompts } from '../lib/synopsis-prompts';
 
 /** 更多操作下拉菜单（Portal 渲染到 body，彻底避免 overflow 裁剪） */
 function MoreMenuPortal({ anchorRef, t, setShowSettings, setShowMoreMenu, onOpenHelp, setShowGitPopup }) {
@@ -218,105 +219,17 @@ async function readAiTextStream(response) {
 
 function buildSynopsisPrompts(chapter) {
     const chapterText = stripChapterHtml(chapter?.content || '');
-
-    const systemPrompt = [
-        '你是小说章节概要整理助手。你的任务不是压缩字数，而是把单章正文整理成高保真、可复用的后续写作上下文。',
-        '',
-        '要求：',
-        '1. 只依据正文，完整保留本章发生的事实、事件链、决定、冲突、信息增量和结尾状态。',
-        '2. 使用与正文一致的语言；角色名、地名、术语保持原文，不翻译也不改写。',
-        '3. 不限制输出 tokens；不要为了简短牺牲内容精细度、详细程度、事件完整性或剧情颗粒度。',
-        '4. 按章节顺序、时间顺序和因果关系记录；每个重要节点尽量写清触发、行动、冲突、结果、信息增量。',
-        '5. 最高优先级是准确、完整、细致；次要优先级才是简洁。未明确发生的内容不要写成事实。',
-        '6. 不要把内容整理成设定库、人物卡或时间线档案；只做这一章的概要与续写衔接。',
-        '7. 只输出 JSON，不要输出 Markdown、解释、代码块或元评论。',
-        '',
-        'JSON 字段必须包含：',
-        '- summary：高保真概述本章完整进展、主要冲突、信息增量和结尾状态，不限制字数。',
-        '- beats：本章关键情节节点数组，按发生顺序排列，颗粒度要细。',
-        '- endingState：本章最后停在什么画面、决定、冲突、信息或情绪状态上。',
-        '- continuityNotes：下一章续写必须记住的上下文数组，只写本章造成的衔接点，不扩写成设定档案。',
-        '- openThreads：明确出现但尚未回收的伏笔、疑问、承诺、风险或待解决冲突数组。',
-        '- spoilerLevel：固定填写 "chapter"。',
-        '数组字段使用完整短句；没有内容时返回空数组。'
-    ].join('\n');
-
-    const userPrompt = [
-        `章节标题：${chapter?.title || '未命名章节'}`,
-        '',
-        '请根据以下完整正文生成最高细节标准的章节概要 JSON，输出需能作为后续写作上下文继续使用：',
-        '',
-        '<chapter>',
-        chapterText,
-        '</chapter>',
-        '',
-        '输出 JSON 结构：',
-        '{"summary":"","beats":[],"endingState":"","continuityNotes":[],"openThreads":[],"spoilerLevel":"chapter"}'
-    ].join('\n');
-
-    return { systemPrompt, userPrompt };
+    return buildChapterSynopsisPrompts({ title: chapter?.title || '', chapterText });
 }
 
 function buildMemoryGroupPrompts({ name, chapters }) {
-    const systemPrompt = [
-        '你是小说多章节记忆压缩助手。你的任务不是粗略概括，而是把多章内容整理成可长期复用的高保真剧情记忆。',
-        '',
-        '要求：',
-        '1. 严格依据提供内容，完整保留跨章节连续性：事件链、因果、人物关系、状态变化、地点/物品/线索变化、伏笔与待回收问题。',
-        '2. 不限制输出 tokens；不要为了简短牺牲内容精细度、详细程度、事件完整性或剧情颗粒度。',
-        '3. 按章节顺序、时间顺序和因果关系组织；写清每个重要节点的触发、行动、冲突、结果和信息增量。',
-        '4. 使用与原文一致的语言；角色名、地名、术语保持原文。',
-        '5. 只输出 JSON，不要输出 Markdown、解释、代码块或元评论。',
-        '',
-        'JSON 字段必须包含：summary、beats、events、entityDeltas、foreshadowing、timelineRefs、spoilerLevel。spoilerLevel 固定填写 "multi-chapter"。'
-    ].join('\n');
-
     const content = chapters.map(({ chapter, ordinal }) => buildChapterSourceText(chapter, ordinal)).join('\n\n---\n\n');
-    const userPrompt = [
-        `记忆组名称：${name || '未命名记忆组'}`,
-        '',
-        '请根据以下章节内容生成最高细节标准的多章节概要 JSON：',
-        '',
-        '<chapters>',
-        content,
-        '</chapters>',
-        '',
-        '输出 JSON 结构：',
-        '{"summary":"","beats":[],"events":[],"entityDeltas":[],"foreshadowing":[],"timelineRefs":[],"spoilerLevel":"multi-chapter"}'
-    ].join('\n');
-
-    return { systemPrompt, userPrompt };
+    return buildMultiChapterSynopsisPrompts({ name, content });
 }
 
 function buildMemoryMergePrompts({ name, groups, chapters }) {
-    const systemPrompt = [
-        '你是小说长期记忆压缩助手。你的任务是把多个章节记忆组继续合并为更高层、更稳定的剧情记忆。',
-        '',
-        '要求：',
-        '1. 保留所有影响后续创作的关键事实、事件链、人物状态、关系变化、设定变化、伏笔、未解决冲突。',
-        '2. 可以压缩重复表述，但不能丢失剧情颗粒度、因果关系和连续性。',
-        '3. 将相同人物/地点/物品/线索的变化合并成清晰状态，不要互相覆盖。',
-        '4. 不限制输出 tokens；最高优先级是准确、完整、细致。',
-        '5. 只输出 JSON，不要输出 Markdown、解释、代码块或元评论。',
-        '',
-        'JSON 字段必须包含：summary、beats、events、entityDeltas、foreshadowing、timelineRefs、spoilerLevel。spoilerLevel 固定填写 "merged-group"。'
-    ].join('\n');
-
     const content = groups.map(group => buildChapterMemoryGroupText(group, chapters)).join('\n\n---\n\n');
-    const userPrompt = [
-        `合并后记忆组名称：${name || '合并记忆组'}`,
-        '',
-        '请将以下多个记忆组进一步合并/压缩为一个可长期复用的多章节概要 JSON：',
-        '',
-        '<memory_groups>',
-        content,
-        '</memory_groups>',
-        '',
-        '输出 JSON 结构：',
-        '{"summary":"","beats":[],"events":[],"entityDeltas":[],"foreshadowing":[],"timelineRefs":[],"spoilerLevel":"merged-group"}'
-    ].join('\n');
-
-    return { systemPrompt, userPrompt };
+    return buildMergedSynopsisPrompts({ name, content });
 }
 
 function formatMemoryTokens(value) {
