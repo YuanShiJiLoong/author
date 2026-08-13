@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 const { version } = JSON.parse(readFileSync('./package.json', 'utf-8'));
 const isOfficialWebBuild = process.env.NEXT_PUBLIC_DEPLOYMENT_TARGET === 'official-web';
 const isVercelBuild = process.env.VERCEL === '1';
+const isDevelopment = process.env.NODE_ENV === 'development';
 
 const officialWebSecurityHeaders = [
   { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
@@ -39,6 +40,9 @@ const nextConfig = {
   output: isVercelBuild ? undefined : 'standalone',
   poweredByHeader: false,
   devIndicators: false,
+  // Electron uses localhost, while local browser checks may use 127.0.0.1.
+  // Keep this exception development-only; it does not affect production headers.
+  allowedDevOrigins: isDevelopment ? ['127.0.0.1'] : undefined,
   // 通用子路径部署配置；仅描述路由挂载位置，不用于识别 Author 官方网站。
   basePath: process.env.NEXT_PUBLIC_BASE_PATH || undefined,
   env: {
