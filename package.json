@@ -13,6 +13,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:ai-routing": "node --test tests/ai-provider-compat.test.mjs",
+    "test:chat-markdown": "node --test tests/chat-markdown.test.mjs",
     "test:synopsis-language": "node --test tests/synopsis-prompts.test.mjs",
     "check:open-core-boundary": "node scripts/check-open-core-boundary.js",
     "electron:dev": "npm run dev & npx electron . --dev",

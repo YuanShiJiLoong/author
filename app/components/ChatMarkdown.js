@@ -4,10 +4,12 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { memo, useState, useCallback } from 'react';
 import { copyTextToClipboard } from '../lib/clipboard';
+import { stabilizeChatMarkdown } from '../lib/chat-markdown';
 import { useI18n } from '../lib/useI18n';
 
 function ChatMarkdownInner({ content }) {
     if (!content) return null;
+    const stableContent = stabilizeChatMarkdown(content);
 
     return (
         <ReactMarkdown
@@ -67,7 +69,7 @@ function ChatMarkdownInner({ content }) {
                 h3({ children, ...props }) { return <h5 className="chat-md-heading" {...props}>{children}</h5>; },
             }}
         >
-            {content}
+            {stableContent}
         </ReactMarkdown>
     );
 }
