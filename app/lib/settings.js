@@ -534,8 +534,10 @@ export function getProjectSettings() {
             } catch { /* ignore */ }
         }
 
-        const migratedApiConfig = migrateEmbeddingConfig(settings.apiConfig)
-            || migrateApiConfigToCompatible(settings.apiConfig);
+        // 两类迁移都必须执行；使用 || 会在嵌入配置发生迁移时短路，跳过供应商纠正。
+        const migratedEmbeddingConfig = migrateEmbeddingConfig(settings.apiConfig);
+        const migratedProviderConfig = migrateApiConfigToCompatible(settings.apiConfig);
+        const migratedApiConfig = migratedEmbeddingConfig || migratedProviderConfig;
         const migratedChatConfig = migrateApiConfigToCompatible(settings.chatApiConfig);
         if (migratedApiConfig || migratedChatConfig) {
             localStorage.setItem('author-api-config', JSON.stringify({

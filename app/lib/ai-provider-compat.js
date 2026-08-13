@@ -49,6 +49,20 @@ export function normalizeCompatibleProviderType(providerType) {
     return LEGACY_PROVIDER_MAP[providerType] || providerType || '';
 }
 
+function isDeepSeekProviderKey(provider) {
+    const normalized = String(provider || '').trim().toLowerCase();
+    return normalized === 'deepseek' || /^deepseek_[a-z0-9]+$/.test(normalized);
+}
+
+/**
+ * DeepSeek 预设始终使用 OpenAI 兼容协议。
+ * provider 是用户当前选中的预设/实例 key，应优先于旧版本可能残留的 providerType。
+ */
+export function isDeepSeekPresetConfig(apiConfig) {
+    return isDeepSeekProviderKey(apiConfig?.provider)
+        || normalizeCompatibleProviderType(apiConfig?.providerType) === 'deepseek';
+}
+
 function migrateProviderEntry(entry, oldType) {
     if (!entry || typeof entry !== 'object') return false;
     const nextType = normalizeCompatibleProviderType(oldType);
@@ -73,6 +87,10 @@ function migrateProviderEntry(entry, oldType) {
             entry.apiFormat = 'anthropic';
             changed = true;
         }
+    } else if (nextType === 'deepseek' && entry.apiFormat) {
+        // DeepSeek 预设没有格式切换；清理旧版本错误遗留的 Anthropic 标记。
+        delete entry.apiFormat;
+        changed = true;
     } else if (['gemini-native', 'custom-gemini', 'openai-responses'].includes(oldType) && entry.apiFormat) {
         delete entry.apiFormat;
         changed = true;
@@ -88,7 +106,9 @@ function migrateProviderConfigs(apiConfig) {
 
     for (const [key, entry] of Object.entries({ ...configs })) {
         if (!entry || typeof entry !== 'object') continue;
-        const oldType = entry.providerType || key;
+        // 配置表的 key 才是用户选择的预设/实例；例如 deepseek 项中残留
+        // providerType=claude 时，不能继续把真实聊天路由到 /v1/messages。
+        const oldType = isDeepSeekProviderKey(key) ? 'deepseek' : (entry.providerType || key);
         const nextType = normalizeCompatibleProviderType(oldType);
         if (migrateProviderEntry(entry, oldType)) changed = true;
 
@@ -140,7 +160,9 @@ function migrateEmbedProviderConfigs(apiConfig) {
 export function migrateApiConfigToCompatible(apiConfig) {
     if (!apiConfig || typeof apiConfig !== 'object') return false;
     let changed = migrateProviderConfigs(apiConfig);
-    const oldType = apiConfig.providerType || apiConfig.provider || '';
+    const oldType = isDeepSeekProviderKey(apiConfig.provider)
+        ? 'deepseek'
+        : (apiConfig.providerType || apiConfig.provider || '');
     const nextType = normalizeCompatibleProviderType(oldType);
 
     if (apiConfig.provider && LEGACY_PROVIDER_MAP[apiConfig.provider] && !apiConfig.providerConfigs?.[apiConfig.provider]) {
@@ -166,6 +188,9 @@ export function migrateApiConfigToCompatible(apiConfig) {
             apiConfig.apiFormat = 'anthropic';
             changed = true;
         }
+    } else if (nextType === 'deepseek' && apiConfig.apiFormat) {
+        delete apiConfig.apiFormat;
+        changed = true;
     } else if (['gemini-native', 'custom-gemini', 'openai-responses'].includes(oldType) && apiConfig.apiFormat) {
         delete apiConfig.apiFormat;
         changed = true;
@@ -193,6 +218,9 @@ export function migrateApiConfigToCompatible(apiConfig) {
 }
 
 export function resolveAiEndpoint(apiConfig) {
+    // 当前选中 DeepSeek 预设时，provider 比旧 providerType/apiFormat 更可信。
+    // 否则测试连接会走 /chat/completions，而真实聊天会误走 /v1/messages 并返回 404。
+    if (isDeepSeekPresetConfig(apiConfig)) return '/api/ai';
     const providerType = normalizeCompatibleProviderType(apiConfig?.providerType || apiConfig?.provider);
     if (providerType === 'gemini-native') return '/api/ai/gemini';
     if (providerType === 'claude' || apiConfig?.apiFormat === 'anthropic') return '/api/ai/claude';

@@ -12,6 +12,7 @@
     "postbuild": "node scripts/check-standalone-safety.js",
     "start": "next start",
     "lint": "eslint",
+    "test:ai-routing": "node --test tests/ai-provider-compat.test.mjs",
     "check:open-core-boundary": "node scripts/check-open-core-boundary.js",
     "electron:dev": "npm run dev & npx electron . --dev",
     "electron:build": "node -e \"const fs=require('fs');['dist','.next'].forEach(d=>{if(fs.existsSync(d)){fs.rmSync(d,{recursive:true,force:true})}})\" && npm run build && npx electron-builder --win",
