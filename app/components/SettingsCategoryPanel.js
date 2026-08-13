@@ -100,17 +100,8 @@ export default function SettingsCategoryPanel({ category }) {
     const [searchQuery, setSearchQuery] = useState('');
     const colors = getCategoryColor(category);
     const CatIcon = getCategoryIcon(category, rootFolder?.icon);
-    const builtInNameZh = {
-        bookInfo: '作品信息',
-        character: '人物设定',
-        location: '空间/地点',
-        world: '世界观/设定',
-        object: '物品/道具',
-        plot: '大纲',
-        rules: '写作规则',
-    }[category];
-    const label = rootFolder?.name && rootFolder.name !== builtInNameZh
-        ? rootFolder.name
+    const label = rootFolder?.name
+        ? getBuiltInFolderLabel(rootFolder.name, text)
         : getCategoryLabel(category, t, text);
 
     // 加载分类节点

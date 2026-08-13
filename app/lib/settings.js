@@ -905,45 +905,12 @@ const WORK_SUB_CATEGORIES = [
     { suffix: 'custom', name: '自定义设定', category: 'custom', type: 'folder', subFolders: [] },
 ];
 
-// ── 内置默认名的显示层 i18n ──
-// 这些子分类名 / 作品名会被写入用户数据（中文），无法直接改数据（会破坏老作品、
-// 也分不清是不是用户自己改的）。所以只在「渲染时」翻译：名字仍是内置默认中文 → 显示译名；
-// 用户改过（不在表内）→ 原样返回。text 由调用方从 useI18n 传入：text(zh, en, ru)。
-const BUILTIN_FOLDER_LABELS = {
-    '主要角色': ['Main Characters', 'Главные персонажи'],
-    '次要角色': ['Supporting Characters', 'Второстепенные персонажи'],
-    '阵营/势力': ['Factions', 'Фракции'],
-    '主要场景': ['Key Locations', 'Ключевые места'],
-    '自然环境': ['Natural Environment', 'Природная среда'],
-    '历史/纪元': ['History / Eras', 'История / Эпохи'],
-    '社会/政治': ['Society / Politics', 'Общество / Политика'],
-    '文化/习俗': ['Culture / Customs', 'Культура / Обычаи'],
-    '力量体系': ['Power System', 'Система сил'],
-    '武器/装备': ['Weapons / Equipment', 'Оружие / Снаряжение'],
-    '特殊道具': ['Special Items', 'Особые предметы'],
-    '主线': ['Main Plot', 'Основной сюжет'],
-    '支线': ['Subplots', 'Побочные линии'],
-    '伏笔': ['Foreshadowing', 'Предвестия'],
-    '文风规范': ['Style Guide', 'Стилистика'],
-    '禁忌/注意': ['Taboos / Notes', 'Табу / Примечания'],
-};
-
-const BUILTIN_WORK_NAME_LABELS = {
-    '默认作品': ['Default Work', 'Работа по умолчанию'],
-    '新作品': ['New Work', 'Новое произведение'],
-};
-
-export function getBuiltInFolderLabel(name, text) {
-    if (!name || typeof text !== 'function') return name;
-    const m = BUILTIN_FOLDER_LABELS[name];
-    return m ? text(name, m[0], m[1]) : name;
-}
-
-export function getBuiltInWorkName(name, text) {
-    if (!name || typeof text !== 'function') return name;
-    const m = BUILTIN_WORK_NAME_LABELS[name];
-    return m ? text(name, m[0], m[1]) : name;
-}
+// 内置名称只在显示层翻译，不重写用户存储的节点名称。
+export {
+    getBuiltInFolderLabel,
+    getBuiltInWorkName,
+    isBuiltInFolderLabel,
+} from './built-in-labels';
 
 // 全局根分类（不属于任何作品）— 已废弃，所有规则均归属各作品
 const GLOBAL_ROOT_CATEGORIES = [];

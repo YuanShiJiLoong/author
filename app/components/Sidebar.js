@@ -6,7 +6,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
 import { createChapter, deleteChapter, updateChapter, saveChapters, getChapters, createVolume, insertChapterAfter, insertChapterInVolume, reorderItems } from '../lib/storage';
 import { exportProject, importProject, importWork, exportWorkAsTxt, exportWorkAsMarkdown, exportWorkAsDocx, exportWorkAsEpub, exportWorkAsPdf } from '../lib/project-io';
-import { WRITING_MODES, getAllWorks, getProjectSettings, getSettingsNodes, addWork, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting, getActiveWorkId } from '../lib/settings';
+import { WRITING_MODES, getAllWorks, getProjectSettings, getSettingsNodes, addWork, saveSettingsNodes, setActiveWorkId as setActiveWorkIdSetting, getActiveWorkId, isBuiltInFolderLabel } from '../lib/settings';
 import { detectConflicts, mergeChapters } from '../lib/chapter-number';
 import { estimateTokens } from '../lib/context-engine';
 import { Settings, Moon, Sun, History, Save, FolderOpen, FileDown, BookOpen, HelpCircle, Github, PanelLeftClose, ListOrdered, Library, Plus, FileText, FileType, BookMarked, FileOutput, Printer, Book, X, MoreHorizontal, ChevronUp, KeyRound, SlidersHorizontal, Eye, Smartphone, Clapperboard, Cloud, CloudOff, RefreshCw, CloudUpload, CloudDownload, Sparkles, Brain, Search, CheckCircle2, GitMerge, Layers3 } from 'lucide-react';
@@ -2696,20 +2696,12 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         {pinnedCategories.filter(cat => cat !== 'bookInfo').map(cat => {
                             const CatIcon = getCategoryIcon(cat, catCustomIcons[cat]);
                             const colors = getCategoryColor(cat);
-                            const builtInCategoryNamesZh = {
-                                character: '人物设定',
-                                location: '空间/地点',
-                                world: '世界观/设定',
-                                object: '物品/道具',
-                                plot: '大纲',
-                                rules: '写作规则',
-                                custom: '自定义设定',
-                            };
                             const customLabel = catCustomLabels[cat];
-                            const catLabel = customLabel && customLabel !== builtInCategoryNamesZh[cat]
+                            const hasCustomLabel = customLabel && !isBuiltInFolderLabel(customLabel);
+                            const catLabel = hasCustomLabel
                                 ? customLabel
                                 : getCategoryLabel(cat, t, text);
-                            const navLabel = customLabel && customLabel !== builtInCategoryNamesZh[cat]
+                            const navLabel = hasCustomLabel
                                 ? customLabel
                                 : ({
                                     character: text('人物', 'Characters', 'Персонажи'),

@@ -8,7 +8,7 @@ import {
     Sparkles, Heart, Star, Shield, Zap, Feather, Compass, Flag, Tag, Layers
 } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
-import { getBuiltInFolderLabel } from '../lib/settings';
+import { getBuiltInFolderLabel, getBuiltInWorkName } from '../lib/settings';
 
 // 分类的颜色和标识
 const CATEGORY_STYLES = {
@@ -186,7 +186,13 @@ function TreeNode({ node, nodes, selectedId, onSelect, onAdd, onDelete, onRename
                         style={{ border: '1px solid var(--accent)', borderRadius: 3, padding: '1px 4px', fontSize: 13, background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none' }}
                     />
                 ) : (
-                    <span className="tree-node-name">{getBuiltInFolderLabel(node.name, text)}</span>
+                    <span className="tree-node-name">
+                        {isWork
+                            ? getBuiltInWorkName(node.name, text)
+                            : (node.type === 'folder' || node.type === 'special')
+                                ? getBuiltInFolderLabel(node.name, text)
+                                : node.name}
+                    </span>
                 )}
 
                 {/* 启用/禁用开关（仅item节点） */}

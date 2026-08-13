@@ -9,7 +9,7 @@ import {
     Search,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { getSettingsNodes, getActiveWorkId, deleteSettingsNode, saveSettingsNodes, addSettingsNode, updateSettingsNode } from '../lib/settings';
+import { getSettingsNodes, getActiveWorkId, deleteSettingsNode, saveSettingsNodes, addSettingsNode, updateSettingsNode, getBuiltInFolderLabel } from '../lib/settings';
 import { useI18n } from '../lib/useI18n';
 import { getIconByName } from './SettingsCategoryPanel';
 
@@ -190,10 +190,9 @@ export default function SettingsCategoryPopover({ anchorRef, onClose, onOpenCate
         custom: text('自定义设定', 'Custom Settings', 'Пользовательские настройки'),
     }[category] || fallback);
     const getDisplayName = (cat) => {
-        const builtInName = CAT_LABELS[cat.category];
-        return builtInName && (!cat.name || cat.name === builtInName)
-            ? getCatLabel(cat.category, cat.name)
-            : (cat.name || getCatLabel(cat.category, cat.category));
+        return cat.name
+            ? getBuiltInFolderLabel(cat.name, text)
+            : getCatLabel(cat.category, cat.category);
     };
 
     const persistPinnedList = useCallback((next) => {

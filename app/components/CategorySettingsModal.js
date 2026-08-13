@@ -1463,18 +1463,18 @@ export default function CategorySettingsModal() {
 
     // 使用 rootFolder 的图标，与缩略图弹窗和完整面板保持一致
     const CatIcon = (rootFolder?.icon && getIconComponent(rootFolder.icon)) || meta.icon;
-    const categoryDefaultLabel = meta.label;
     const localizedCategoryLabel = getLocalizedCatLabel(category, text);
-    const categoryLabel = rootFolder?.name && rootFolder.name !== categoryDefaultLabel
-        ? rootFolder.name
+    const categoryLabel = rootFolder?.name
+        ? getBuiltInFolderLabel(rootFolder.name, text)
         : localizedCategoryLabel;
     const getDisplayName = useCallback((node) => {
         if (!node) return '';
-        const builtInLabel = CAT_META[node.category]?.label;
-        if ((node.type === 'folder' || node.type === 'special') && builtInLabel && (!node.name || node.name === builtInLabel)) {
-            return getLocalizedCatLabel(node.category, text);
+        if (node.type === 'folder' || node.type === 'special') {
+            return node.name
+                ? getBuiltInFolderLabel(node.name, text)
+                : getLocalizedCatLabel(node.category, text);
         }
-        return getBuiltInFolderLabel(node.name, text) || getLocalizedCatLabel(node.category, text);
+        return node.name || getLocalizedCatLabel(node.category, text);
     }, [text]);
 
     const categoryNodes = useMemo(() => {
