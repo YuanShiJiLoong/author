@@ -2,13 +2,23 @@ import { NextResponse } from 'next/server';
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { assertUpdateToken } from '../../lib/update-source-auth';
 
 /**
  * POST /api/update-source
  * 一键更新源码部署：git pull → npm install → npm run build
  * 仅在本地源码部署（存在 .git 目录）时可用
+ * 安全：需通过 UPDATE_SOURCE_TOKEN 校验，避免匿名访客触发命令执行
  */
-export async function POST() {
+export async function POST(request) {
+    const authCheck = assertUpdateToken(request);
+    if (!authCheck.ok) {
+        return NextResponse.json(
+            { error: authCheck.error, code: authCheck.code },
+            { status: authCheck.status }
+        );
+    }
+
     const cwd = process.cwd();
     const gitDir = join(cwd, '.git');
 
