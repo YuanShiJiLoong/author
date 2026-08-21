@@ -108,10 +108,9 @@ function runCommand(cmd, args, cwd, timeout) {
         let output = '';
         let timer;
 
-        // Windows 下用 shell 模式
         const proc = spawn(cmd, args, {
             cwd,
-            shell: true,
+            shell: false,
             env: { ...process.env },
             stdio: ['ignore', 'pipe', 'pipe'],
         });
