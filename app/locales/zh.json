@@ -841,16 +841,19 @@
     },
     "exitSyncModal": {
         "title": "退出确认",
-        "desc": "退出前，是否将本地的当前进度强制同步到云端？",
+        "desc": "退出前会先确认当前内容已保存到本机。是否同时同步到云端？",
         "syncAndExit": "是的，同步后退出",
         "syncing": "同步中，请稍候...",
-        "exitDirectly": "否，直接退出",
+        "exitDirectly": "保存到本机并退出",
         "cancel": "取消，返回应用",
         "syncFailed": "云同步失败，但当前内容已经安全保存到本机。你可以重试同步，或仅退出并保留本地内容。",
         "retrySyncAndExit": "重试同步并退出",
         "exitWithLocalSave": "仅退出（本地已保存）",
         "localSaved": "本地内容已安全保存到当前设备。",
         "errorPrefix": "同步失败：",
-        "snapshotTooLarge": "自动快照超过云端单文档限制，当前内容已保存在本机。新版会把快照留在本机，仅同步作品、章节和设定。"
+        "snapshotTooLarge": "自动快照超过云端单文档限制，当前内容已保存在本机。新版会把快照留在本机，仅同步作品、章节和设定。",
+        "savingLocal": "正在保存到本机...",
+        "localSaveFailed": "本地保存尚未完成，请重试保存后再退出。",
+        "localSaveErrorPrefix": "本地保存失败："
     }
 }

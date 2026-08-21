@@ -228,6 +228,14 @@ const store = create((set, get) => ({
         return await flusher();
     },
 
+    pendingLocalSaveFlusher: null,
+    setPendingLocalSaveFlusher: (flusher) => set({ pendingLocalSaveFlusher: typeof flusher === 'function' ? flusher : null }),
+    flushPendingLocalSave: async () => {
+        const flusher = get().pendingLocalSaveFlusher;
+        if (typeof flusher !== 'function') return { changed: false };
+        return await flusher();
+    },
+
     // --- AI Chat & Generation State ---
     sessionStore: { activeSessionId: null, sessions: [] },
     setSessionStore: (action) => set((state) => ({ sessionStore: typeof action === 'function' ? action(state.sessionStore) : action })),

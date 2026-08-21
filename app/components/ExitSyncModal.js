@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { AlertCircle, LogOut, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
 import { useAppStore } from '../store/useAppStore';
+import { waitForLocalSaves } from '../lib/local-save-status';
 
 function formatSyncError(error, t) {
     const message = String(error?.message || error || '').trim();
@@ -27,6 +28,8 @@ export default function ExitSyncModal() {
     const [isOpen, setIsOpen] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncError, setSyncError] = useState('');
+    const [failureKind, setFailureKind] = useState(null);
+    const [operationStage, setOperationStage] = useState(null);
     const [localSaveReady, setLocalSaveReady] = useState(false);
     const [mounted, setMounted] = useState(false);
     const { t } = useI18n();
@@ -35,25 +38,49 @@ export default function ExitSyncModal() {
         setMounted(true);
         if (typeof window === 'undefined' || !window.electronAPI) return;
 
-        window.electronAPI.onExitSyncRequest(() => {
+        return window.electronAPI.onExitSyncRequest(() => {
             // 当主进程拦截到窗口关闭时触发
             setSyncError('');
+            setFailureKind(null);
+            setOperationStage(null);
             setLocalSaveReady(false);
             setIsSyncing(false);
             setIsOpen(true);
         });
     }, []);
 
-    const handleExitDirectly = () => {
-        if (!window.electronAPI) return;
-        setIsOpen(false);
-        window.electronAPI.allowClose();
+    const flushLocalBeforeExit = async () => {
+        await useAppStore.getState().flushPendingLocalSave();
+        await waitForLocalSaves();
+    };
+
+    const handleExitDirectly = async () => {
+        if (!window.electronAPI || isSyncing) return;
+        setIsSyncing(true);
+        setOperationStage('local');
+        setSyncError('');
+        setFailureKind(null);
+        try {
+            await flushLocalBeforeExit();
+            setLocalSaveReady(true);
+            setIsOpen(false);
+            window.electronAPI.allowClose();
+        } catch (error) {
+            console.error('Local save before exit failed:', error);
+            setFailureKind('local');
+            setSyncError(t('exitSyncModal.localSaveFailed'));
+        } finally {
+            setOperationStage(null);
+            setIsSyncing(false);
+        }
     };
 
     const handleExitWithLocalSave = () => {
         if (!window.electronAPI) return;
         setIsOpen(false);
         setSyncError('');
+        setFailureKind(null);
+        setOperationStage(null);
         setLocalSaveReady(false);
         window.electronAPI.allowClose();
     };
@@ -62,10 +89,15 @@ export default function ExitSyncModal() {
         if (isSyncing) return;
         setIsSyncing(true);
         setSyncError('');
+        setFailureKind(null);
+        setOperationStage('local');
 
+        let stage = 'local';
         try {
-            await useAppStore.getState().flushPendingEditorSave();
+            await flushLocalBeforeExit();
             setLocalSaveReady(true);
+            stage = 'sync';
+            setOperationStage('sync');
             const { syncToCloud } = await import('../lib/persistence');
             await syncToCloud();
             if (window.electronAPI) {
@@ -74,8 +106,12 @@ export default function ExitSyncModal() {
             }
         } catch (err) {
             console.error('Exit sync failed:', err);
-            setSyncError(formatSyncError(err, t));
+            setFailureKind(stage);
+            setSyncError(stage === 'local'
+                ? t('exitSyncModal.localSaveFailed')
+                : formatSyncError(err, t));
         } finally {
+            setOperationStage(null);
             setIsSyncing(false);
         }
     };
@@ -85,6 +121,8 @@ export default function ExitSyncModal() {
         setIsOpen(false);
         setIsSyncing(false);
         setSyncError('');
+        setFailureKind(null);
+        setOperationStage(null);
         setLocalSaveReady(false);
         if (window.electronAPI && window.electronAPI.cancelClose) {
             window.electronAPI.cancelClose();
@@ -100,7 +138,11 @@ export default function ExitSyncModal() {
                     <AlertCircle size={48} style={{ color: 'var(--accent)', margin: '0 auto 16px' }} />
                     <h2 style={{ marginBottom: 16, fontSize: 18 }}>{t('exitSyncModal.title')}</h2>
                     <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 24 }}>
-                        {syncError ? t('exitSyncModal.syncFailed') : t('exitSyncModal.desc')}
+                        {failureKind === 'local'
+                            ? t('exitSyncModal.localSaveFailed')
+                            : syncError
+                                ? t('exitSyncModal.syncFailed')
+                                : t('exitSyncModal.desc')}
                     </p>
                     {syncError && (
                         <div style={{
@@ -117,7 +159,9 @@ export default function ExitSyncModal() {
                             overflowWrap: 'anywhere',
                             wordBreak: 'break-word',
                         }}>
-                            {(t('exitSyncModal.errorPrefix') || '同步失败：') + syncError}
+                            {(failureKind === 'local'
+                                ? t('exitSyncModal.localSaveErrorPrefix')
+                                : t('exitSyncModal.errorPrefix')) + syncError}
                         </div>
                     )}
                     {localSaveReady && (
@@ -137,7 +181,7 @@ export default function ExitSyncModal() {
                             disabled={isSyncing}
                         >
                             {isSyncing ? (
-                                <>{t('exitSyncModal.syncing')}</>
+                                <>{operationStage === 'local' ? t('exitSyncModal.savingLocal') : t('exitSyncModal.syncing')}</>
                             ) : (
                                 <><CheckCircle2 size={16} /> {syncError ? t('exitSyncModal.retrySyncAndExit') : t('exitSyncModal.syncAndExit')}</>
                             )}

@@ -75,7 +75,7 @@ export default function CloudSyncIndicator() {
 
     const handleSignOut = async () => {
         try {
-            await useAppStore.getState().flushPendingEditorSave();
+            await useAppStore.getState().flushPendingLocalSave();
             const { stopCloudSync } = await import('../lib/persistence');
             await stopCloudSync();
             if (account?.provider === 'custom') {

@@ -25,9 +25,9 @@ function text(zh, en, ru = en) {
 }
 
 async function flushPendingEditorBeforeSnapshot() {
-    const flushPendingEditorSave = useAppStore.getState().flushPendingEditorSave;
-    if (typeof flushPendingEditorSave === 'function') {
-        await flushPendingEditorSave();
+    const flushPendingLocalSave = useAppStore.getState().flushPendingLocalSave;
+    if (typeof flushPendingLocalSave === 'function') {
+        await flushPendingLocalSave();
     }
 }
 

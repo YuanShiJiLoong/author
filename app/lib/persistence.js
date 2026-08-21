@@ -11,6 +11,7 @@ import { get, set, del } from 'idb-keyval';
 import { isSyncableKey } from './sync-key-policy';
 import { apiPath } from './api-base';
 import { IS_OFFICIAL_WEB } from './deployment-target';
+import { trackLocalSave } from './local-save-status';
 
 // ==================== 用户ID管理 ====================
 
@@ -211,7 +212,7 @@ export async function persistSet(key, value) {
     ensureUserId();
 
     // 1. 先写浏览器（立即可用）
-    await browserSet(key, value);
+    await trackLocalSave(() => browserSet(key, value), `set:${key}`);
 
     // 2. 异步写服务端（不阻塞 UI）
     if (isSyncableKey(key) && await checkServerAvailable()) {
@@ -243,7 +244,7 @@ export async function persistSet(key, value) {
 export async function persistDel(key) {
     if (typeof window === 'undefined') return;
 
-    await browserDel(key);
+    await trackLocalSave(() => browserDel(key), `delete:${key}`);
 
     if (isSyncableKey(key) && await checkServerAvailable()) {
         serverDel(key).catch(() => { });

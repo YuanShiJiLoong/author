@@ -41,6 +41,11 @@ import { useI18n } from '../lib/useI18n';
 import DesktopTtsControls from './DesktopTtsControls';
 import { applyRemarkText, getRemarkEditState } from '../lib/remark-actions';
 import { getRemarkNotePlacement } from '../lib/remark-layout';
+import {
+    beginLocalSave,
+    completeLocalSave,
+    failLocalSave,
+} from '../lib/local-save-status';
 
 // ==================== 虚拟分页常量 ====================
 const PAGE_HEIGHT = 1056; // A4 纸 @ 96dpi
@@ -256,6 +261,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
     const currentLineHighlight = useAppStore((state) => state.currentLineHighlight);
     const clipPathId = useId();
     const debounceRef = useRef(null);
+    const debouncedSaveOperationRef = useRef(null);
     const positionSaveTimerRef = useRef(null);
     const positionRestoreSeqRef = useRef(0);
     const restoredPositionKeyRef = useRef(null);
@@ -362,6 +368,23 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
         saveQueueRef.current = nextSave;
         return nextSave;
     }, [onUpdate]);
+
+    const takeDebouncedSaveOperation = useCallback(() => {
+        const operationId = debouncedSaveOperationRef.current || beginLocalSave('editor');
+        debouncedSaveOperationRef.current = null;
+        return operationId;
+    }, []);
+
+    const queueTrackedSave = useCallback(async (payload, operationId = beginLocalSave('editor')) => {
+        try {
+            const result = await queueSave(payload);
+            completeLocalSave(operationId);
+            return result;
+        } catch (error) {
+            failLocalSave(operationId, error);
+            throw error;
+        }
+    }, [queueSave]);
 
     const saveCurrentEditorPosition = useCallback((targetEditor, targetChapterId, targetWorkId) => {
         const latest = latestPositionTargetRef.current;
@@ -524,10 +547,14 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
             // 跳过程序化 setContent 触发的 onUpdate（章节/作品切换）
             if (isLoadingContentRef.current) return;
             scheduleCurrentEditorPosition(editor);
+            if (!debouncedSaveOperationRef.current) {
+                debouncedSaveOperationRef.current = beginLocalSave('editor-debounce');
+            }
             if (debounceRef.current) clearTimeout(debounceRef.current);
             debounceRef.current = setTimeout(() => {
                 debounceRef.current = null;
-                queueSave(buildSavePayload(editor)).catch(err => {
+                const operationId = takeDebouncedSaveOperation();
+                queueTrackedSave(buildSavePayload(editor), operationId).catch(err => {
                     console.error('Editor autosave failed:', err);
                 });
             }, 500);
@@ -545,8 +572,9 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
         }
 
         const payload = buildSavePayload(editor);
-        return await queueSave(payload);
-    }, [buildSavePayload, editor, queueSave]);
+        const operationId = takeDebouncedSaveOperation();
+        return await queueTrackedSave(payload, operationId);
+    }, [buildSavePayload, editor, queueTrackedSave, takeDebouncedSaveOperation]);
 
     const buildSplitDraft = useCallback(() => {
         if (!editor) return null;
@@ -595,8 +623,12 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
         if (debounceRef.current) {
             clearTimeout(debounceRef.current);
             debounceRef.current = null;
+            const operationId = takeDebouncedSaveOperation();
+            queueTrackedSave(buildSavePayload(editor), operationId).catch(error => {
+                console.error('Failed to flush editor during unmount:', error);
+            });
         }
-    }, []);
+    }, [buildSavePayload, editor, queueTrackedSave, takeDebouncedSaveOperation]);
 
     // 切换章节时重置编辑器内容（替代 key={chapterId} 强制重挂载，避免闪白）
     const prevChapterIdRef = useRef(chapterId);
@@ -614,7 +646,8 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
                 clearTimeout(debounceRef.current);
                 debounceRef.current = null;
                 const outgoingPayload = buildSavePayload(editor);
-                queueSave(outgoingPayload).catch(error => {
+                const operationId = takeDebouncedSaveOperation();
+                queueTrackedSave(outgoingPayload, operationId).catch(error => {
                     console.error('Failed to flush outgoing chapter before switch:', error);
                 });
             }
@@ -662,7 +695,7 @@ const Editor = forwardRef(function Editor({ content, chapterId, workId = 'work-d
         if (restoredPositionKeyRef.current !== currentIdentity) {
             restoreCurrentEditorPosition(editor, chapterId, normalizedWorkId);
         }
-    }, [buildSavePayload, chapterId, content, editor, flushCurrentEditorPosition, language, normalizedWorkId, queueSave, restoreCurrentEditorPosition]);
+    }, [buildSavePayload, chapterId, content, editor, flushCurrentEditorPosition, language, normalizedWorkId, queueTrackedSave, restoreCurrentEditorPosition, takeDebouncedSaveOperation]);
 
     useEffect(() => {
         if (!editor) return;
@@ -2698,7 +2731,6 @@ function StatusBar({ editor, pageCount, chapterId }) {
             </div>
             <div className="status-bar-right">
                 <span className="status-bar-shortcut">{text('Ctrl+J AI助手', 'Ctrl+J AI Assistant', 'Ctrl+J ИИ-помощник')}</span>
-                <span>{text('自动保存', 'Auto saved', 'Автосохранение')}</span>
                 <span style={{ opacity: 0.5, fontSize: '11px' }}>© 2026 YuanShiJiLoong</span>
             </div>
         </div>
