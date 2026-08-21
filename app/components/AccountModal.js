@@ -163,7 +163,7 @@ export default function AccountModal() {
     const handleSignOut = async () => {
         setSigningOut(true);
         try {
-            await useAppStore.getState().flushPendingEditorSave();
+            await useAppStore.getState().flushPendingLocalSave();
             const { stopCloudSync } = await import('../lib/persistence');
             await stopCloudSync();
             if (isCustomAccount) {
@@ -185,7 +185,7 @@ export default function AccountModal() {
     const handleSwitchToAccount = async (account) => {
         // 先退出当前账号
         try {
-            await useAppStore.getState().flushPendingEditorSave();
+            await useAppStore.getState().flushPendingLocalSave();
             const { stopCloudSync } = await import('../lib/persistence');
             await stopCloudSync();
             if (isCustomAccount) {
@@ -228,7 +228,7 @@ export default function AccountModal() {
     const handleManualSync = async () => {
         try {
             setSaveMsg('');
-            await useAppStore.getState().flushPendingEditorSave();
+            await useAppStore.getState().flushPendingLocalSave();
             const { syncToCloud } = await import('../lib/persistence');
             await syncToCloud();
             setSaveMsg(text('已保存并同步到云端', 'Saved and synced to cloud', 'Сохранено и синхронизировано с облаком'));

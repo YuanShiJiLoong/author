@@ -171,7 +171,7 @@ export default function PortableSyncSettings({ mode = 'all' }) {
     };
 
     const flushEditor = async () => {
-        await useAppStore.getState().flushPendingEditorSave();
+        await useAppStore.getState().flushPendingLocalSave();
     };
 
     const handlePush = async () => {

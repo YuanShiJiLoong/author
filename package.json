@@ -17,6 +17,7 @@
     "test:chat-markdown": "node --test tests/chat-markdown.test.mjs",
     "test:remarks": "node --test tests/remarks.test.mjs",
     "test:synopsis-language": "node --test tests/synopsis-prompts.test.mjs",
+    "test:local-save": "node --test tests/local-save-status.test.mjs",
     "check:open-core-boundary": "node scripts/check-open-core-boundary.js",
     "electron:dev": "npm run dev & npx electron . --dev",
     "electron:build": "node -e \"const fs=require('fs');['dist','.next'].forEach(d=>{if(fs.existsSync(d)){fs.rmSync(d,{recursive:true,force:true})}})\" && npm run build && npx electron-builder --win",

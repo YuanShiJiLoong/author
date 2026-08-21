@@ -141,7 +141,7 @@ function SyncMenuPortal({ anchorRef, t, text, showToast, cloudinarySyncStatus, s
                         onClick={async () => {
                             setShowSyncMenu(false);
                             try {
-                                await useAppStore.getState().flushPendingEditorSave();
+                                await useAppStore.getState().flushPendingLocalSave();
                                 const { syncToCloud } = await import('../lib/persistence');
                                 await syncToCloud();
                             } catch (err) {
@@ -3265,7 +3265,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                     onClose={() => setShowSyncConfirmModal(false)} 
                     onConfirm={async () => {
                         try {
-                            await useAppStore.getState().flushPendingEditorSave();
+                            await useAppStore.getState().flushPendingLocalSave();
                             const { forcePullFromCloud } = await import('../lib/persistence');
                             const { createSnapshot } = await import('../lib/snapshots');
 

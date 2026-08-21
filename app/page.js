@@ -7,6 +7,7 @@ import { useI18n } from './lib/useI18n';
 import { Menu, Sparkles, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 import Tooltip from './components/ui/Tooltip';
 import BeianNotice from './components/BeianNotice';
+import LocalSaveIndicator from './components/LocalSaveIndicator';
 import {
   getChapters,
   createChapter,
@@ -34,6 +35,12 @@ import { exportProject, importProject } from './lib/project-io';
 import { createSnapshot } from './lib/snapshots';
 import { initDiagnostics, recordDiagnosticEvent } from './lib/diagnostics';
 import { clearChunkRecoveryQuery, importWithChunkRecovery } from './lib/chunk-recovery';
+import {
+  beginLocalSave,
+  completeLocalSave,
+  failLocalSave,
+  waitForLocalSaves,
+} from './lib/local-save-status';
 // 动态导入编辑器和设定集面板及侧边栏（避免 SSR 问题）
 const Sidebar = dynamic(() => importWithChunkRecovery(() => import('./components/Sidebar')), { ssr: false });
 const Editor = dynamic(() => importWithChunkRecovery(() => import('./components/Editor')), {
@@ -158,7 +165,7 @@ export default function Home() {
     contextSelection, setContextSelection,
     contextItems, setContextItems,
     settingsVersion, incrementSettingsVersion,
-    setPendingEditorSaveFlusher,
+    setPendingLocalSaveFlusher,
     sessionStore, setSessionStore,
     generationArchive, setGenerationArchive,
     chatStreaming, setChatStreaming
@@ -171,6 +178,7 @@ export default function Home() {
   const sessionStoreHydratedRef = useRef(false);
   const latestSessionStoreRef = useRef(sessionStore);
   const sessionAutosaveTimerRef = useRef(null);
+  const sessionSaveOperationRef = useRef(null);
   const chapterLoadSeqRef = useRef(0);
   const chaptersWorkIdRef = useRef(null);
   const generationArchiveHydratedRef = useRef(false);
@@ -185,17 +193,49 @@ export default function Home() {
 
   const flushSessionStoreSave = useCallback(async () => {
     const currentStore = latestSessionStoreRef.current;
-    if (!currentStore || !Array.isArray(currentStore.sessions)) return;
-    await saveSessionStore(currentStore);
+    const operationId = sessionSaveOperationRef.current;
+    sessionSaveOperationRef.current = null;
+    if (!currentStore || !Array.isArray(currentStore.sessions)) {
+      if (operationId) completeLocalSave(operationId);
+      return;
+    }
+    try {
+      await saveSessionStore(currentStore);
+      if (operationId) completeLocalSave(operationId);
+    } catch (error) {
+      if (operationId) failLocalSave(operationId, error);
+      throw error;
+    }
   }, []);
 
   const scheduleSessionStoreSave = useCallback((delay = 500) => {
+    if (!sessionSaveOperationRef.current) {
+      sessionSaveOperationRef.current = beginLocalSave('chat-session');
+    }
     if (sessionAutosaveTimerRef.current) return;
     sessionAutosaveTimerRef.current = window.setTimeout(async () => {
       sessionAutosaveTimerRef.current = null;
-      await flushSessionStoreSave();
+      try {
+        await flushSessionStoreSave();
+      } catch (error) {
+        console.error('Chat session autosave failed:', error);
+      }
     }, delay);
   }, [flushSessionStoreSave]);
+
+  const flushPendingLocalSave = useCallback(async () => {
+    if (sessionAutosaveTimerRef.current) {
+      window.clearTimeout(sessionAutosaveTimerRef.current);
+      sessionAutosaveTimerRef.current = null;
+    }
+
+    const tasks = [flushPendingEditorSave()];
+    if (sessionSaveOperationRef.current) {
+      tasks.push(flushSessionStoreSave());
+    }
+    await Promise.all(tasks);
+    return await waitForLocalSaves();
+  }, [flushPendingEditorSave, flushSessionStoreSave]);
 
   useEffect(() => {
     clearChunkRecoveryQuery();
@@ -204,9 +244,9 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    setPendingEditorSaveFlusher(flushPendingEditorSave);
-    return () => setPendingEditorSaveFlusher(null);
-  }, [flushPendingEditorSave, setPendingEditorSaveFlusher]);
+    setPendingLocalSaveFlusher(flushPendingLocalSave);
+    return () => setPendingLocalSaveFlusher(null);
+  }, [flushPendingLocalSave, setPendingLocalSaveFlusher]);
 
   // ===== AI 助手按钮拖拽位置 =====
   const [aiTogglePos, setAiTogglePos] = useState(null);
@@ -474,30 +514,6 @@ export default function Home() {
     const workId = generationArchiveWorkIdRef.current || activeWorkId || getActiveWorkId() || 'work-default';
     saveGenerationArchive(workId, generationArchive);
   }, [activeWorkId, generationArchive]);
-
-  useEffect(() => {
-    const flushNow = () => {
-      if (!sessionStoreHydratedRef.current) return;
-      if (sessionAutosaveTimerRef.current) {
-        window.clearTimeout(sessionAutosaveTimerRef.current);
-        sessionAutosaveTimerRef.current = null;
-      }
-      flushSessionStoreSave();
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') flushNow();
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeunload', flushNow);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', flushNow);
-      if (sessionAutosaveTimerRef.current) {
-        window.clearTimeout(sessionAutosaveTimerRef.current);
-        sessionAutosaveTimerRef.current = null;
-      }
-    };
-  }, [flushSessionStoreSave]);
 
   // 切换作品时重新加载章节
   const prevWorkIdRef = useRef(activeWorkId);
@@ -880,6 +896,7 @@ export default function Home() {
         </div>
         <div className="top-header-right">
           <AndroidDownloadMenu />
+          <LocalSaveIndicator />
           <CloudSyncIndicator />
         </div>
       </header>

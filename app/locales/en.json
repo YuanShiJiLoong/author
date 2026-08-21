@@ -841,16 +841,19 @@
   },
   "exitSyncModal": {
     "title": "Confirm Exit",
-    "desc": "Would you like to sync your current progress to the cloud before exiting?",
+    "desc": "Your latest changes will be saved locally first. Would you also like to sync them to the cloud?",
     "syncAndExit": "Yes, sync and exit",
     "syncing": "Syncing, please wait...",
-    "exitDirectly": "No, exit directly",
+    "exitDirectly": "Save locally and exit",
     "cancel": "Cancel, back to app",
     "syncFailed": "Cloud sync failed, but your latest content is already saved on this device. You can retry syncing or exit with the local save.",
     "retrySyncAndExit": "Retry Sync and Exit",
     "exitWithLocalSave": "Exit with Local Save",
     "localSaved": "Your latest content has been safely saved on this device.",
     "errorPrefix": "Sync failed: ",
-    "snapshotTooLarge": "The automatic snapshot is larger than the cloud document limit. Your latest content is saved locally; this version keeps snapshots on this device and only syncs works, chapters, and settings."
+    "snapshotTooLarge": "The automatic snapshot is larger than the cloud document limit. Your latest content is saved locally; this version keeps snapshots on this device and only syncs works, chapters, and settings.",
+    "savingLocal": "Saving locally...",
+    "localSaveFailed": "Local saving has not completed. Retry before exiting.",
+    "localSaveErrorPrefix": "Local save failed: "
   }
 }

@@ -24,7 +24,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     // ---- 退出确认 ----
     onExitSyncRequest: (callback) => {
-        ipcRenderer.on('confirm-exit-sync', () => callback());
+        const listener = () => callback();
+        ipcRenderer.on('confirm-exit-sync', listener);
+        return () => ipcRenderer.removeListener('confirm-exit-sync', listener);
     },
     allowClose: () => {
         ipcRenderer.send('allow-close');
