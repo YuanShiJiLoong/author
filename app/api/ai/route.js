@@ -13,7 +13,7 @@ import { applyContentSafety } from '../../lib/content-safety';
 import { proxyFetch } from '../../lib/proxy-fetch';
 import { rotateKey } from '../../lib/keyRotator';
 import { isOutboundRequestBlocked, isServerCredentialBlocked, resolveAiCredential, safeUpstreamDetail } from '../../lib/server-security.mjs';
-import { buildOpenAiCompatibleParams, isDeepSeekRequest, isDeepSeekThinkingMode } from '../../lib/ai-model-rules.js';
+import { buildDeepSeekWebToolsParams, buildOpenAiCompatibleParams, isDeepSeekRequest, isDeepSeekThinkingMode } from '../../lib/ai-model-rules.js';
 import { isInsufficientBalanceError } from '../../lib/ai-upstream-errors.js';
 import { assertReadableAfterSearch, createToolRoundGuard, formatWebpageForModel, readableUrlKey, runDeepSeekFetch, runDeepSeekSearch, searchFailureToolText } from '../../lib/web-search.js';
 
@@ -335,13 +335,18 @@ async function handlePOST(request) {
             return nonStreamAnswerResponse(round1Data);
         }
 
-        // ===== 普通模式（含 OpenAI 内置搜索） =====
+        // ===== 普通模式（含 OpenAI 内置搜索、DeepSeek 内置联网） =====
+        // DeepSeek 内置联网由 DeepSeek 服务端执行，引用来源在流里以 annotations 返回
+        const deepseekWebTools = toolsConfig?.deepseekWebTools && isDeepSeekRequest(apiConfig, baseUrl, model)
+            ? toolsConfig.deepseekWebTools : null;
         const response = await proxyFetch(url, {
             method: 'POST', signal,
             headers,
             body: JSON.stringify({
                 model, messages, ...baseParams,
-                ...(toolsConfig?.webSearch ? { web_search_options: { search_context_size: 'medium' } } : {}),
+                ...(deepseekWebTools
+                    ? buildDeepSeekWebToolsParams(deepseekWebTools)
+                    : toolsConfig?.webSearch ? { web_search_options: { search_context_size: 'medium' } } : {}),
                 stream: true,
                 ...(shouldIncludeStreamUsage ? { stream_options: { include_usage: true } } : {}),
             }),

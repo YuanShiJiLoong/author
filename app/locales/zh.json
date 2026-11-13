@@ -609,7 +609,7 @@
         "searchEngine": "搜索引擎",
         "tavilyHint": "免费 1000次/月 → tavily.com",
         "exaHint": "按量计费，注册赠送额度 → exa.ai",
-        "searchToolDeepSeekPricing": "搜索和读取网页都按次收费（2026 年 11 月 1 日起）：每 1000 次成功请求 0.75 美元，从 DeepSeek 账户余额扣；失败和没有结果的不收费。每个账号每秒最多 5 次（搜索和读取网页分开算）。",
+        "searchToolDeepSeekPricing": "搜索和读取网页都按次收费（2026 年 11 月 1 日起）：每 1000 次成功请求 0.75 美元，从 DeepSeek 账户余额扣；失败和没有结果的不收费。每个账号每秒最多搜索 100 次、读取网页 25 次。",
         "searchDeepSeekSuggest": "你已经配置了 DeepSeek：搜索工具选「DeepSeek」会自动填好 Key 和地址，不用另外申请。",
         "searchDeepSeekKeyPlaceholder": "留空则使用已配置的 DeepSeek 服务商 Key",
         "searchDeepSeekKeyFromProvider": "已自动填入 DeepSeek 服务商的 Key，可以改成别的。",
@@ -617,7 +617,11 @@
         "searchDeepSeekReadWebpage": "允许 AI 读取网页全文",
         "searchDeepSeekReadWebpageDesc": "你在对话里给出网页链接时，AI 会让 DeepSeek 读取网页正文再回答。每次回答最多读 3 个网页，每读一个网页算一次请求。",
         "searchDeepSeekReadAfterSearch": "搜索后再挑网页读全文",
-        "searchDeepSeekReadAfterSearchDesc": "AI 先看搜索结果，再挑几个网页读全文后回答。回答更详细，但要多等几秒，而且整段一起出现。每读一个网页算一次收费。为了安全，只会读搜索结果里出现过的网页。"
+        "searchDeepSeekReadAfterSearchDesc": "AI 先看搜索结果，再挑几个网页读全文后回答。回答更详细，但要多等几秒，而且整段一起出现。每读一个网页算一次收费。为了安全，只会读搜索结果里出现过的网页。",
+        "searchDeepSeekBuiltinHint": "由 DeepSeek 直接联网，不用另配搜索 Key，回答更快。目前只支持 deepseek-flash 模型；想用 Tavily、Exa 等其他来源请选「外部搜索」。",
+        "searchDeepSeekBuiltinUnsupported": "当前模型不支持 DeepSeek 内置联网（目前只支持 deepseek-flash），会改用下面配置的外部搜索。",
+        "searchDeepSeekBuiltinPricing": "按次收费：每 1000 次搜索 0.75 美元，每 1000 次读网页 0.75 美元，从 DeepSeek 账户余额扣。一次搜多个关键词按关键词个数算。",
+        "searchDeepSeekBuiltinReadWebpageDesc": "你在对话里给出网页链接，或 AI 需要看完整网页时，由 DeepSeek 读取正文再回答。每读一个网页算一次收费。"
     },
     "preferences": {
         "intro": "在这里可以随时更改应用程序的语言和视觉主题偏好。所有的更改都会实时生效并保存在本地。",

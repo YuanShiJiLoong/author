@@ -8209,11 +8209,6 @@ h5.chat-md-heading {
   background: rgba(230, 80, 80, 0.04);
 }
 
-.tool-call-card.grounding {
-  border-color: rgba(255, 180, 60, 0.25);
-  background: rgba(255, 180, 60, 0.04);
-}
-
 .tool-call-header {
   display: flex;
   align-items: center;
@@ -8251,34 +8246,148 @@ h5.chat-md-heading {
   font-family: inherit;
 }
 
-.grounding-sources {
-  padding: 6px 10px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+/* ===== 回复末尾的搜索来源（标题行右侧可展开全部） ===== */
+.search-sources {
+  margin: 10px 0 2px;
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.6;
 }
 
-.grounding-chip {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-size: var(--ui-font-size-xs);
-  font-weight: 500;
-  background: rgba(255, 180, 60, 0.10);
-  color: var(--accent);
+.search-sources-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.search-sources-label {
+  color: var(--text-muted);
+}
+
+.search-sources-count {
+  margin-left: 5px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.search-sources-list {
+  list-style: disc;
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--text-muted);
+}
+
+.search-sources-list li {
+  padding: 1px 0;
+}
+
+.search-sources-list a {
+  position: relative;
+  color: var(--text-primary);
   text-decoration: none;
-  border: 1px solid rgba(255, 180, 60, 0.2);
-  transition: all 0.15s;
-  max-width: 200px;
+}
+
+.search-sources-title {
+  word-break: break-word;
+  border-bottom: 1px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.search-sources-arrow {
+  display: inline-block;
+  margin-left: 2px;
+  vertical-align: -1px;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.search-sources-list a:hover .search-sources-title,
+.search-sources-list a:focus-visible .search-sources-title {
+  color: var(--accent);
+  border-bottom-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.search-sources-list a:hover .search-sources-arrow,
+.search-sources-list a:focus-visible .search-sources-arrow {
+  opacity: 1;
+}
+
+/* 悬停时在标题上方出现的小气泡：站点 + 完整网址 */
+.search-sources-tip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: min(320px, 80vw);
+  padding: 5px 9px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  font-size: 11px;
+  line-height: 1.45;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(2px);
+  transition: opacity 0.12s, transform 0.12s, visibility 0.12s;
+  pointer-events: none;
+}
+
+.search-sources-list a:hover .search-sources-tip,
+.search-sources-list a:focus-visible .search-sources-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition-delay: 0.25s;
+}
+
+.search-sources-tip-site {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.search-sources-tip-url {
+  color: var(--text-muted);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.grounding-chip:hover {
-  background: rgba(255, 180, 60, 0.18);
-  border-color: rgba(255, 180, 60, 0.4);
-  color: var(--accent-hover, var(--accent));
+.search-sources-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.search-sources-more:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.search-sources-more-chevron {
+  display: inline-block;
+  transition: transform 0.15s;
+}
+
+.search-sources-more.open .search-sources-more-chevron {
+  transform: rotate(180deg);
 }
 
 /* ===== 变体导航 < 1/3 > ===== */

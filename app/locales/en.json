@@ -609,7 +609,7 @@
     "searchEngine": "Search Engine",
     "tavilyHint": "Free 1000/month → tavily.com",
     "exaHint": "Pay-per-use, free credits on signup → exa.ai",
-    "searchToolDeepSeekPricing": "Search and page reading are billed per request from Nov 1, 2026: $0.75 per 1,000 successful requests, charged to your DeepSeek balance. Failed and empty requests are free. Up to 5 requests per second per account (search and page reading counted separately).",
+    "searchToolDeepSeekPricing": "Search and page reading are billed per request from Nov 1, 2026: $0.75 per 1,000 successful requests, charged to your DeepSeek balance. Failed and empty requests are free. Up to 100 searches and 25 page reads per second per account.",
     "searchDeepSeekSuggest": "You have DeepSeek configured: choose \"DeepSeek\" as the search tool and its key and URL are filled in for you, with no extra sign-up.",
     "searchDeepSeekKeyPlaceholder": "Leave blank to use your configured DeepSeek provider key",
     "searchDeepSeekKeyFromProvider": "Filled in from your DeepSeek provider. You can change it.",
@@ -617,7 +617,11 @@
     "searchDeepSeekReadWebpage": "Let AI read full web pages",
     "searchDeepSeekReadWebpageDesc": "When you give a web link in the chat, the AI has DeepSeek read the page text before answering. Up to 3 pages per answer; each page read counts as one request.",
     "searchDeepSeekReadAfterSearch": "Read pages picked from search results",
-    "searchDeepSeekReadAfterSearchDesc": "The AI first reads the search results, then picks a few pages to read in full before answering. Answers are more detailed but take a few seconds longer and appear all at once. Each page read is billed as one request. For safety, only pages from the search results can be read."
+    "searchDeepSeekReadAfterSearchDesc": "The AI first reads the search results, then picks a few pages to read in full before answering. Answers are more detailed but take a few seconds longer and appear all at once. Each page read is billed as one request. For safety, only pages from the search results can be read.",
+    "searchDeepSeekBuiltinHint": "DeepSeek searches the web itself, so no extra search key is needed and answers come faster. Currently only the deepseek-flash model is supported; choose \"External search\" to use Tavily, Exa or other sources.",
+    "searchDeepSeekBuiltinUnsupported": "The current model does not support DeepSeek built-in web tools (only deepseek-flash does for now), so the external search configured below will be used.",
+    "searchDeepSeekBuiltinPricing": "Billed per use: $0.75 per 1,000 searches and $0.75 per 1,000 page reads, charged to your DeepSeek balance. A search with several queries counts once per query.",
+    "searchDeepSeekBuiltinReadWebpageDesc": "When you share a link, or the AI needs a full page, DeepSeek reads the page text before answering. Each page read is billed once."
   },
   "preferences": {
     "intro": "You can change your language and visual theme preferences here at any time. All changes take effect immediately and are saved locally.",

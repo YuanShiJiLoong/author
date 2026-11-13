@@ -48,6 +48,31 @@ export function isDeepSeekRequest(apiConfig, baseUrl, model) {
         || isDeepSeekThinkingModel(model);
 }
 
+/**
+ * DeepSeek 内置联网工具（2026-11-13 上线）：在 chat/completions 里声明，由 DeepSeek 服务端
+ * 执行搜索和读网页，引用来源以 url_citation 注释随最后一个流式分片返回。官方文档目前只写明
+ * deepseek-flash 支持；其他模型继续走 Function Calling 外部搜索。
+ */
+const DEEPSEEK_WEB_TOOLS_MODELS = new Set(['deepseek-flash']);
+
+export function supportsDeepSeekWebTools(model) {
+    return DEEPSEEK_WEB_TOOLS_MODELS.has(normalizeModelId(model));
+}
+
+/**
+ * 内置联网工具的请求字段。webTools = { readUrl } ，未开启时返回空对象。
+ * 声明这些工具时不能再带 web_search_options 或自定义搜索工具，否则 DeepSeek 返回 400。
+ */
+export function buildDeepSeekWebToolsParams(webTools) {
+    if (!webTools) return {};
+    return {
+        tools: [
+            { type: 'deepseek_web_search' },
+            ...(webTools.readUrl ? [{ type: 'deepseek_read_url' }] : []),
+        ],
+    };
+}
+
 /** 思考模式下带工具调用时，DeepSeek 要求把之前各轮的 reasoning_content 原样传回。 */
 export function isDeepSeekThinkingMode(apiConfig, baseUrl, model, reasoningEffort) {
     if (!isDeepSeekRequest(apiConfig, baseUrl, model)) return false;

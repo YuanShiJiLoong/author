@@ -14,6 +14,8 @@ import { saveGenerationArchive } from '../lib/generation-archive';
 import { useAppStore } from '../store/useAppStore';
 import ChatMarkdown from './ChatMarkdown';
 import ModelPicker from './ModelPicker';
+import SearchSourcesCard from './SearchSourcesCard';
+import { collectSearchSources } from '../lib/search-sources';
 import { FolderOpen, Plus, X, Pencil, Trash2, RefreshCw, GitBranch, CornerDownLeft, ClipboardList, Copy, Code2, FileText, Maximize2, Minimize2, Sparkles } from 'lucide-react';
 import { useI18n } from '../lib/useI18n';
 import { copyTextToClipboard } from '../lib/clipboard';
@@ -21,7 +23,7 @@ import { resolveAiEndpoint } from '../lib/ai-provider-compat';
 import { readAiEvents } from '../lib/ai-stream.js';
 import { aiFetch } from '../lib/ai-direct';
 import { localizeApiError } from '../lib/api-error-i18n';
-import { resolveFunctionSearchConfig } from '../lib/search-config';
+import { resolveDeepSeekWebTools, resolveFunctionSearchConfig } from '../lib/search-config';
 import {
     applySettingsUndoPatch,
     canUndoCreatedSettingsNode,
@@ -1032,24 +1034,52 @@ export default function AiSidebar({ onInsertText }) {
         showToast(t('aiSidebar.archiveDeleted'), 'success');
     }, [setGenerationArchive, showToast, t]);
 
-    // 新消息时只在用户已滚动到底部时才自动滚动（不劫持用户滚动）
+    // 自动跟随到底部：只有用户停在底部时才跟随。生成过程中每个分片都会触发这里，
+    // 以前每次都用平滑滚动，动画会和用户的滚轮抢，导致往上滚不动；现在改成直接定位，
+    // 并在用户往上滚（滚轮、触摸、拖滚动条）时立刻停止跟随，滚回底部再恢复。
+    const stickToBottomRef = useRef(true);
+    const lastChatLengthRef = useRef(chatHistory.length);
     useEffect(() => {
         const container = chatContainerRef.current;
-        if (!container) {
-            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-            return;
-        }
+        if (!container) return undefined;
         const threshold = 80;
-        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
-        if (isNearBottom) {
-            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }
+        const updateStick = () => {
+            stickToBottomRef.current = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+        };
+        const stopOnScrollUp = e => { if (e.deltaY < 0) stickToBottomRef.current = false; };
+        let touchY = null;
+        const onTouchStart = e => { touchY = e.touches[0]?.clientY ?? null; };
+        const onTouchMove = e => {
+            const y = e.touches[0]?.clientY;
+            if (touchY != null && y != null && y > touchY) stickToBottomRef.current = false;
+            touchY = y ?? touchY;
+        };
+        container.addEventListener('scroll', updateStick, { passive: true });
+        container.addEventListener('wheel', stopOnScrollUp, { passive: true });
+        container.addEventListener('touchstart', onTouchStart, { passive: true });
+        container.addEventListener('touchmove', onTouchMove, { passive: true });
+        return () => {
+            container.removeEventListener('scroll', updateStick);
+            container.removeEventListener('wheel', stopOnScrollUp);
+            container.removeEventListener('touchstart', onTouchStart);
+            container.removeEventListener('touchmove', onTouchMove);
+        };
+    }, [activeTab, open]);
+
+    useEffect(() => {
+        const container = chatContainerRef.current;
+        // 新发出一条消息时总是回到底部
+        if (chatHistory.length > lastChatLengthRef.current) stickToBottomRef.current = true;
+        lastChatLengthRef.current = chatHistory.length;
+        if (!container || !stickToBottomRef.current) return;
+        container.scrollTop = container.scrollHeight;
     }, [chatHistory]);
 
     // 切到聊天 Tab / 重新打开侧栏时，滚动到底部并聚焦输入框
     useEffect(() => {
         if (activeTab === 'chat' && open) {
             // 延迟一帧等待 DOM 渲染完成后再滚动到底部
+            stickToBottomRef.current = true;
             requestAnimationFrame(() => {
                 chatEndRef.current?.scrollIntoView({ behavior: 'instant' });
             });
@@ -1087,7 +1117,11 @@ export default function AiSidebar({ onInsertText }) {
             const ce = !!apiConfig?.tools?.codeExecution;
             if (gs || ce) toolsPayload = { googleSearch: gs, codeExecution: ce };
         } else if (searchEnabled) {
-            if (searchMode === 'builtin' && isOpenAI) {
+            const deepseekWebTools = resolveDeepSeekWebTools(apiConfig);
+            if (deepseekWebTools) {
+                // DeepSeek 内置联网：搜索和读网页都由 DeepSeek 服务端完成
+                toolsPayload = { deepseekWebTools };
+            } else if (searchMode === 'builtin' && isOpenAI) {
                 // OpenAI 兼容端点的内置搜索
                 toolsPayload = { webSearch: true };
             } else if (searchMode === 'external' || !isOpenAI) {
@@ -2342,7 +2376,7 @@ export default function AiSidebar({ onInsertText }) {
 
                                         {/* 消息内容 / 编辑模式 */}
                                         {/* 工具调用结果展示（Gemini 内置工具） */}
-                                        {msg.toolCalls && msg.toolCalls.length > 0 && (
+                                        {msg.toolCalls?.some(tc => tc.type !== 'grounding') && (
                                             <div className="tool-calls-container">
                                                 {msg.toolCalls.map((tc, idx) => {
                                                     if (tc.type === 'codeExec') return (
@@ -2355,18 +2389,6 @@ export default function AiSidebar({ onInsertText }) {
                                                         <div key={idx} className={`tool-call-card code-result ${tc.outcome === 'OUTCOME_OK' ? 'success' : 'error'}`}>
                                                             <div className="tool-call-header">{tc.outcome === 'OUTCOME_OK' ? '✅' : '❌'} {t('aiSidebar.toolCodeResult') || '执行结果'}</div>
                                                             <pre className="tool-code-block"><code>{tc.output}</code></pre>
-                                                        </div>
-                                                    );
-                                                    if (tc.type === 'grounding' && tc.sources?.length > 0) return (
-                                                        <div key={idx} className="tool-call-card grounding">
-                                                            <div className="tool-call-header">🔍 {t('aiSidebar.toolSearchSources') || '搜索来源'}</div>
-                                                            <div className="grounding-sources">
-                                                                {tc.sources.map((src, si) => (
-                                                                    <a key={si} className="grounding-chip" href={src.uri} target="_blank" rel="noopener noreferrer" title={src.uri}>
-                                                                        {src.title || src.uri}
-                                                                    </a>
-                                                                ))}
-                                                            </div>
                                                         </div>
                                                     );
                                                     if (tc.type === 'searchNotice') return (
@@ -2467,6 +2489,11 @@ export default function AiSidebar({ onInsertText }) {
                                                     });
                                                 })()}
                                             </div>
+                                        )}
+
+                                        {/* 搜索来源：放在回复末尾，同一网页只显示一次 */}
+                                        {editingMsgId !== msg.id && (
+                                            <SearchSourcesCard sources={collectSearchSources(msg.toolCalls)} tx={tx} />
                                         )}
 
                                         {/* 变体导航 < 1/3 > */}

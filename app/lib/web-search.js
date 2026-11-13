@@ -310,7 +310,7 @@ async function requestDeepSeekTool({ tool, url, body, apiKey, fetchImpl, signal,
     }
 }
 
-/** 调用 DeepSeek 搜索（账号级每秒 5 次），返回 {title, url, snippet} 列表。 */
+/** 调用 DeepSeek 搜索（账号级每秒 100 次），返回 {title, url, snippet} 列表。 */
 export async function runDeepSeekSearch({
     query, apiKey, baseUrl, fetchImpl, signal, count = DEFAULT_RESULT_COUNT,
     maxRetries = 1, retryDelayMs = DEFAULT_RETRY_DELAY_MS, wait = abortableDelay,
@@ -321,7 +321,7 @@ export async function runDeepSeekSearch({
     return mapDeepSeekSearchResults(data);
 }
 
-/** 调用 DeepSeek 读取网页（账号级每秒 5 次，另有按网站的限速），返回 {title, url, content, truncated}。 */
+/** 调用 DeepSeek 读取网页（账号级每秒 25 次，另有按网站的限速），返回 {title, url, content, truncated}。 */
 export async function runDeepSeekFetch({
     url: target, apiKey, baseUrl, fetchImpl, signal, maxChars = MAX_WEBPAGE_CHARS,
     maxRetries = 1, retryDelayMs = DEFAULT_RETRY_DELAY_MS, wait = abortableDelay,

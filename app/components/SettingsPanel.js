@@ -39,10 +39,11 @@ import {
     getBuiltInWorkName,
 } from '../lib/settings';
 import { DEEPSEEK_RETIRED_MODELS } from '../lib/ai-model-rules';
+import { isDeepSeekPresetConfig } from '../lib/ai-provider-compat';
 import SettingsTree from './SettingsTree';
 import { useI18n } from '../lib/useI18n';
 import { localizeApiError } from '../lib/api-error-i18n';
-import { DEEPSEEK_SEARCH_DEFAULT_BASE_URL, SEARCH_TOOL_KEY_PAGES, SEARCH_TOOL_LABELS, SEARCH_TOOLS, deepSeekSearchPrefill, findConfiguredDeepSeekApi, getSearchTool, isDeepSeekReadAfterSearchEnabled, isDeepSeekReadWebpageEnabled } from '../lib/search-config';
+import { DEEPSEEK_SEARCH_DEFAULT_BASE_URL, SEARCH_TOOL_KEY_PAGES, SEARCH_TOOL_LABELS, SEARCH_TOOLS, deepSeekSearchPrefill, findConfiguredDeepSeekApi, getSearchTool, isDeepSeekReadAfterSearchEnabled, isDeepSeekReadWebpageEnabled, resolveDeepSeekWebTools } from '../lib/search-config';
 import { apiPath } from '../lib/api-base';
 import { testAiConnection } from '../lib/ai-direct';
 import { getEmbeddingProviderConfig } from '../lib/embedding-provider-config';
@@ -2198,6 +2199,10 @@ function ApiConfigForm({ data, onChange }) {
     const searchToolLabel = SEARCH_TOOL_LABELS[searchTool];
     const isDeepSeekSearch = searchTool === 'deepseek';
     const configuredDeepSeek = findConfiguredDeepSeekApi(data);
+    // DeepSeek 内置联网：DeepSeek 预设 + 支持的模型 + 搜索方式不是外部搜索
+    const isDeepSeekProvider = isDeepSeekPresetConfig(data);
+    const deepSeekBuiltinSelected = isDeepSeekProvider && data.tools?.searchMode !== 'external';
+    const usesDeepSeekWebTools = Boolean(resolveDeepSeekWebTools(data));
     const searchKeyField = isDeepSeekSearch ? 'deepseekApiKey' : 'apiKey';
     const searchBaseUrlField = isDeepSeekSearch ? 'deepseekBaseUrl' : 'baseUrl';
     const searchApiKey = data.searchConfig?.[searchKeyField] || '';
@@ -2782,7 +2787,7 @@ function ApiConfigForm({ data, onChange }) {
                         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, paddingLeft: 22 }}>
                             {t('apiConfig.enableSearchDesc') || '让 AI 搜索互联网获取最新信息，搜索来源会显示在回复中'}
                         </div>
-                        {data.tools?.searchEnabled && resolvedProviderType === 'openai' && (
+                        {data.tools?.searchEnabled && (resolvedProviderType === 'openai' || isDeepSeekProvider) && (
                             <div style={{ paddingLeft: 22, marginBottom: 6 }}>
                                 <div style={{ display: 'flex', gap: 6 }}>
                                     {[
@@ -2792,13 +2797,29 @@ function ApiConfigForm({ data, onChange }) {
                                         <button key={opt.key} style={{ padding: '4px 10px', border: (data.tools?.searchMode || 'builtin') === opt.key ? '2px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', background: (data.tools?.searchMode || 'builtin') === opt.key ? 'var(--accent-light)' : 'var(--bg-primary)', cursor: 'pointer', fontSize: 11, fontWeight: (data.tools?.searchMode || 'builtin') === opt.key ? 600 : 400, color: (data.tools?.searchMode || 'builtin') === opt.key ? 'var(--accent)' : 'var(--text-primary)', transition: 'all 0.15s' }} onClick={() => onChange({ ...data, tools: { ...(data.tools || {}), searchMode: opt.key } })}>{opt.label}</button>
                                     ))}
                                 </div>
-                                {resolvedProviderType === 'custom'
+                                {isDeepSeekProvider
+                                    ? (deepSeekBuiltinSelected && (
+                                        <div style={{ fontSize: 10, color: usesDeepSeekWebTools ? 'var(--text-muted)' : 'var(--error)', marginTop: 3, lineHeight: 1.5 }}>
+                                            {usesDeepSeekWebTools ? t('apiConfig.searchDeepSeekBuiltinHint') : t('apiConfig.searchDeepSeekBuiltinUnsupported')}
+                                        </div>
+                                    ))
+                                    : resolvedProviderType === 'custom'
                                     ? <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>{text('自定义供应商仅支持 Function Calling (外部搜索) 方式', 'Custom providers only support Function Calling (external search)', 'Свои провайдеры поддерживают только Function Calling (внешний поиск)')}</div>
                                     : <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>{t('apiConfig.searchModeHint') || '内置搜索速度更快，外部搜索可自定义来源'}</div>
                                 }
+                                {usesDeepSeekWebTools && (
+                                    <div style={{ marginTop: 8 }}>
+                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, lineHeight: 1.5 }}>{t('apiConfig.searchDeepSeekBuiltinPricing')}</div>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)' }}>
+                                            <input type="checkbox" checked={isDeepSeekReadWebpageEnabled(data.searchConfig)} onChange={e => updateSearchConfig({ deepseekReadWebpage: e.target.checked })} style={{ margin: 0 }} />
+                                            {t('apiConfig.searchDeepSeekReadWebpage')}
+                                        </label>
+                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, paddingLeft: 22, lineHeight: 1.5 }}>{t('apiConfig.searchDeepSeekBuiltinReadWebpageDesc')}</div>
+                                    </div>
+                                )}
                             </div>
                         )}
-                        {data.tools?.searchEnabled && (
+                        {data.tools?.searchEnabled && !usesDeepSeekWebTools && (
                             (data.tools?.searchMode === 'external' || resolvedProviderType !== 'openai') && (
                                 <div style={{ paddingLeft: 22, marginTop: 6 }}>
                                     <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 3 }}>{t('apiConfig.searchTool') || '搜索工具'}</div>

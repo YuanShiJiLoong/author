@@ -20,7 +20,7 @@ import { IS_OFFICIAL_WEB } from './deployment-target';
 import { rotateKey } from './keyRotator';
 import { applyContentSafety } from './content-safety';
 // 模型识别与参数拼装和 app/api/ai/route.js 共用同一份实现
-import { buildOpenAiCompatibleParams, DEEPSEEK_DEFAULT_MODEL, isDeepSeekRequest } from './ai-model-rules.js';
+import { buildDeepSeekWebToolsParams, buildOpenAiCompatibleParams, DEEPSEEK_DEFAULT_MODEL, isDeepSeekRequest } from './ai-model-rules.js';
 
 // ===== 开关与资格判断 =====
 
@@ -60,6 +60,8 @@ async function directOpenAiFetch(payload, signal) {
     const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
     const baseParams = buildOpenAiCompatibleParams({ model, maxTokens, temperature, topP, reasoningEffort });
     const shouldIncludeStreamUsage = Boolean(toolsConfig?.webSearch) || isDeepSeekRequest(apiConfig, baseUrl, model);
+    const deepseekWebTools = toolsConfig?.deepseekWebTools && isDeepSeekRequest(apiConfig, baseUrl, model)
+        ? toolsConfig.deepseekWebTools : null;
 
     const messages = [
         { role: 'system', content: applyContentSafety(systemPrompt) },
@@ -76,7 +78,9 @@ async function directOpenAiFetch(payload, signal) {
             },
             body: JSON.stringify({
                 model, messages, ...baseParams,
-                ...(toolsConfig?.webSearch ? { web_search_options: { search_context_size: 'medium' } } : {}),
+                ...(deepseekWebTools
+                    ? buildDeepSeekWebToolsParams(deepseekWebTools)
+                    : toolsConfig?.webSearch ? { web_search_options: { search_context_size: 'medium' } } : {}),
                 stream: true,
                 ...(shouldIncludeStreamUsage ? { stream_options: { include_usage: true } } : {}),
             }),

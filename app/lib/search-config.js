@@ -7,6 +7,7 @@
 // 读取网页全文（deepseekReadWebpage，默认开启），以及看完搜索结果再挑网页读（deepseekReadAfterSearch，默认关闭）。
 
 import { isDeepSeekPresetConfig } from './ai-provider-compat.js';
+import { supportsDeepSeekWebTools } from './ai-model-rules.js';
 
 export const SEARCH_TOOLS = ['tavily', 'exa', 'deepseek'];
 export const DEFAULT_SEARCH_TOOL = 'tavily';
@@ -77,6 +78,17 @@ export function resolveFunctionSearchConfig(apiConfig, ...fallbackConfigs) {
     const baseUrl = trimmed(searchConfig.deepseekBaseUrl) || configured?.baseUrl || DEEPSEEK_SEARCH_DEFAULT_BASE_URL;
     const readWebpage = isDeepSeekReadWebpageEnabled(searchConfig);
     return { tool, provider: tool, apiKey, baseUrl, readWebpage, readAfterSearch: readWebpage && isDeepSeekReadAfterSearchEnabled(searchConfig) };
+}
+
+/**
+ * 当前对话用 DeepSeek 内置联网时返回 { readUrl }，否则返回 null（调用方继续走原来的搜索方式）。
+ * 条件：DeepSeek 预设、模型支持内置工具、搜索方式不是"外部搜索"。读网页沿用 deepseekReadWebpage 开关。
+ */
+export function resolveDeepSeekWebTools(apiConfig) {
+    if (!apiConfig || !isDeepSeekPresetConfig(apiConfig)) return null;
+    if (apiConfig.tools?.searchMode === 'external') return null;
+    if (!supportsDeepSeekWebTools(apiConfig.model)) return null;
+    return { readUrl: isDeepSeekReadWebpageEnabled(apiConfig.searchConfig) };
 }
 
 /** DeepSeek 搜索时是否同时让 AI 读取网页全文（默认开启，设置面板可关）。 */
