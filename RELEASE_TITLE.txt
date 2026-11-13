@@ -1,1 +1,1 @@
-支持 DeepSeek 内置联网，搜索来源改到回复末尾 | DeepSeek built-in web search, sources moved to the end of replies
+安卓端：修复切到设定卡顿，支持 DeepSeek 内置联网，全新首屏 | Android: smoother Lore tab, DeepSeek built-in web search, new welcome screen
