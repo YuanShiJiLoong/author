@@ -49,6 +49,12 @@ export function localizeApiError(payload, text) {
             return text('API Key 无效或无权限', 'API Key is invalid or has no permission.', 'Ключ API недействителен или нет прав доступа.');
 
         // —— 网络 ——
+        case 'OUTBOUND_FAKE_IP_BLOCKED':
+            return text(
+                'API 域名被解析成了 198.18.x.x，这是代理工具 fake-ip 模式给的假地址，服务端按内网地址拦截了。可以在代理工具里把这个域名加入 fake-ip 过滤名单（或关闭 TUN / fake-ip），或者设置环境变量 AUTHOR_ALLOW_PRIVATE_NETWORK=1 后重启。',
+                'The API domain resolved to 198.18.x.x, a placeholder address from a proxy tool\'s fake-ip mode, so the server blocked it as a private address. Add the domain to the proxy\'s fake-ip filter (or turn off TUN / fake-ip), or set AUTHOR_ALLOW_PRIVATE_NETWORK=1 and restart.',
+                'Домен API разрешился в 198.18.x.x — это фиктивный адрес режима fake-ip прокси-программы, поэтому сервер заблокировал его как внутренний. Добавьте домен в фильтр fake-ip прокси (или отключите TUN / fake-ip) либо задайте переменную окружения AUTHOR_ALLOW_PRIVATE_NETWORK=1 и перезапустите.'
+            );
         case 'NETWORK_ERROR':
             return text('网络连接失败，请检查 API 地址', 'Network connection failed. Please check the API address.', 'Сбой сетевого подключения. Проверьте адрес API.');
         case 'NETWORK_ERROR_CHECK':

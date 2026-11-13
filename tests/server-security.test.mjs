@@ -130,3 +130,15 @@ test('server-owned keys require desktop authorization and a fixed endpoint', () 
         else process.env.AUTHOR_DESKTOP_CAPABILITY = previous;
     }
 });
+
+test('代理 fake-ip 假地址（198.18.0.0/15）单独识别，仍不算公网', async () => {
+    const { isFakeIpAddress, isPublicIpAddress, isOutboundRequestBlocked, FAKE_IP_BLOCKED_CODE } = await import('../app/lib/server-security.mjs');
+    for (const address of ['198.18.1.18', '198.19.255.1', '::ffff:198.18.0.5']) {
+        assert.equal(isFakeIpAddress(address), true, address);
+        assert.equal(isPublicIpAddress(address), false, address);
+    }
+    for (const address of ['198.20.0.1', '8.8.8.8', '192.168.1.1', '']) {
+        assert.equal(isFakeIpAddress(address), false, address);
+    }
+    assert.equal(isOutboundRequestBlocked({ code: FAKE_IP_BLOCKED_CODE }), true);
+});

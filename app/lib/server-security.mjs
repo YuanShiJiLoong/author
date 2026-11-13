@@ -178,6 +178,24 @@ function parseHttpUrl(rawUrl) {
     return parsed;
 }
 
+// 代理工具（Clash、Surge 等）的 fake-ip 模式会把域名解析成 198.18.0.0/15 里的假地址，
+// 连接时再由代理转发。这段地址不是公网，照样拦截，但单独提示原因和解决办法，免得用户误以为 Key 填错。
+export function isFakeIpAddress(address) {
+    const ipv4 = mappedIpv4(normalizedIp(address)) || normalizedIp(address);
+    return isIP(ipv4) === 4 && /^198\.(18|19)\./.test(ipv4);
+}
+
+export const FAKE_IP_BLOCKED_CODE = 'OUTBOUND_FAKE_IP_BLOCKED';
+
+function fakeIpBlockedError(hostname) {
+    const error = new OutboundRequestBlockedError(
+        `${hostname} 被解析成了 198.18.x.x，这是代理工具 fake-ip 模式给的假地址，服务端按内网地址拦截了。`
+        + '可以在代理工具里把这个域名加入 fake-ip 过滤名单（或关闭 TUN / fake-ip），或者设置环境变量 AUTHOR_ALLOW_PRIVATE_NETWORK=1 后重启。'
+    );
+    error.code = FAKE_IP_BLOCKED_CODE;
+    return error;
+}
+
 async function lookupPublicAddresses(hostname, family = 0) {
     const host = normalizedIp(hostname);
     if (isIP(host)) {
@@ -190,7 +208,9 @@ async function lookupPublicAddresses(hostname, family = 0) {
         ? records.filter(record => record.family === family)
         : records;
     if (filtered.length === 0 || filtered.some(record => !isPublicIpAddress(record.address))) {
-        throw new OutboundRequestBlockedError();
+        // 官网服务端不会装代理工具，也不能用 AUTHOR_ALLOW_PRIVATE_NETWORK，沿用原提示
+        if (!OFFICIAL_WEB && filtered.some(record => isFakeIpAddress(record.address))) throw fakeIpBlockedError(host);
+        throw new OutboundRequestBlockedError(OFFICIAL_WEB ? undefined : PRIVATE_NETWORK_BLOCKED_MESSAGE);
     }
     return filtered;
 }
@@ -231,7 +251,7 @@ export function rejectOfficialProxy(proxyUrl) {
 }
 
 export function isOutboundRequestBlocked(error) {
-    return error?.code === 'OUTBOUND_REQUEST_BLOCKED';
+    return error?.code === 'OUTBOUND_REQUEST_BLOCKED' || error?.code === FAKE_IP_BLOCKED_CODE;
 }
 
 export function redactSensitiveText(value, maxLength = 500) {

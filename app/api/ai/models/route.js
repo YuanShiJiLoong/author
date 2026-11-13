@@ -157,7 +157,9 @@ async function fetchOpenAIModels(apiKey, baseUrl, embedOnly, provider, proxyUrl)
             const data = await response.json();
             rawModels = extractModelArray(data);
             if (rawModels.length > 0) break;
-        } catch {
+        } catch (error) {
+            // 被安全检查拦下（如代理 fake-ip 假地址）：如实告诉用户，不当成普通网络错误
+            if (isOutboundRequestBlocked(error)) throw error;
             // 超时或网络错误：记录下来，避免后面被内置向量模型兜底掩盖了连接问题
             hadNetworkError = true;
             continue;
