@@ -133,7 +133,7 @@ test('server-owned keys require desktop authorization and a fixed endpoint', () 
 
 test('代理 fake-ip 假地址（198.18.0.0/15）单独识别，仍不算公网', async () => {
     const { isFakeIpAddress, isPublicIpAddress, isOutboundRequestBlocked, FAKE_IP_BLOCKED_CODE } = await import('../app/lib/server-security.mjs');
-    for (const address of ['198.18.1.18', '198.19.255.1', '::ffff:198.18.0.5']) {
+    for (const address of ['198.18.0.1', '198.19.0.10', '::ffff:198.18.0.2']) {
         assert.equal(isFakeIpAddress(address), true, address);
         assert.equal(isPublicIpAddress(address), false, address);
     }

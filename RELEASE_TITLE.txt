@@ -1,1 +1,1 @@
-放宽 AI 生成超时，修复 MiniMax 新模型和余额不足提示 | Longer AI generation timeout, fixes for new MiniMax models and low-balance messages
+支持 DeepSeek 内置联网，搜索来源改到回复末尾 | DeepSeek built-in web search, sources moved to the end of replies

@@ -364,7 +364,7 @@ Author 支持让 AI 联网搜索实时信息。不同供应商的搜索方式不
 |--------|---------|---------|
 | Gemini（原生格式） | 内置 Google Search | 无需额外配置 |
 | OpenAI / OpenAI Responses | 内置 Web Search | 无需额外配置（需搜索模型） |
-| DeepSeek | DeepSeek 搜索（外部搜索） | 自动沿用已配置的 DeepSeek Key |
+| DeepSeek | 内置联网（deepseek-flash）；其他模型用 DeepSeek 搜索（外部搜索） | 自动沿用已配置的 DeepSeek Key |
 | 智谱 / 硅基 / Claude / 其他 | 外部搜索 API | **需配置搜索工具 Key**（Tavily、Exa 或 DeepSeek） |
 
 对于不支持内置搜索的供应商，需要选择一个搜索工具（Tavily、Exa 或 DeepSeek）并填入 API Key：

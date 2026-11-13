@@ -360,7 +360,7 @@ Author supports AI-powered web search for real-time information. Different provi
 |----------|--------------|-------------|
 | Gemini (Native) | Built-in Google Search | No extra config needed |
 | OpenAI / OpenAI Responses | Built-in Web Search | No extra config (needs search model) |
-| DeepSeek | DeepSeek Search (external) | Reuses your DeepSeek API Key |
+| DeepSeek | Built-in web tools (deepseek-flash); other models use DeepSeek Search (external) | Reuses your DeepSeek API Key |
 | ZhipuAI / SiliconFlow / Claude / Others | External Search API | **Search tool Key required** (Tavily, Exa, or DeepSeek) |
 
 For providers without built-in search, choose a search tool (Tavily, Exa, or DeepSeek) and enter its API Key:

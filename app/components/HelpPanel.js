@@ -132,8 +132,8 @@ AI 会自动参考：
 - **发送快捷键**：在「设定集 → 偏好设置 → AI 对话发送快捷键」可选择 Enter 发送，或 Ctrl/⌘ + Enter 发送；设置会同时作用于小输入框和全屏输入面板。
 
 #### 联网搜索
-让 AI 先上网查资料再回答，回复下方会列出参考来源。在「API 配置 → 联网搜索」中勾选「启用联网搜索」即可开启。
-- **服务商自带搜索**：Gemini（原生格式）自带 Google 搜索；OpenAI 兼容服务商可以选「内置搜索」（需要接口本身支持）。
+让 AI 先上网查资料再回答，回复末尾会列出参考来源。在「API 配置 → 联网搜索」中勾选「启用联网搜索」即可开启。
+- **服务商自带搜索**：Gemini（原生格式）自带 Google 搜索；OpenAI 兼容服务商可以选「内置搜索」（需要接口本身支持）；DeepSeek 用 deepseek-flash 模型时默认由 DeepSeek 直接联网，不用另配搜索 Key。其他 DeepSeek 模型，或选了「外部搜索」，会改用下面的外部搜索。
 - **外部搜索**：其他服务商需要选一个搜索工具：
   - **DeepSeek**：如果已经配置了 DeepSeek，选它会自动填好 Key 和地址，不用另外申请。2026 年 11 月 1 日起按次收费，每 1000 次成功请求 0.75 美元。
   - **Tavily / Exa**：在官网注册后获取 API Key 填入，都有免费额度。
@@ -812,8 +812,8 @@ AI can generate **setting action cards** in chat. You can apply them with one cl
 - **Send shortcut**: in **Lore -> Preferences -> AI chat send shortcut**, choose Enter to send or Ctrl/⌘+Enter to send. The setting applies to both compact and fullscreen input.
 
 #### Web Search
-Let the AI look things up online before answering; the sources are listed under the reply. Turn it on in **API Config -> Web Search -> Enable Web Search**.
-- **Provider search**: Gemini (native format) has built-in Google Search. OpenAI-compatible providers can use **Built-in** search if the endpoint supports it.
+Let the AI look things up online before answering; the sources are listed at the end of the reply. Turn it on in **API Config -> Web Search -> Enable Web Search**.
+- **Provider search**: Gemini (native format) has built-in Google Search. OpenAI-compatible providers can use **Built-in** search if the endpoint supports it. DeepSeek with the deepseek-flash model searches the web itself by default, with no extra search key; other DeepSeek models, or choosing **External**, use external search below.
 - **External search**: other providers need a search tool:
   - **DeepSeek**: if DeepSeek is already set up, choosing it fills in the Key and URL automatically, with no extra sign-up. Billed per request from Nov 1, 2026: $0.75 per 1,000 successful requests.
   - **Tavily / Exa**: sign up on their sites and paste the API Key. Both have a free tier.
@@ -1490,8 +1490,8 @@ Author — **платформа письма с ИИ** для авторов п�
 - Горячую клавишу отправки можно выбрать в **Лор -> Предпочтения**.
 
 #### Веб-поиск
-ИИ сначала ищет информацию в интернете, а затем отвечает; источники показываются под ответом. Включается в **API-конфигурация -> Веб-поиск -> Включить веб-поиск**.
-- **Поиск провайдера**: в Gemini (нативный формат) есть встроенный Google Search. OpenAI-совместимые провайдеры могут использовать **Встроенный** поиск, если его поддерживает endpoint.
+ИИ сначала ищет информацию в интернете, а затем отвечает; источники показываются в конце ответа. Включается в **API-конфигурация -> Веб-поиск -> Включить веб-поиск**.
+- **Поиск провайдера**: в Gemini (нативный формат) есть встроенный Google Search. OpenAI-совместимые провайдеры могут использовать **Встроенный** поиск, если его поддерживает endpoint. DeepSeek с моделью deepseek-flash по умолчанию сам ищет в интернете, отдельный ключ поиска не нужен; другие модели DeepSeek или выбор **Внешнего** поиска используют внешний поиск ниже.
 - **Внешний поиск**: другим провайдерам нужен инструмент поиска:
   - **DeepSeek**: если DeepSeek уже настроен, при выборе ключ и адрес подставятся автоматически, отдельная регистрация не нужна. С 1 ноября 2026 г. оплата за запрос: 0,75 $ за 1000 успешных запросов.
   - **Tavily / Exa**: зарегистрируйтесь на их сайтах и вставьте API-ключ. У обоих есть бесплатный лимит.

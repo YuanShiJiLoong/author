@@ -27,6 +27,6 @@ test('只保留 http(s) 链接', () => {
 
 test('站点名去掉 www / m / wap 前缀', () => {
     assert.equal(sourceSiteName('https://www.example.test/a'), 'example.test');
-    assert.equal(sourceSiteName('https://m.96tw.net/a'), '96tw.net');
+    assert.equal(sourceSiteName('https://m.example.test/a'), 'example.test');
     assert.equal(sourceSiteName('bad'), '');
 });

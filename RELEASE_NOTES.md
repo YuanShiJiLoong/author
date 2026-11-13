@@ -1,15 +1,17 @@
-## v1.2.60 — 放宽 AI 生成超时，修复 MiniMax 新模型和余额不足提示
+## v1.2.61 — 支持 DeepSeek 内置联网，搜索来源改到回复末尾
 
 ### 中文
 
 #### 桌面端与网页版
 
-- **AI 生成的等待时间放宽到 5 分钟**：一次发送很多章节时，模型要先读完全部内容才开始输出，这段时间可能超过 2 分钟，以前会直接提示"生成超时"。现在改为连续 5 分钟没有任何输出才算超时；模型持续输出时，写多久都不会被打断。
-- **MiniMax M3 系列**：
-  - 使用 Anthropic 格式时，默认输出额度提高到 65536。MiniMax 的思考也计入输出额度，以前额度偏小，长篇任务容易只有思考、没有正文，提示"生成中断"。
-  - 思考层级按 MiniMax 的要求发送。MiniMax-M3.1-Flash 无法关闭思考，选"关闭思考"时改用 Low，不再报错；MiniMax-M3 选"关闭思考"会真正关闭。
-- **余额不足的提示统一**：各家服务商余额不足时，统一提示"API 账户余额不足，请充值后重试"，不再被误报成请求过于频繁、没有权限，或直接显示英文原文。设定面板里的"测试连接"同样适用。
-- README 重写了「为什么做这个项目」一节，各语言版本同步更新。
+- **DeepSeek 内置联网**：服务商选 DeepSeek、模型用 deepseek-flash 时，开启联网搜索后由 DeepSeek 直接搜索和读取网页，不用另配搜索 Key，回答更快。
+  - 设置里可以在「内置搜索 / 外部搜索」之间切换；想用 Tavily、Exa 等其他来源，选「外部搜索」即可。
+  - 其他 DeepSeek 模型暂不支持内置联网，会自动改用外部搜索，设置面板里会有提示。
+  - 「允许 AI 读取网页全文」开关同样适用于内置联网。按次收费：每 1000 次搜索或读网页各 0.75 美元，从 DeepSeek 账户余额扣。
+- **搜索来源改到回复末尾**：同一网页只显示一次，平时只列标题；鼠标悬停时显示站点和完整网址。来源超过 4 条时，可以在「来源」标题行点「全部」展开。
+- **生成时可以往上翻**：AI 输出过程中往上滚动，不会再被拉回底部；滚回底部或发送新消息后，恢复自动跟随。
+- **代理工具导致连接失败时提示原因**：自行部署或从源码运行时，如果代理工具开着 TUN / fake-ip 模式，API 域名会被解析成代理给的假地址，被安全检查当成内网地址拦截。以前只提示"检查 API 地址和 Key"，现在会说明原因和解决办法。桌面版不受影响。
+- 更新了 DeepSeek 搜索的限额说明，帮助页和各语言 README 的联网搜索部分同步更新。
 
 #### 安卓端
 
@@ -21,12 +23,14 @@
 
 #### Desktop and Web
 
-- **AI generation now waits up to 5 minutes**: when many chapters are sent at once, the model has to read all of them before it starts writing, which can take more than 2 minutes and used to end with "Generation timed out". A generation now times out only after 5 minutes with no output at all; as long as the model keeps writing, it is never cut off.
-- **MiniMax M3 series**:
-  - With the Anthropic format, the default output limit is now 65536 tokens. MiniMax counts thinking toward this limit, and the old, smaller limit often left long tasks with thinking but no text, ending with "Generation was interrupted".
-  - Reasoning effort is now sent the way MiniMax expects. MiniMax-M3.1-Flash cannot turn thinking off, so "Disable Thinking" now uses Low instead of failing; on MiniMax-M3, "Disable Thinking" really turns thinking off.
-- **Consistent low-balance message**: when an account runs out of balance, every provider now shows "Insufficient account balance. Please top up and retry." instead of a rate-limit or permission error, or the provider's raw English text. "Test Connection" in settings does the same.
-- Rewrote the "Why I Built This" section of the README, updated in every language.
+- **DeepSeek built-in web search**: with DeepSeek as the provider and the deepseek-flash model, web search is now done by DeepSeek itself, including reading pages. No extra search key is needed, and answers come faster.
+  - Settings let you switch between **Built-in** and **External** search; choose External to use Tavily, Exa or other sources.
+  - Other DeepSeek models do not support built-in web tools yet and automatically fall back to external search, with a note in settings.
+  - The **Let AI read full web pages** switch also applies to built-in search. Billed per use: $0.75 per 1,000 searches and $0.75 per 1,000 page reads, charged to your DeepSeek balance.
+- **Sources moved to the end of replies**: each page appears only once and only its title is listed; hover to see the site and full URL. With more than 4 sources, click **All** next to the "Sources" heading to expand.
+- **Scroll up while the AI is writing**: scrolling up during generation no longer snaps back to the bottom; auto-follow resumes when you scroll back down or send a new message.
+- **Clearer message when a proxy tool blocks connections**: when self-hosting or running from source with a proxy tool in TUN / fake-ip mode, API domains resolve to placeholder addresses from the proxy and get blocked as private addresses. Instead of only "check the API address and Key", the message now explains why and how to fix it. The desktop app is not affected.
+- Updated the DeepSeek search rate-limit text, and the web search sections of the help page and every README.
 
 #### Android
 
