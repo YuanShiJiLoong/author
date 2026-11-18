@@ -1,4 +1,4 @@
-import { getChapters, saveChapters } from './storage';
+import { getChapters, saveChapters, validateChapterList } from './storage';
 import { getSettingsNodes, saveSettingsNodes, getActiveWorkId, setActiveWorkId } from './settings';
 import { getChapterMemoryGroups, saveChapterMemoryGroups } from './chapter-memory-groups';
 import { loadSessionStore, saveSessionStore } from './chat-sessions';
@@ -76,6 +76,22 @@ function createChapterPreview(chapters = []) {
     }));
 }
 
+// 快照内容指纹（cyrb53 + 长度）。只用来判断“和上一份是否完全相同”；
+// 偶发误判为不同只会多存一份，不会少存。
+function fingerprintSnapshotData(data) {
+    const json = JSON.stringify(data);
+    let h1 = 0xdeadbeef;
+    let h2 = 0x41c6ce57;
+    for (let i = 0; i < json.length; i++) {
+        const ch = json.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return `${json.length}:${(h2 >>> 0).toString(36)}:${(h1 >>> 0).toString(36)}`;
+}
+
 function createSnapshotIndexEntry(snapshot) {
     return {
         id: snapshot.id,
@@ -84,6 +100,7 @@ function createSnapshotIndexEntry(snapshot) {
         type: snapshot.type,
         workId: snapshot.data?.workId,
         stats: snapshot.stats || {},
+        ...(snapshot.fingerprint ? { fingerprint: snapshot.fingerprint } : {}),
         data: {
             chapters: createChapterPreview(snapshot.data?.chapters),
         },
@@ -112,7 +129,8 @@ function applySnapshotRetention(snapshots, protectedIds = new Set()) {
 
 async function migrateLegacySnapshots() {
     const legacySnapshots = await get(LEGACY_SNAPSHOTS_KEY);
-    if (!Array.isArray(legacySnapshots)) return [];
+    if (legacySnapshots === undefined) return [];
+    if (!Array.isArray(legacySnapshots)) throw new Error(text('无法读取旧版快照列表。', 'Cannot read the legacy snapshot list.', 'Не удалось прочитать старый список снимков.'));
 
     const { kept } = applySnapshotRetention(legacySnapshots);
     const index = kept.map(createSnapshotIndexEntry);
@@ -134,8 +152,9 @@ async function migrateLegacySnapshots() {
 
 async function getSnapshotIndex() {
     const index = await get(SNAPSHOT_INDEX_KEY);
-    if (Array.isArray(index)) return index;
-    return migrateLegacySnapshots();
+    if (index === undefined) return migrateLegacySnapshots();
+    if (!Array.isArray(index)) throw new Error(text('无法读取快照列表。', 'Cannot read the snapshot list.', 'Не удалось прочитать список снимков.'));
+    return index;
 }
 
 async function saveSnapshotIndex(index) {
@@ -152,6 +171,12 @@ async function getSnapshotById(snapshotId) {
     }
 
     return null;
+}
+
+export async function getSnapshotChapters(snapshotId) {
+    const snapshot = await getSnapshotById(snapshotId);
+    validateChapterList(snapshot?.data?.chapters);
+    return snapshot.data.chapters;
 }
 
 async function restoreWorksIndexForSnapshot(workId, worksIndex) {
@@ -197,21 +222,14 @@ async function restoreWorksIndexForSnapshot(workId, worksIndex) {
  * @returns {Promise<Array>} 快照列表（按时间倒序）
  */
 export async function getSnapshots() {
-    try {
-        // 读取轻量索引，完整快照按需读取，避免每次都克隆整份历史数据。
-        const snapshots = await getSnapshotIndex();
-        return Array.isArray(snapshots) ? snapshots : [];
-    } catch (e) {
-        console.error('Failed to get snapshots:', e);
-        return [];
-    }
+    return getSnapshotIndex();
 }
 
 /**
  * 创建新快照
  * @param {string} label - 快照标签描述
  * @param {string} type - 'auto' | 'manual'
- * @returns {Promise<object>}
+ * @returns {Promise<object|null>} 自动快照与最近一份内容相同时跳过，返回 null
  */
 export function createSnapshot(label, type = 'auto', options = {}) {
     const workId = options.workId || getActiveWorkId() || 'work-default';
@@ -225,12 +243,48 @@ async function readBackupArray(key) {
     return value;
 }
 
-async function createSnapshotNow(label, type, { workId, strictRead = false, protectedIds: extraProtectedIds = [] }) {
+export const CURRENT_UNREADABLE_CODE = 'SNAPSHOT_CURRENT_UNREADABLE';
+
+function currentUnreadableError(cause) {
+    const error = new Error(text(
+        '当前作品有内容读不出来，恢复前无法备份这部分。',
+        'Part of the current work cannot be read, so it cannot be backed up before restoring.',
+        'Часть текущего произведения не читается, поэтому её нельзя сохранить перед восстановлением.',
+    ));
+    error.code = CURRENT_UNREADABLE_CODE;
+    error.cause = cause;
+    return error;
+}
+
+// 恢复前的备份：某部分读不出时先停下，交给用户确认。确认后跳过这部分继续恢复，
+// 浏览器里还能取到的原始值（格式坏但没丢）原样留在备份里；连原始值都取不到的已无法保存。
+async function readCurrentForBackup(part, key, readValid, { replaceUnreadable, unreadable }) {
+    try {
+        return await readValid();
+    } catch (error) {
+        if (!replaceUnreadable) throw currentUnreadableError(error);
+        let raw;
+        try { raw = await get(key); } catch { raw = undefined; }
+        unreadable[part] = raw === undefined ? null : raw;
+        return [];
+    }
+}
+
+async function createSnapshotNow(label, type, { workId, strictRead = false, replaceUnreadable = false, protectedIds: extraProtectedIds = [] }) {
     try {
         await flushPendingEditorBeforeSnapshot();
-        const chapters = strictRead ? await readBackupArray(`author-chapters-${workId}`) : await getChapters(workId);
-        const settingsNodes = strictRead ? await readBackupArray(`author-settings-nodes-${workId}`) : await getSettingsNodes(workId);
-        const chapterMemoryGroups = strictRead ? await readBackupArray(`author-chapter-memory-groups-${workId}`) : await getChapterMemoryGroups(workId);
+        const unreadable = {};
+        const backupRead = { replaceUnreadable, unreadable };
+        const chapters = strictRead
+            ? await readCurrentForBackup('chapters', `author-chapters-${workId}`, () => getChapters(workId, { requireStored: false }), backupRead)
+            : await getChapters(workId, { requireStored: true });
+        const settingsNodes = strictRead
+            ? await readCurrentForBackup('settingsNodes', `author-settings-nodes-${workId}`, () => readBackupArray(`author-settings-nodes-${workId}`), backupRead)
+            : await getSettingsNodes(workId);
+        const chapterMemoryGroups = strictRead
+            ? await readCurrentForBackup('chapterMemoryGroups', `author-chapter-memory-groups-${workId}`, () => readBackupArray(`author-chapter-memory-groups-${workId}`), backupRead)
+            : await getChapterMemoryGroups(workId);
+        const hasUnreadable = Object.keys(unreadable).length > 0;
         const worksIndex = await persistGet('author-works-index');
         if (strictRead && worksIndex != null && !Array.isArray(worksIndex)) throw new Error('Cannot read the current works list');
         const chatSessions = await getChatSessionsForSnapshot(strictRead);
@@ -238,12 +292,15 @@ async function createSnapshotNow(label, type, { workId, strictRead = false, prot
             sum + (Array.isArray(session.messages) ? session.messages.length : 0)
         ), 0);
 
+        const baseLabel = label || (type === 'auto'
+            ? text('自动存档', 'Auto Snapshot', 'Автоснимок')
+            : text('手动存档', 'Manual Snapshot', 'Ручной снимок'));
         const snapshot = {
             id: newSnapshotId(),
             timestamp: Date.now(),
-            label: label || (type === 'auto'
-                ? text('自动存档', 'Auto Snapshot', 'Автоснимок')
-                : text('手动存档', 'Manual Snapshot', 'Ручной снимок')),
+            label: hasUnreadable
+                ? baseLabel + text('（部分内容读不出，未能备份）', ' (some content was unreadable and not backed up)', ' (часть содержимого не читалась и не сохранена)')
+                : baseLabel,
             type,
             stats: {
                 chapterCount: chapters.length,
@@ -260,10 +317,17 @@ async function createSnapshotNow(label, type, { workId, strictRead = false, prot
                 settingsNodes,
                 chapterMemoryGroups,
                 chatSessions,
+                ...(hasUnreadable ? { unreadable } : {}),
             }
         };
+        snapshot.fingerprint = fingerprintSnapshotData(snapshot.data);
 
         const existingIndex = await getSnapshotIndex();
+        // 内容和这部作品最近一份快照完全相同时不再自动存档。否则程序挂一夜，
+        // 几十份一模一样的自动快照会把更早的历史全部挤出保留上限。
+        if (type === 'auto' && existingIndex.find(s => s?.workId === workId)?.fingerprint === snapshot.fingerprint) {
+            return null;
+        }
         const nextIndex = [
             createSnapshotIndexEntry(snapshot),
             ...existingIndex.filter(s => s?.id !== snapshot.id),
@@ -292,8 +356,9 @@ async function createSnapshotNow(label, type, { workId, strictRead = false, prot
  * @param {string} snapshotId
  * @returns {Promise<boolean>}
  */
-export function restoreSnapshot(snapshotId) {
-    return serializeSnapshotWrite(() => restoreSnapshotNow(snapshotId));
+// options.replaceUnreadable：当前作品有读不出的内容时，用户已确认用快照替换它们。
+export function restoreSnapshot(snapshotId, options = {}) {
+    return serializeSnapshotWrite(() => restoreSnapshotNow(snapshotId, options));
 }
 
 export async function getPendingSnapshotRestore() {
@@ -324,7 +389,7 @@ function mergeRestoredSessions(current, saved, restoreId) {
     return { ...current, sessions, activeSessionId: restoredIds.get(saved.activeSessionId) || current.activeSessionId };
 }
 
-async function restoreSnapshotNow(snapshotId) {
+async function restoreSnapshotNow(snapshotId, { replaceUnreadable = false } = {}) {
     let journal;
     try {
         const target = await getSnapshotById(snapshotId);
@@ -334,6 +399,7 @@ async function restoreSnapshotNow(snapshotId) {
         if (!Array.isArray(data.chapters) || !Array.isArray(data.settingsNodes)) {
             throw new Error(text('快照内容不完整，未修改作品。', 'Snapshot is incomplete. No work was changed.'));
         }
+        validateChapterList(data.chapters);
         const pending = await getPendingSnapshotRestore();
         if (pending && snapshotId !== pending.snapshotId && snapshotId !== pending.backupId) {
             throw new Error(text('请先重试上次恢复，或恢复其备份。', 'Retry the unfinished restore or restore its backup first.'));
@@ -344,7 +410,7 @@ async function restoreSnapshotNow(snapshotId) {
             }
             journal = { ...pending, phase: 'applying' };
         } else {
-            const backup = await createSnapshotNow(text('恢复前的备份', 'Backup before restore', 'Резервная копия перед восстановлением'), 'manual', { workId, strictRead: true, protectedIds: [snapshotId] });
+            const backup = await createSnapshotNow(text('恢复前的备份', 'Backup before restore', 'Резервная копия перед восстановлением'), 'manual', { workId, strictRead: true, replaceUnreadable, protectedIds: [snapshotId] });
             journal = { id: newSnapshotId(), snapshotId, backupId: backup.id, workId, phase: 'applying', startedAt: Date.now() };
         }
         // Persist recovery information before changing any work data, including on retries.
@@ -353,7 +419,8 @@ async function restoreSnapshotNow(snapshotId) {
         const previousAwaitServerWrite = window._forcePersistAwaitServerWrite;
         window._forcePersistAwaitServerWrite = true;
         try {
-            await saveChapters(data.chapters, workId);
+            // 走到这里时，当前内容已备份，或用户已确认替换读不出的部分，或是在续做有备份的恢复。
+            await saveChapters(data.chapters, workId, { overwriteDamaged: true });
             await saveSettingsNodes(data.settingsNodes, workId);
             if (Array.isArray(data.chapterMemoryGroups)) {
                 await saveChapterMemoryGroups(data.chapterMemoryGroups, workId);

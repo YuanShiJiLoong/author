@@ -3,6 +3,8 @@ import { registerHooks } from 'node:module';
 import test from 'node:test';
 
 const moduleUrl = new URL('../app/lib/snapshots.js', import.meta.url);
+const storageUrl = new URL('../app/lib/storage.js', import.meta.url);
+const projectUrl = new URL('../app/lib/project-io.js', import.meta.url);
 let instance = 0;
 const targetSnapshot = () => ({
     id: 'old-a', timestamp: 1, type: 'manual', label: 'Older A',
@@ -49,18 +51,22 @@ async function fixture(t, persisted = {}) {
         // fixture ${++instance}
         let env;
         export function configure(value) { env = value; }
-        export const persistGet = key => env.read(key);
+        export const persistGet = async (key, options = {}) => {
+            const value = await env.read(key);
+            if (value !== undefined) options.validateValue?.(value);
+            return value;
+        };
+        export const persistDel = () => { throw new Error('Unexpected chapter deletion'); };
         export const persistSet = (key, value) => env.write(key, value);
         export const get = key => env.get(key);
         export const set = (key, value) => env.set(key, value);
         export const del = key => env.del(key);
-        export const getChapters = id => env.read('author-chapters-' + id).then(value => value || []);
-        export const saveChapters = (value, id) => env.write('author-chapters-' + id, value);
         export const getSettingsNodes = id => env.read('author-settings-nodes-' + id).then(value => value || []);
         export const saveSettingsNodes = (value, id) => env.write('author-settings-nodes-' + id, value);
         export const getChapterMemoryGroups = id => env.read('author-chapter-memory-groups-' + id).then(value => value || []);
         export const saveChapterMemoryGroups = (value, id) => env.write('author-chapter-memory-groups-' + id, value);
         export const getActiveWorkId = () => env.getActive();
+        export const getAllWorks = () => env.read('author-works-index');
         export const setActiveWorkId = value => env.setActive(value);
         export const loadSessionStore = () => Promise.resolve(env.app.sessionStore);
         export const saveSessionStore = value => env.write('author-chat-sessions', value);
@@ -68,14 +74,81 @@ async function fixture(t, persisted = {}) {
     `)}`;
     (await import(mockUrl)).configure(env);
     const hooks = registerHooks({ resolve(specifier, context, nextResolve) {
+        if ((context.parentURL?.startsWith(moduleUrl.href) || context.parentURL?.startsWith(projectUrl.href)) && specifier === './storage') {
+            return { url: storageUrl.href + '?snapshot=' + instance, shortCircuit: true };
+        }
+        if (context.parentURL?.startsWith(projectUrl.href)) {
+            const url = ['./settings', './persistence'].includes(specifier) ? mockUrl : new URL(specifier + '.js', projectUrl).href;
+            return { url, shortCircuit: true };
+        }
+        if (context.parentURL?.startsWith(storageUrl.href) && specifier === './persistence') return { url: mockUrl, shortCircuit: true };
         if (context.parentURL?.startsWith(moduleUrl.href)) return { url: mockUrl, shortCircuit: true };
         return nextResolve(specifier, context);
     } });
-    let api;
-    try { api = await import(`${moduleUrl.href}?fixture=${instance}`); }
+    let api, project;
+    try {
+        api = await import(`${moduleUrl.href}?fixture=${instance}`);
+        if (persisted.withExport) project = await import(`${projectUrl.href}?fixture=${instance}`);
+    }
     finally { hooks.deregister(); }
-    return { api, values, snapshots, target, env, writes, app, activeWork: () => activeWorkId };
+    return { api, project, values, snapshots, target, env, writes, app, activeWork: () => activeWorkId };
 }
+
+test('project export leaves out an unreadable work instead of blocking the others, and Markdown recovery uses only the selected snapshot', async t => {
+    const f = await fixture(t, { withExport: true });
+    const downloads = [];
+    window.showSaveFilePicker = async () => ({
+        createWritable: async () => ({ write: async value => downloads.push(value), close: async () => {} }),
+    });
+    f.env.failReadKey = 'author-chapters-b';
+    const partial = await f.project.exportProject();
+    assert.deepEqual(partial.incomplete, [{ id: 'b', name: 'Current B', parts: ['chapters'] }]);
+    const partialFile = JSON.parse(downloads[0]);
+    // 缺的部分不写空数组：导入这份存档时 B 的章节保持原样。
+    assert.equal(Object.hasOwn(partialFile.perWorkChapters, 'b'), false);
+    assert.equal(partialFile.perWorkChapters.a[0].content, 'current a');
+    assert.deepEqual(partialFile._incomplete, partial.incomplete);
+    f.env.failReadKey = 'author-chapters-a';
+    await f.project.exportWorkAsMarkdown(await f.api.getSnapshotChapters('old-a'), 'Recovered');
+    assert.match(downloads[1], /old a/);
+    assert.deepEqual(f.writes, []);
+    f.env.failReadKey = null;
+    const full = await f.project.exportProject();
+    assert.deepEqual(full.incomplete, []);
+    assert.equal(JSON.parse(downloads[2]).perWorkChapters.b[0].content, 'current b');
+    assert.equal(Object.hasOwn(JSON.parse(downloads[2]), '_incomplete'), false);
+});
+
+test('project export never stores default settings in place of unreadable ones', async t => {
+    const f = await fixture(t, { withExport: true });
+    const downloads = [];
+    window.showSaveFilePicker = async () => ({
+        createWritable: async () => ({ write: async value => downloads.push(value), close: async () => {} }),
+    });
+    f.values.set('author-settings-nodes-a', { invalid: true });
+    const result = await f.project.exportProject();
+    assert.deepEqual(result.incomplete, [{ id: 'a', name: 'Current A', parts: ['settings'] }]);
+    assert.equal(Object.hasOwn(JSON.parse(downloads[0]).perWorkSettings, 'a'), false);
+});
+
+test('failed chapter reads never publish an empty snapshot or rotate existing history', async t => {
+    const f = await fixture(t);
+    const original = structuredClone(f.snapshots);
+    for (const type of ['auto', 'manual']) {
+        f.env.failReadKey = 'author-chapters-a';
+        await assert.rejects(f.api.createSnapshot('failed', type, { workId: 'a' }));
+        assert.deepEqual(await f.api.getSnapshotChapters('old-a'), f.target.data.chapters);
+        f.env.failReadKey = null;
+        for (const bad of [undefined, null, {}, [{ id: 'ok' }, { content: 'unreadable' }]]) {
+            f.values.set('author-chapters-a', bad);
+            await assert.rejects(f.api.createSnapshot('failed', type, { workId: 'a' }));
+        }
+    }
+    assert.deepEqual(f.snapshots, original);
+    assert.deepEqual(f.writes, []);
+    f.values.set('author-chapters-a', []);
+    assert.deepEqual((await f.api.createSnapshot('empty work', 'auto', { workId: 'a' })).data.chapters, []);
+});
 
 test('restoring A preserves B and backs up A even while B is active', async t => {
     const f = await fixture(t);
@@ -86,6 +159,16 @@ test('restoring A preserves B and backs up A even while B is active', async t =>
     const backups = [...f.snapshots.values()].filter(value => value?.id && value.id !== 'old-a' && value.data?.workId === 'a' && value.data?.chapters?.[0]?.content === 'current a');
     assert.ok(backups.length > 0);
     assert.equal(f.activeWork(), 'a');
+});
+
+test('a damaged snapshot index is reported and preserved on both list and create', async t => {
+    const f = await fixture(t);
+    f.snapshots.set('author-snapshots-index-v2', { invalid: true });
+    const original = structuredClone(f.snapshots);
+    await assert.rejects(f.api.getSnapshots());
+    await assert.rejects(f.api.createSnapshot('new', 'auto'));
+    assert.deepEqual(f.snapshots, original);
+    assert.deepEqual(await f.api.getSnapshotChapters('old-a'), f.target.data.chapters);
 });
 
 test('old snapshot indexes never resurrect unrelated deleted works', async t => {
@@ -160,6 +243,74 @@ test('failed backup reads and missing snapshot fields stop before overwriting wo
             assert.equal(f.activeWork(), 'b');
         });
     }
+});
+
+test('unreadable current chapters need confirmation, then the snapshot replaces them', async t => {
+    for (const damage of ['unreadable', 'malformed']) {
+        await t.test(damage, async t => {
+            const f = await fixture(t);
+            const broken = { broken: true };
+            if (damage === 'unreadable') f.env.failReadKey = 'author-chapters-a';
+            else {
+                f.values.set('author-chapters-a', broken);
+                // 测试里两张表是同一个浏览器库的两种读法。
+                f.snapshots.set('author-chapters-a', broken);
+            }
+            f.values.set('author-settings-nodes-a', [{ id: 'current-setting' }]);
+            const before = structuredClone(f.snapshots);
+
+            // 未确认：只报告，不写任何东西。
+            await assert.rejects(f.api.restoreSnapshot('old-a'), error => error.code === f.api.CURRENT_UNREADABLE_CODE);
+            assert.deepEqual(f.writes, []);
+            assert.deepEqual(f.snapshots, before);
+            assert.equal(await f.api.getPendingSnapshotRestore(), null);
+
+            await f.api.restoreSnapshot('old-a', { replaceUnreadable: true });
+            assert.equal(f.values.get('author-chapters-a')[0].content, 'old a');
+            assert.equal(f.activeWork(), 'a');
+            const backup = (await f.api.getSnapshots()).find(item => item.id !== 'old-a');
+            const backupData = f.snapshots.get('author-snapshot-data-v2:' + backup.id).data;
+            // 能读的设定照常备份；读不出的章节记录下来，格式坏但还在的原样保留。
+            assert.deepEqual(backupData.settingsNodes, [{ id: 'current-setting' }]);
+            assert.deepEqual(backupData.chapters, []);
+            assert.deepEqual(backupData.unreadable, { chapters: damage === 'malformed' ? broken : null });
+            assert.match(backup.label, /unreadable/);
+        });
+    }
+});
+
+test('a pre-restore backup with unreadable chapters can itself be restored', async t => {
+    const f = await fixture(t);
+    f.env.failReadKey = 'author-chapters-a';
+    await f.api.restoreSnapshot('old-a', { replaceUnreadable: true });
+    f.env.failReadKey = null;
+    const backup = (await f.api.getSnapshots()).find(item => item.id !== 'old-a');
+    await f.api.restoreSnapshot(backup.id);
+    assert.deepEqual(f.values.get('author-chapters-a'), []);
+});
+
+test('auto snapshots are skipped while nothing has changed, but manual ones are always kept', async t => {
+    const f = await fixture(t);
+    const first = await f.api.createSnapshot('auto 1', 'auto', { workId: 'a' });
+    assert.ok(first.fingerprint);
+    // 程序挂一夜：内容不变，不应再多出快照、挤掉历史。
+    for (let i = 0; i < 60; i++) assert.equal(await f.api.createSnapshot('idle', 'auto', { workId: 'a' }), null);
+    assert.deepEqual((await f.api.getSnapshots()).map(item => item.id), [first.id, 'old-a']);
+    assert.ok(f.snapshots.has('author-snapshot-data-v2:old-a'));
+
+    // 另一部作品的快照不影响判断。
+    await f.api.createSnapshot('b', 'manual', { workId: 'b' });
+    assert.equal(await f.api.createSnapshot('idle', 'auto', { workId: 'a' }), null);
+
+    f.values.set('author-chapters-a', [{ id: 'chapter-a', content: 'edited a' }]);
+    const changed = await f.api.createSnapshot('auto 2', 'auto', { workId: 'a' });
+    assert.ok(changed);
+    assert.notEqual(changed.fingerprint, first.fingerprint);
+    assert.equal(await f.api.createSnapshot('idle', 'auto', { workId: 'a' }), null);
+
+    const manual = await f.api.createSnapshot('manual', 'manual', { workId: 'a' });
+    assert.equal(manual.fingerprint, changed.fingerprint);
+    assert.equal((await f.api.getSnapshots()).length, 5);
 });
 
 test('backup index or recovery journal write failure prevents the restore from starting', async t => {

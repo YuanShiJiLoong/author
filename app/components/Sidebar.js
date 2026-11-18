@@ -1575,7 +1575,7 @@ function ChapterSynopsisOverviewModal({
     );
 }
 
-export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
+export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode, chaptersReady }) {
     const {
         chapters, addChapter, setChapters, updateChapter: updateChapterStore,
         addVolume, toggleVolumeCollapsed, reorderChapters,
@@ -2764,7 +2764,21 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
                         <IconButton icon={themeMeta.icon} label={themeMeta.label} text={sidebarOpen ? themeMeta.text : undefined} tooltipSide="right" onClick={toggleTheme} className="nav-item" />
                         <IconButton icon={<History size={18} />} label={t('sidebar.tooltipTimeMachine')} text={sidebarOpen ? (t('sidebar.navSnapshots') || '快照') : undefined} tooltipSide="right" onClick={() => setShowSnapshots(true)} className="nav-item" />
                         <IconButton icon={<FolderOpen size={18} />} label={t('sidebar.menuLoad') || '读档'} text={sidebarOpen ? (t('sidebar.menuLoad') || '读档') : undefined} tooltipSide="right" onClick={() => document.getElementById('project-import-input')?.click()} className="nav-item" />
-                        <IconButton icon={<Save size={18} />} label={t('sidebar.menuSave') || '存档'} text={sidebarOpen ? (t('sidebar.menuSave') || '存档') : undefined} tooltipSide="right" onClick={() => { exportProject(); showToast(t('sidebar.exportedProject') || '已导出', 'success'); }} className="nav-item" />
+                        <IconButton icon={<Save size={18} />} label={t('sidebar.menuSave') || '存档'} text={sidebarOpen ? (t('sidebar.menuSave') || '存档') : undefined} tooltipSide="right" onClick={async () => {
+                            try {
+                                const result = await exportProject();
+                                if (!result) return;
+                                if (result.incomplete.length) {
+                                    const works = result.incomplete.map(work => work.name).join(text('、', ', ', ', '));
+                                    // 提示框 3 秒就消失，这条必须让用户看到。
+                                    alert(t('sidebar.exportedProjectIncomplete', { works }));
+                                } else {
+                                    showToast(t('sidebar.exportedProject'), 'success');
+                                }
+                            } catch (error) {
+                                showToast(t('sidebar.projectExportFailed', { error: error.message }), 'error');
+                            }
+                        }} className="nav-item" />
                         <IconButton icon={<FileDown size={18} />} label={t('sidebar.menuImportWork') || '导入'} text={sidebarOpen ? (t('sidebar.navImport') || '导入') : undefined} tooltipSide="right" onClick={() => document.getElementById('work-import-input')?.click()} className="nav-item" />
                         <div ref={navExportRef} style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
                             <IconButton icon={<FileOutput size={18} />} label={showNavExportMenu ? '' : text('导出', 'Export', 'Экспорт')} text={sidebarOpen ? text('导出', 'Export', 'Экспорт') : undefined} tooltipSide="right" onClick={() => setShowNavExportMenu(!showNavExportMenu)} className="nav-item" />
@@ -2848,7 +2862,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
 
                 {/* ===== 右侧内容区 (Content Pane) ===== */}
                 <div className="sidebar-content-pane">
-                    {activeNavTab === 'chapters' ? (
+                    {activeNavTab === 'chapters' ? chaptersReady && (
                     <>
                     {/* ===== 文档分页 ===== */}
                 <div className="gdocs-section-header">
@@ -3133,7 +3147,7 @@ export default function Sidebar({ onOpenHelp, onToggle, editorRef, pushMode }) {
             )}
 
             {/* ===== 右键菜单 ===== */}
-            {contextMenu && (
+            {chaptersReady && contextMenu && (
                 <div className="modal-overlay" style={{ background: 'transparent' }} onClick={() => setContextMenu(null)}>
                     <div className="dropdown-menu" style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y }}>
                         <button className="dropdown-item" onClick={() => { setRenameId(contextMenu.id); const ch = chapters.find(c => c.id === contextMenu.id); setRenameTitle(ch?.title || ''); setContextMenu(null); }}>{t('sidebar.contextRename')}</button>

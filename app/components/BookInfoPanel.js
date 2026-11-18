@@ -571,7 +571,7 @@ export default function BookInfoPanel() {
             const allNodes = await getSettingsNodes(selectedWorkId);
             setNodes(allNodes);
             // 加载选中作品的章节数据（非全局活跃作品）
-            const workChapters = await getChapters(selectedWorkId);
+            const workChapters = await getChapters(selectedWorkId).catch(() => null);
             setSelectedChapters(workChapters);
             const biNode = allNodes.find(n => n.category === 'bookInfo' && n.type === 'special');
             setBookInfoNode(biNode || null);
@@ -1217,8 +1217,8 @@ export default function BookInfoPanel() {
                             gap: 12, marginBottom: 28,
                         }}>
                             <StatCard label={text('总设定条目', 'Total Settings', 'Всего настроек')} value={stats.totalItems} icon={Layers} color="#6366f1" bg="rgba(99,102,241,0.1)" onClick={() => { setShowBookInfo(false); setTimeout(() => useAppStore.getState().setShowSettings('settings'), 80); }} />
-                            <StatCard label={text('总字数', 'Total Words', 'Всего слов')} value={stats.totalWords.toLocaleString()} icon={FileText} color="#10b981" bg="rgba(16,185,129,0.1)" />
-                            <StatCard label={text('章节数', 'Chapters', 'Главы')} value={stats.chapterCount} icon={BookOpen} color="#8b5cf6" bg="rgba(139,92,246,0.1)" />
+                            <StatCard label={text('总字数', 'Total Words', 'Всего слов')} value={selectedChapters === null ? '—' : stats.totalWords.toLocaleString()} icon={FileText} color="#10b981" bg="rgba(16,185,129,0.1)" />
+                            <StatCard label={text('章节数', 'Chapters', 'Главы')} value={selectedChapters === null ? '—' : stats.chapterCount} icon={BookOpen} color="#8b5cf6" bg="rgba(139,92,246,0.1)" />
                             {stats.orderedCatEntries.map(({ key: cat, count }) => {
                                 const isCustomFolder = cat.startsWith('custom__');
                                 const Icon = isCustomFolder ? SettingsIcon : (CAT_ICONS[cat] || SettingsIcon);
@@ -1311,7 +1311,8 @@ export default function BookInfoPanel() {
                                     ))}
                                 </div>
                             </div>
-                            <ActivityChart chapters={selectedChapters} period={chartPeriod} text={text} language={language} />
+                            {selectedChapters === null ? <p role="alert">{t('page.chapterReadFailed')}</p> :
+                                <ActivityChart chapters={selectedChapters} period={chartPeriod} text={text} language={language} />}
                         </div>
 
                         {/* 最近编辑 + 最近章节 — 左右并排 */}

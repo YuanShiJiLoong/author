@@ -589,7 +589,7 @@ function createWindow() {
                 type: 'error',
                 title: '系统崩溃拦截',
                 message: '渲染进程由于致命错误（如内存不足或驱动异常）突然终止。',
-                detail: `崩溃原因: ${details.reason}\n错误码: ${details.exitCode}\n\n已自动保存诊断报告:\n${crashReportPath || logFile}\n\n系统被迫中断。如果您刚才正在编辑，文字会安全保留在本地存储中不会丢失。`,
+                detail: `崩溃原因: ${details.reason}\n错误码: ${details.exitCode}\n\n诊断日志:\n${crashReportPath || logFile}\n\n最近的编辑可能尚未保存。重启后请核对章节，也可以在时光机中查看历史版本。`,
                 buttons: ['立即重启', '打开日志目录', '结束应用'],
                 defaultId: 0,
                 cancelId: 2,

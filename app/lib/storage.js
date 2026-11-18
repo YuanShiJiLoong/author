@@ -4,12 +4,23 @@
 
 import { persistGet, persistSet, persistDel } from './persistence';
 import { countWords } from './word-count.js';
+import { localizedError } from './runtime-i18n.js';
 
 const LEGACY_STORAGE_KEY = 'author-chapters';
+const ACTIVE_CHAPTER_KEY_PREFIX = 'author-active-chapter-';
 const chapterOperationQueues = new Map();
 
 function getStorageKey(workId) {
     return workId ? `author-chapters-${workId}` : LEGACY_STORAGE_KEY;
+}
+
+export function getRememberedChapterId(workId) {
+    if (typeof window === 'undefined' || !workId) return null;
+    return localStorage.getItem(ACTIVE_CHAPTER_KEY_PREFIX + workId);
+}
+
+export function rememberChapterId(workId, chapterId) {
+    if (workId && chapterId) localStorage.setItem(ACTIVE_CHAPTER_KEY_PREFIX + workId, chapterId);
 }
 
 function enqueueChapterOperation(workId, operation) {
@@ -25,13 +36,25 @@ function enqueueChapterOperation(workId, operation) {
     });
 }
 
-async function readChapters(key) {
-    const chapters = await persistGet(key);
-    return Array.isArray(chapters) ? chapters : [];
+export function validateChapterList(chapters) {
+    if (Array.isArray(chapters) && chapters.findIndex(ch =>
+        !ch || typeof ch !== 'object' || !ch.id || (ch.content != null && typeof ch.content !== 'string')
+    ) === -1) return;
+    throw localizedError('章节记录格式异常。', 'The stored chapter list is invalid.', 'Неверный формат сохранённых глав.');
+}
+
+async function readStoredChapters(key) {
+    return persistGet(key, { validateValue: validateChapterList });
+}
+
+async function readChapters(workId, requireStored) {
+    const chapters = await readStoredChapters(getStorageKey(workId));
+    if (chapters === undefined && (requireStored ?? !!getRememberedChapterId(workId))) throw missingChapterRecord();
+    return chapters ?? [];
 }
 
 async function writeChapters(key, chapters) {
-    await persistSet(key, chapters);
+    await persistSet(key, chapters, { requireWrite: true });
 }
 
 // 生成唯一ID
@@ -39,60 +62,63 @@ export function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 }
 
-/**
- * 一次性迁移：将旧的全局 author-chapters 剪切到当前活跃作品
- * 调用方在 page.js initData 中负责调用
- */
-export async function migrateGlobalChapters(workId) {
-    if (typeof window === 'undefined' || !workId) return;
-    try {
-        await enqueueChapterOperation(workId, async () => {
-            const perWorkData = await persistGet(getStorageKey(workId));
-            if (perWorkData) return; // 该作品已有数据，不迁移
-
-            const globalData = await persistGet(LEGACY_STORAGE_KEY);
-            if (globalData && Array.isArray(globalData) && globalData.length > 0) {
-                await writeChapters(getStorageKey(workId), globalData);
+// 在同一个作品队列内完成读取、旧稿迁移和首章初始化。读取失败必须先交给用户重试。
+export function openWorkChapters(workId, firstTitle, { migrateLegacy = false } = {}) {
+    return enqueueChapterOperation(workId, async () => {
+        const key = getStorageKey(workId);
+        const existing = await readStoredChapters(key);
+        if (existing?.length) return existing;
+        if (existing === undefined && migrateLegacy && workId) {
+            const legacy = await readStoredChapters(LEGACY_STORAGE_KEY);
+            if (legacy?.length) {
+                await writeChapters(key, legacy);
                 await persistDel(LEGACY_STORAGE_KEY);
+                return legacy;
             }
-        });
-    } catch {
-        // Keep the legacy global chapters untouched if migration fails.
-    }
+        }
+        if (existing === undefined && getRememberedChapterId(workId)) throw missingChapterRecord();
+        const chapters = [newChapterEntry(firstTitle)];
+        await writeChapters(key, chapters);
+        return chapters;
+    });
+}
+
+function missingChapterRecord() {
+    return localizedError('找不到这部作品的章节记录。', 'No chapter record was found for this work.', 'Не найдена запись глав этого произведения.');
 }
 
 // 获取所有章节 (Async)
-export async function getChapters(workId) {
+export async function getChapters(workId, { requireStored } = {}) {
     if (typeof window === 'undefined') return [];
     const key = getStorageKey(workId);
-    try {
-        const pending = chapterOperationQueues.get(key);
-        if (pending) await pending.catch(() => undefined);
-        return await readChapters(key);
-    } catch {
-        return [];
-    }
+    const pending = chapterOperationQueues.get(key);
+    if (pending) await pending;
+    return readChapters(workId, requireStored);
 }
 
 // 保存所有章节 (Async)
-export async function saveChapters(chapters, workId) {
+// 默认先确认旧记录可读，避免盖掉读不出的稿子。快照恢复已先做备份或经用户确认，
+// 传 overwriteDamaged 直接写入，否则坏掉的记录永远无法用历史版本替换。
+export async function saveChapters(chapters, workId, { requireStored, overwriteDamaged = false } = {}) {
     if (typeof window === 'undefined') return;
-    await enqueueChapterOperation(workId, () => writeChapters(getStorageKey(workId), chapters));
+    validateChapterList(chapters);
+    await enqueueChapterOperation(workId, async () => {
+        if (!overwriteDamaged) await readChapters(workId, requireStored);
+        await writeChapters(getStorageKey(workId), chapters);
+    });
+}
+
+function newChapterEntry(title) {
+    const now = new Date().toISOString();
+    return { id: generateId(), title, content: '', wordCount: 0, createdAt: now, updatedAt: now };
 }
 
 // 创建新章节 (Async)
 export async function createChapter(title = '未命名章节', workId) {
     return enqueueChapterOperation(workId, async () => {
         const key = getStorageKey(workId);
-        const chapters = await readChapters(key);
-        const newChapter = {
-            id: generateId(),
-            title,
-            content: '',
-            wordCount: 0,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-        };
+        const chapters = await readChapters(workId);
+        const newChapter = newChapterEntry(title);
         chapters.push(newChapter);
         await writeChapters(key, chapters);
         return newChapter;
@@ -103,7 +129,7 @@ export async function createChapter(title = '未命名章节', workId) {
 export async function insertChapterAfter(title = '未命名章节', afterId, workId) {
     return enqueueChapterOperation(workId, async () => {
         const key = getStorageKey(workId);
-        const chapters = await readChapters(key);
+        const chapters = await readChapters(workId);
         const newChapter = {
             id: generateId(),
             title,
@@ -123,7 +149,7 @@ export async function insertChapterAfter(title = '未命名章节', afterId, wor
 export async function updateChapter(id, updates, workId) {
     return enqueueChapterOperation(workId, async () => {
         const key = getStorageKey(workId);
-        const chapters = await readChapters(key);
+        const chapters = await readChapters(workId);
         const index = chapters.findIndex(ch => ch.id === id);
         if (index === -1) return null;
 
@@ -142,7 +168,7 @@ export async function updateChapter(id, updates, workId) {
 export function saveEditorChapter(id, { content, wordCount, baseContent, externalVersions = [], backupSuffix }, workId) {
     return enqueueChapterOperation(workId, async () => {
         const key = getStorageKey(workId);
-        const chapters = await readChapters(key);
+        const chapters = await readChapters(workId);
         const index = chapters.findIndex(ch => ch.id === id);
         if (index === -1) throw new Error('The edited chapter no longer exists');
         const current = chapters[index];
@@ -180,7 +206,7 @@ export function saveEditorChapter(id, { content, wordCount, baseContent, externa
 export async function deleteChapter(id, workId) {
     return enqueueChapterOperation(workId, async () => {
         const key = getStorageKey(workId);
-        const chapters = await readChapters(key);
+        const chapters = await readChapters(workId);
         const newChapters = chapters.filter(ch => ch.id !== id);
         await writeChapters(key, newChapters);
         return newChapters;
@@ -191,7 +217,7 @@ export async function deleteChapter(id, workId) {
 export async function createVolume(title = '第一卷', workId, afterId) {
     return enqueueChapterOperation(workId, async () => {
         const key = getStorageKey(workId);
-        const chapters = await readChapters(key);
+        const chapters = await readChapters(workId);
         const vol = {
             id: generateId(),
             title,
@@ -224,7 +250,7 @@ export async function createVolume(title = '第一卷', workId, afterId) {
 export async function insertChapterInVolume(title, volumeId, workId) {
     return enqueueChapterOperation(workId, async () => {
         const key = getStorageKey(workId);
-        const chapters = await readChapters(key);
+        const chapters = await readChapters(workId);
         const volIdx = chapters.findIndex(c => c.id === volumeId);
         const newChapter = {
             id: generateId(),
@@ -253,7 +279,7 @@ export async function insertChapterInVolume(title, volumeId, workId) {
 export async function reorderItems(orderedIds, workId) {
     return enqueueChapterOperation(workId, async () => {
         const key = getStorageKey(workId);
-        const chapters = await readChapters(key);
+        const chapters = await readChapters(workId);
         const map = new Map(chapters.map(c => [c.id, c]));
         const reordered = orderedIds.map(id => map.get(id)).filter(Boolean);
         const orderedIdSet = new Set(orderedIds);

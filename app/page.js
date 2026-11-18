@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useEffectEvent, useCallback, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useAppStore } from './store/useAppStore';
 import { useI18n, translate, LANGUAGES } from './lib/useI18n';
@@ -10,15 +10,15 @@ import Tooltip from './components/ui/Tooltip';
 import BeianNotice from './components/BeianNotice';
 import LocalSaveIndicator from './components/LocalSaveIndicator';
 import {
-  getChapters,
-  createChapter,
+  openWorkChapters,
+  getRememberedChapterId,
+  rememberChapterId,
   updateChapter,
   saveEditorChapter,
   deleteChapter,
   generateId,
   exportToMarkdown,
   exportAllToMarkdown,
-  migrateGlobalChapters,
   saveChapters,
 } from './lib/storage';
 import { initPersistence } from './lib/persistence';
@@ -72,7 +72,6 @@ const SyncMethodModal = dynamic(() => importWithChunkRecovery(() => import('./co
 const WebDavSyncModal = dynamic(() => importWithChunkRecovery(() => import('./components/WebDavSyncModal')), { ssr: false });
 const LanSyncModal = dynamic(() => importWithChunkRecovery(() => import('./components/LanSyncModal')), { ssr: false });
 
-const ACTIVE_CHAPTER_KEY_PREFIX = 'author-active-chapter-';
 const CONTEXT_STRATEGY_VERSION_KEY = 'author-context-strategy-version';
 const CONTEXT_STRATEGY_VERSION = 'multi-chapter-v1';
 
@@ -87,16 +86,6 @@ function getFirstChapterTitle(language) {
 
 function isWritableChapter(chapter) {
   return chapter && (chapter.type || 'chapter') !== 'volume';
-}
-
-function getRememberedChapterId(workId) {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(`${ACTIVE_CHAPTER_KEY_PREFIX}${getWorkScopedId(workId)}`) || null;
-}
-
-function rememberChapterId(workId, chapterId) {
-  if (typeof window === 'undefined' || !chapterId) return;
-  localStorage.setItem(`${ACTIVE_CHAPTER_KEY_PREFIX}${getWorkScopedId(workId)}`, chapterId);
 }
 
 function chooseActiveChapterForWork(chapters, workId) {
@@ -186,8 +175,12 @@ export default function Home() {
   const latestSessionStoreRef = useRef(sessionStore);
   const sessionAutosaveTimerRef = useRef(null);
   const sessionSaveOperationRef = useRef(null);
-  const chapterLoadSeqRef = useRef(0);
-  const chaptersWorkIdRef = useRef(null);
+  const [initialWorkId, setInitialWorkId] = useState(null);
+  const [chapterLoad, setChapterLoad] = useState(null);
+  const [chapterReadAttempt, setChapterReadAttempt] = useState(0);
+  const currentWorkId = getWorkScopedId(activeWorkId);
+  const chaptersReady = chapterLoad?.workId === currentWorkId && !chapterLoad.failed;
+  const chapterReadFailed = chapterLoad?.workId === currentWorkId && chapterLoad.failed;
   const generationArchiveHydratedRef = useRef(false);
   const generationArchiveLoadSeqRef = useRef(0);
   const generationArchiveWorkIdRef = useRef(null);
@@ -397,40 +390,26 @@ export default function Home() {
   const chatHistory = useMemo(() => activeSession?.messages || [], [activeSession]);
 
   // 加载指定作品的章节
-  const loadChaptersForWork = useCallback(async (workId) => {
-    const targetWorkId = getWorkScopedId(workId);
-    const loadSeq = chapterLoadSeqRef.current + 1;
-    chapterLoadSeqRef.current = loadSeq;
-
-    let saved = await getChapters(targetWorkId);
-    // 自动修复：过滤掉损坏的章节数据
-    if (Array.isArray(saved)) {
-      const cleaned = saved.filter(ch => ch && typeof ch === 'object' && ch.id);
-      if (cleaned.length !== saved.length) {
-        console.warn(`[数据修复] 发现 ${saved.length - cleaned.length} 条损坏的章节数据，已自动清理`);
-        saved = cleaned;
-        await saveChapters(saved, targetWorkId);
-      }
-    } else {
-      saved = [];
-    }
-    if (chapterLoadSeqRef.current !== loadSeq) return;
-
-    chaptersWorkIdRef.current = targetWorkId;
-    if (saved.length === 0) {
-      // 直接读当前语言：启动时调用的这份回调还是语言生效前创建的，里面的 t 固定是中文
-      const first = await createChapter(getFirstChapterTitle(useAppStore.getState().language), targetWorkId);
-      if (chapterLoadSeqRef.current !== loadSeq) return;
-      setChapters([first]);
-      setActiveChapterId(first.id);
-      rememberChapterId(targetWorkId, first.id);
-    } else {
-      const targetChapter = chooseActiveChapterForWork(saved, targetWorkId);
+  useEffect(() => {
+    if (!initialWorkId) return;
+    let cancelled = false;
+    setChapterLoad(null);
+    setChapters([]);
+    setActiveChapterId(null);
+    const title = getFirstChapterTitle(useAppStore.getState().language);
+    openWorkChapters(currentWorkId, title, { migrateLegacy: currentWorkId === initialWorkId }).then(saved => {
+      if (cancelled) return;
+      const targetChapter = chooseActiveChapterForWork(saved, currentWorkId);
       setChapters(saved);
       setActiveChapterId(targetChapter?.id || null);
-      if (targetChapter?.id) rememberChapterId(targetWorkId, targetChapter.id);
-    }
-  }, [setChapters, setActiveChapterId]);
+      setChapterLoad({ workId: currentWorkId, failed: false });
+    }).catch(error => {
+      if (cancelled) return;
+      console.error('Failed to open chapters:', error.name);
+      setChapterLoad({ workId: currentWorkId, failed: true });
+    });
+    return () => { cancelled = true; };
+  }, [currentWorkId, initialWorkId, chapterReadAttempt, setChapters, setActiveChapterId]);
 
   // 全新打开时，第一章可能在欢迎窗口选语言之前就建好了，只能先叫“第一章”。
   // 语言选定后，如果它还没被改过名、也没写内容，就换成所选语言的默认名。
@@ -439,7 +418,7 @@ export default function Home() {
   const firstChapterTitlePendingRef = useRef(!storeLanguage);
   useEffect(() => {
     if (!firstChapterTitlePendingRef.current || !storeLanguage) return;
-    const workId = chaptersWorkIdRef.current;
+    const workId = chaptersReady && currentWorkId;
     // 章节还没加载完（或第一章正在创建）时先等，加载完会因 chapters 变化再进来
     if (!workId || chapters.length === 0) return;
     firstChapterTitlePendingRef.current = false;
@@ -453,7 +432,7 @@ export default function Home() {
         if (updated) updateChapterStore(retitle.id, { title: retitle.title });
       })
       .catch(error => console.warn('[默认章名] 改名失败', error));
-  }, [storeLanguage, chapters, updateChapterStore]);
+  }, [storeLanguage, chapters, chaptersReady, currentWorkId, updateChapterStore]);
 
   // 初始化数据
   useEffect(() => {
@@ -461,13 +440,9 @@ export default function Home() {
       // 初始化本地持久化与当前同步方式
       await initPersistence();
 
-      const workId = getActiveWorkId();
-      if (workId) {
-        setActiveWorkIdStore(workId);
-        // 一次性迁移旧全局章节
-        await migrateGlobalChapters(workId);
-      }
-      await loadChaptersForWork(workId);
+      const workId = getWorkScopedId();
+      setActiveWorkIdStore(workId);
+      setInitialWorkId(workId);
 
       const savedTheme = localStorage.getItem('author-theme') || 'light';
       setTheme(savedTheme);
@@ -487,7 +462,7 @@ export default function Home() {
       sessionStoreHydratedRef.current = true;
     };
     initData();
-  }, []);
+  }, [setActiveWorkIdStore, setSessionStore, setTheme, setWritingMode]);
 
   useEffect(() => {
     latestSessionStoreRef.current = sessionStore;
@@ -546,13 +521,6 @@ export default function Home() {
     saveGenerationArchive(workId, generationArchive);
   }, [activeWorkId, generationArchive]);
 
-  // 切换作品时重新加载章节
-  const prevWorkIdRef = useRef(activeWorkId);
-  useEffect(() => {
-    if (prevWorkIdRef.current === activeWorkId) return;
-    prevWorkIdRef.current = activeWorkId;
-    loadChaptersForWork(activeWorkId);
-  }, [activeWorkId, loadChaptersForWork]);
   const contextWorkIdRef = useRef(activeWorkId);
 
   // 章节指纹 —— 当章节改名或拖动排序时会变化，触发上下文列表重建
@@ -634,19 +602,18 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [activeWorkId, activeChapterId, activeSession?.id, settingsVersion, chatHistory.length, chaptersFingerprint, memoryGroupsVersion, t]);
 
-  // 定时器只注册一次，存档名通过 ref 读取最新语言，切换语言不会重置备份计时
-  const latestTRef = useRef(t);
-  useEffect(() => {
-    latestTRef.current = t;
-  }, [t]);
+  // 在计时器触发时读取当前作品的加载状态，切换作品或语言不重置计时。
+  const runAutoSnapshot = useEffectEvent(async () => {
+    if (!chaptersReady) return;
+    try {
+      await createSnapshot(t('page.autoSnapshot'), 'auto', { workId: currentWorkId });
+    } catch (error) {
+      console.error(t('page.autoSnapshotFail'), error);
+      showToast(`${t('page.autoSnapshotFail')} ${error.message}`, 'error');
+    }
+  });
 
-  // 定时自动存档 (每 15 分钟)
   useEffect(() => {
-    const runAutoSnapshot = () => {
-      const translate = latestTRef.current;
-      createSnapshot(translate('page.autoSnapshot'), 'auto').catch(e => console.error(translate('page.autoSnapshotFail'), e));
-    };
-
     // 首次加载后延迟 5 分钟做一次初始存档，之后每 15 分钟做一次
     const initialTimer = setTimeout(runAutoSnapshot, 5 * 60 * 1000);
     const intervalTimer = setInterval(runAutoSnapshot, 15 * 60 * 1000);
@@ -658,15 +625,14 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const targetWorkId = getWorkScopedId(activeWorkId);
-    if (chaptersWorkIdRef.current !== targetWorkId) return;
+    if (!chaptersReady) return;
     const selectedChapter = chapters.find(ch => ch.id === activeChapterId);
     if (!isWritableChapter(selectedChapter)) return;
-    rememberChapterId(targetWorkId, activeChapterId);
-  }, [activeChapterId, activeWorkId, chapters]);
+    rememberChapterId(currentWorkId, activeChapterId);
+  }, [activeChapterId, currentWorkId, chapters, chaptersReady]);
 
   // 当前活跃章节
-  const activeChapter = Array.isArray(chapters) ? chapters.find(ch => ch.id === activeChapterId && isWritableChapter(ch)) : null;
+  const activeChapter = chaptersReady ? chapters.find(ch => ch.id === activeChapterId && isWritableChapter(ch)) : null;
 
   const handleToggleActiveChapterSpecial = useCallback(async () => {
     if (!activeChapter || (activeChapter.type || 'chapter') === 'volume') return;
@@ -919,7 +885,7 @@ export default function Home() {
         {/* 挤开模式：侧边栏放在 main 外面 */}
         {sidebarPushMode && (
           <>
-            <Sidebar pushMode onOpenHelp={() => setShowHelp(true)} onToggle={() => setSidebarOpen(!sidebarOpen)} editorRef={editorRef} />
+            <Sidebar pushMode chaptersReady={chaptersReady} onOpenHelp={() => setShowHelp(true)} onToggle={() => setSidebarOpen(!sidebarOpen)} editorRef={editorRef} />
             {sidebarOpen && <div className="resize-handle resize-handle-left" onMouseDown={e => startDrag('left', e)} />}
           </>
         )}
@@ -954,14 +920,20 @@ export default function Home() {
               color: 'var(--text-muted)',
               fontSize: '16px',
             }}>
-              {t('page.noChapterHint')}
+              {chapterReadFailed ? (
+                <div role="alert" style={{ textAlign: 'center', padding: 16 }}>
+                  <p>{t('page.chapterReadFailed')}</p>
+                  <button className="btn btn-ghost" onClick={() => setChapterReadAttempt(n => n + 1)}>{t('page.retryChapterRead')}</button>
+                  <button className="btn btn-ghost" onClick={() => setShowSnapshots(true)}>{t('snapshot.title')}</button>
+                </div>
+              ) : chaptersReady ? t('page.noChapterHint') : null}
             </div>
           )}
 
           {/* 覆盖模式：侧边栏放在 main 里面 */}
           {!sidebarPushMode && (
             <>
-              <Sidebar onOpenHelp={() => setShowHelp(true)} onToggle={() => setSidebarOpen(!sidebarOpen)} editorRef={editorRef} />
+              <Sidebar chaptersReady={chaptersReady} onOpenHelp={() => setShowHelp(true)} onToggle={() => setSidebarOpen(!sidebarOpen)} editorRef={editorRef} />
               {sidebarOpen && <div className="resize-handle resize-handle-left overlay" onMouseDown={e => startDrag('left', e)} />}
             </>
           )}

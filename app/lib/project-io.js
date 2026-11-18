@@ -83,32 +83,45 @@ export async function exportProject() {
     const perWorkInspirations = {};
     const perWorkTimelineEvents = {};
 
+    // 某部作品的某部分读不出时，不写进存档（也不写空数组），并记下来提示用户：
+    // 一部作品坏了不该挡住其余作品的备份；导入这份存档时，缺的那部分保持原样，不会被空数据覆盖。
+    const incomplete = [];
+    const markIncomplete = (work, part) => {
+        let entry = incomplete.find(item => item.id === work.id);
+        if (!entry) incomplete.push(entry = { id: work.id, name: work.name || work.id, parts: [] });
+        entry.parts.push(part);
+    };
+
     for (const work of works) {
         try {
             perWorkChapters[work.id] = await getChapters(work.id);
         } catch {
-            perWorkChapters[work.id] = [];
+            markIncomplete(work, 'chapters');
         }
         try {
+            // getSettingsNodes 读不出时会退回默认设定，先确认原记录可读，免得存档里是默认值。
+            const storedSettings = await persistGet(`author-settings-nodes-${work.id}`);
+            if (storedSettings != null && !Array.isArray(storedSettings)) throw new Error('Invalid settings nodes');
             perWorkSettings[work.id] = await getSettingsNodes(work.id);
         } catch {
-            perWorkSettings[work.id] = [];
+            markIncomplete(work, 'settings');
         }
         try {
             perWorkInspirations[work.id] = await persistGet(`author-inspirations-${work.id}`) || [];
         } catch {
-            perWorkInspirations[work.id] = [];
+            markIncomplete(work, 'inspirations');
         }
         try {
             perWorkTimelineEvents[work.id] = await persistGet(`author-timeline-events-${work.id}`) || [];
         } catch {
-            perWorkTimelineEvents[work.id] = [];
+            markIncomplete(work, 'timelineEvents');
         }
     }
     data.perWorkChapters = perWorkChapters;
     data.perWorkSettings = perWorkSettings;
     data.perWorkInspirations = perWorkInspirations;
     data.perWorkTimelineEvents = perWorkTimelineEvents;
+    if (incomplete.length) data._incomplete = incomplete;
 
     // 生成文件名
     const now = new Date();
@@ -117,9 +130,8 @@ export async function exportProject() {
 
     // 下载
     const jsonStr = JSON.stringify(data, null, 2);
-    await downloadFile(jsonStr, fileName, 'application/json');
-
-    return fileName;
+    // 取消保存返回 null；incomplete 列出未能写进存档的作品及部分。
+    return await downloadFile(jsonStr, fileName, 'application/json') ? { fileName, incomplete } : null;
 }
 
 /**
@@ -786,9 +798,9 @@ export async function downloadFile(content, fileName, mimeType = 'text/plain') {
             const writable = await handle.createWritable();
             await writable.write(content);
             await writable.close();
-            return;
+            return true;
         } catch (e) {
-            if (e.name === 'AbortError') return;
+            if (e.name === 'AbortError') return false;
             console.warn('showSaveFilePicker fallback:', e);
         }
     }
@@ -799,6 +811,7 @@ export async function downloadFile(content, fileName, mimeType = 'text/plain') {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    return true;
 }
 
 // Blob 版下载（给 DOCX/EPUB 等二进制格式用）

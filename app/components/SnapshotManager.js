@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, Star } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useI18n } from '../lib/useI18n';
-import { getSnapshots, createSnapshot, restoreSnapshot, deleteSnapshot, getPendingSnapshotRestore } from '../lib/snapshots';
+import { getSnapshots, createSnapshot, restoreSnapshot, deleteSnapshot, getPendingSnapshotRestore, getSnapshotChapters, CURRENT_UNREADABLE_CODE } from '../lib/snapshots';
+import { exportWorkAsMarkdown } from '../lib/project-io';
 import { promptInput } from '../lib/promptInput';
 import { waitForLocalSaves } from '../lib/local-save-status';
 
@@ -73,7 +74,14 @@ export default function SnapshotManager({ onRestored }) {
 
         setIsRestoring(true);
         try {
-            await restoreSnapshot(snap.id);
+            try {
+                await restoreSnapshot(snap.id);
+            } catch (e) {
+                // 当前作品有读不出的内容，没法先备份它：问过用户再用快照替换。
+                if (e?.code !== CURRENT_UNREADABLE_CODE) throw e;
+                if (!confirm(t('snapshot.confirmReplaceUnreadable'))) return;
+                await restoreSnapshot(snap.id, { replaceUnreadable: true });
+            }
             // Restored conversations can schedule a local autosave. Finish it
             // before reloading, or Electron's unload guard cancels the refresh
             // and leaves the editor showing the pre-restore document.
@@ -102,6 +110,15 @@ export default function SnapshotManager({ onRestored }) {
     };
 
     const selectedSnap = snapshots.find(s => s.id === selectedId);
+
+    const exportSnapshotChapters = async () => {
+        try {
+            const chapters = await getSnapshotChapters(selectedId);
+            await exportWorkAsMarkdown(chapters, selectedSnap.label);
+        } catch (error) {
+            alert(t('sidebar.projectExportFailed', { error: error.message }));
+        }
+    };
 
     const formatDate = (ts) => {
         const d = new Date(ts);
@@ -228,6 +245,9 @@ export default function SnapshotManager({ onRestored }) {
                                 </div>
 
                                 <div style={{ marginTop: 'auto', paddingTop: 20, borderTop: '1px solid var(--border-light)', textAlign: 'right' }}>
+                                    <button className="btn btn-ghost" onClick={exportSnapshotChapters} disabled={loading || !!loadError || !selectedSnap.data?.chapters?.length}>
+                                        {t('snapshot.exportChapters')}
+                                    </button>
                                     <button
                                         className="btn btn-primary"
                                         style={{ background: 'var(--error)', borderColor: 'var(--error)', padding: '10px 24px', fontSize: 14 }}

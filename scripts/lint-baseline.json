@@ -41,7 +41,6 @@
     "[\"app/lib/useI18n.js\",\"react-hooks/set-state-in-effect\",\"Error: Calling setState synchronously within an effect can trigger cascading renders\"]": 1,
     "[\"app/page.js\",\"react-hooks/exhaustive-deps\",\"React Hook useCallback has a missing dependency: 't'. Either include it or remove the dependency array.\"]": 1,
     "[\"app/page.js\",\"react-hooks/exhaustive-deps\",\"React Hook useEffect has a missing dependency: '_hydrateSidebarModes'. Either include it or remove the dependency array.\"]": 1,
-    "[\"app/page.js\",\"react-hooks/exhaustive-deps\",\"React Hook useEffect has missing dependencies: 'loadChaptersForWork', 'setActiveWorkIdStore', 'setSessionStore', 'setTheme', and 'setWritingMode'. Either include them or remove the dependency array.\"]": 1,
     "[\"app/store/useAppStore.js\",\"react-hooks/refs\",\"Error: Cannot access refs during render\"]": 2
   }
 }

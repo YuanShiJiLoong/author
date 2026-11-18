@@ -164,6 +164,7 @@ export async function persistGet(key, options = {}) {
     if (!usesFileStorage(key)) {
         const value = await browserGet(key);
         options.assertCurrent?.();
+        if (value !== undefined) options.validateValue?.(value);
         return value;
     }
     options = fileStorageOptions(options);
@@ -185,6 +186,8 @@ export async function persistGet(key, options = {}) {
         options.signal?.throwIfAborted();
     }
     if (received) {
+        // 文件接口用 null 表示键不存在。其他值先校验，再更新本机缓存。
+        if (remote != null) options.validateValue?.(remote);
         // 读取期间若发生本地保存，返回新本地稿；迟到的 GET 不得覆盖它。
         try { return await cacheFileRead(key, remote, local.state, options); }
         catch (error) {
@@ -195,7 +198,11 @@ export async function persistGet(key, options = {}) {
             return remote ?? undefined;
         }
     }
-    return (await readFileState(key, options)).value;
+    const fallback = await readFileState(key, options);
+    if (options.validateValue && fallback.value === undefined && !fallback.state?.deleted && (fallback.state || _serverAvailable !== false)) {
+        throw new Error('Could not read the file or find a local copy');
+    }
+    return fallback.value;
 }
 
 /**
@@ -207,7 +214,7 @@ export async function persistSet(key, value, options = {}) {
     options.assertCurrent?.();
     options.signal?.throwIfAborted();
     if (typeof window !== 'undefined' && window._isAppForcePulling && !window._isForcePullingBypass && !options.bypassForcePull) {
-        if (options.signal) throw new Error('同步写入已暂停，请稍后重试');
+        if (options.signal || options.requireWrite) throw new Error('同步写入已暂停，请稍后重试');
         return;
     }
     if (typeof window === 'undefined') return;
@@ -345,6 +352,7 @@ async function readStateFromStore(store, key) {
     const [value, state] = await Promise.all([
         promisifyRequest(store.get(key)), promisifyRequest(store.get(fileStateKey(key))),
     ]);
+    if (state?.pending && !state.deleted && value === undefined) throw new Error('Pending value is missing for its recorded revision');
     return { value: state?.deleted ? undefined : value, state };
 }
 
@@ -352,6 +360,7 @@ function readFileState(key, options) {
     return browserTransaction(async store => {
         const local = await readStateFromStore(store, key);
         options.assertCurrent?.();
+        if (local.value !== undefined) options.validateValue?.(local.value);
         // 旧浏览器稿没有确认记录，不能推断服务器那份更新；先保住本地内容。
         if (!local.state && local.value !== undefined) {
             local.state = { ...newFileState(false), unverified: true };
@@ -365,7 +374,10 @@ function cacheFileRead(key, value, previousState, options) {
     return browserTransaction(async store => {
         const local = await readStateFromStore(store, key);
         options.assertCurrent?.();
-        if (local.state?.revision !== previousState?.revision || local.state?.pending) return local.value;
+        if (local.state?.revision !== previousState?.revision || local.state?.pending) {
+            if (local.value !== undefined) options.validateValue?.(local.value);
+            return local.value;
+        }
         const deleted = value === null || value === undefined;
         if (deleted) store.delete(key);
         else store.put(value, key);

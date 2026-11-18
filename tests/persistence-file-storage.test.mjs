@@ -197,6 +197,49 @@ test('server-only data is cached for offline reading', async t => {
     assert.deepEqual(f.values.get(KEY), { text: 'server original' });
 });
 
+const chapterRead = { validateValue: value => {
+    if (!Array.isArray(value)) throw new Error('Invalid chapter list');
+} };
+
+test('validated reads reject malformed files before replacing the last readable browser copy', async t => {
+    const f = await fixture(t);
+    const chapters = [{ id: 'chapter', content: 'saved locally' }];
+    await f.api.persistSet(KEY, chapters, { awaitServerWrite: true });
+    f.server.set(KEY, {});
+    await assert.rejects(f.api.persistGet(KEY, chapterRead), /Invalid chapter list/);
+    assert.deepEqual(f.values.get(KEY), chapters);
+});
+
+test('a malformed legacy browser value is never queued for file migration by a chapter read', async t => {
+    const f = await fixture(t);
+    f.values.set(KEY, false);
+    await assert.rejects(f.api.persistGet(KEY, chapterRead), /Invalid chapter list/);
+    await f.drain();
+    assert.deepEqual([...f.values], [[KEY, false]]);
+    assert.equal(f.requests.length, 0);
+});
+
+test('file read failure without a cached copy cannot initialize an empty chapter list', async t => {
+    const f = await fixture(t);
+    f.env.getStatus = 500;
+    await assert.rejects(f.api.persistGet(KEY, chapterRead));
+    assert.equal(f.values.has(KEY), false);
+    f.env.getStatus = 200;
+    f.server.set(KEY, [{ id: 'saved' }]);
+    assert.deepEqual(await f.api.persistGet(KEY, chapterRead), [{ id: 'saved' }]);
+});
+
+test('a lost pending value and a paused migration cannot be acknowledged as successful', async t => {
+    const f = await fixture(t);
+    f.env.pingStatus = 403;
+    await f.api.persistSet(KEY, [], { awaitServerWrite: true });
+    f.values.delete(KEY);
+    await assert.rejects(f.api.persistGet(KEY, chapterRead), /missing/);
+    f.globals.window._isAppForcePulling = true;
+    await assert.rejects(f.api.persistSet(KEY, [], { requireWrite: true }));
+    assert.equal(f.values.has(KEY), false);
+});
+
 test('failure to save pending metadata aborts the data write and reports a local save error', async t => {
     const f = await fixture(t);
     f.values.set(KEY, { text: 'original' });
