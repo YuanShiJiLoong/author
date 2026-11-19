@@ -437,7 +437,7 @@
     "source": {
       "cloud": "Your sync account",
       "webdav": "Your WebDAV storage",
-      "snapshot": "Auto-save on this computer"
+      "snapshot": "Auto-save on this device"
     }
   },
   "page": {

@@ -587,9 +587,10 @@ function createWindow() {
             const crashReportPath = writeCrashReport('render-process-gone', details);
             const options = {
                 type: 'error',
-                title: '系统崩溃拦截',
-                message: '渲染进程由于致命错误（如内存不足或驱动异常）突然终止。',
-                detail: `崩溃原因: ${details.reason}\n错误码: ${details.exitCode}\n\n诊断日志:\n${crashReportPath || logFile}\n\n最近的编辑可能尚未保存。重启后请核对章节，也可以在时光机中查看历史版本。`,
+                title: '程序意外退出了',
+                message: '程序意外退出了',
+                // 先说用户该做什么；排查用的原因、代码和日志位置放在最后。
+                detail: `最近的编辑可能还没保存。重启后请核对章节，也可以在时光机里找回历史版本。\n\n排查用：原因 ${details.reason}，代码 ${details.exitCode}\n日志：${crashReportPath || logFile}`,
                 buttons: ['立即重启', '打开日志目录', '结束应用'],
                 defaultId: 0,
                 cancelId: 2,

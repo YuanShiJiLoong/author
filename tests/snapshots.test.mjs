@@ -274,7 +274,7 @@ test('unreadable current chapters need confirmation, then the snapshot replaces 
             assert.deepEqual(backupData.settingsNodes, [{ id: 'current-setting' }]);
             assert.deepEqual(backupData.chapters, []);
             assert.deepEqual(backupData.unreadable, { chapters: damage === 'malformed' ? broken : null });
-            assert.match(backup.label, /unreadable/);
+            assert.match(backup.label, /couldn't be opened/);
         });
     }
 });

@@ -45,13 +45,16 @@ async function fixture(t) {
     return { api, env, values };
 }
 
+// 读不出时给用户的是一句大白话，底层原因留在 cause 里。
+const unreadable = cause => error => /couldn't be opened|没能打开/.test(error.message) && (!cause || cause.test(error.cause?.message));
+
 const draft = (overrides = {}) => ({ content: 'local', wordCount: 5, baseContent: 'base', backupSuffix: 'External backup', ...overrides });
 
 test('unreadable chapters stop opening, and a retry reads the original draft', async t => {
     const f = await fixture(t);
     f.env.failReadKey = 'author-chapters-a';
-    await assert.rejects(f.api.openWorkChapters('a', 'First chapter'), /Synthetic read failure/);
-    await assert.rejects(f.api.getChapters('a'), /Synthetic read failure/);
+    await assert.rejects(f.api.openWorkChapters('a', 'First chapter'), unreadable(/Synthetic read failure/));
+    await assert.rejects(f.api.getChapters('a'), unreadable(/Synthetic read failure/));
     f.env.failReadKey = undefined;
     assert.equal((await f.api.openWorkChapters('a', 'First chapter'))[0].content, 'base');
     assert.deepEqual(f.env.writes, []);
@@ -90,7 +93,7 @@ test('legacy read or copy failure can be retried before a first chapter is creat
     f.values.set('author-chapters', legacy);
     const open = () => f.api.openWorkChapters('new', 'First chapter', { migrateLegacy: true });
     f.env.failReadKey = 'author-chapters';
-    await assert.rejects(open(), /Synthetic read failure/);
+    await assert.rejects(open(), unreadable(/Synthetic read failure/));
     f.env.failReadKey = undefined;
     f.env.fail = true;
     await assert.rejects(open(), /Synthetic write failure/);

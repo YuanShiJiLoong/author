@@ -299,7 +299,7 @@ async function createSnapshotNow(label, type, { workId, strictRead = false, repl
             id: newSnapshotId(),
             timestamp: Date.now(),
             label: hasUnreadable
-                ? baseLabel + text('（部分内容读不出，未能备份）', ' (some content was unreadable and not backed up)', ' (часть содержимого не читалась и не сохранена)')
+                ? baseLabel + text('（当时作品打不开，有些内容没能备份）', " (the work couldn't be opened, so some content wasn't backed up)", ' (произведение не открывалось, часть данных не сохранена)')
                 : baseLabel,
             type,
             stats: {

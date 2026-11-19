@@ -437,7 +437,7 @@
         "source": {
             "cloud": "你的同步账号",
             "webdav": "你的 WebDAV 网盘",
-            "snapshot": "这台电脑上的自动存档"
+            "snapshot": "这台设备上的自动存档"
         }
     },
     "page": {

@@ -40,11 +40,27 @@ export function validateChapterList(chapters) {
     if (Array.isArray(chapters) && chapters.findIndex(ch =>
         !ch || typeof ch !== 'object' || !ch.id || (ch.content != null && typeof ch.content !== 'string')
     ) === -1) return;
-    throw localizedError('章节记录格式异常。', 'The stored chapter list is invalid.', 'Неверный формат сохранённых глав.');
+    throw localizedError('章节内容不完整，没法使用。', "This chapter data is incomplete and can't be used.", 'Данные глав неполные, использовать их нельзя.');
+}
+
+// 作品读不出来时，各处提示（存档失败、自动存档失败等）都给同一句用户看得懂的话，
+// 底层原因留在 cause 里供排查。
+function workUnreadableError(cause) {
+    const error = localizedError(
+        '这部作品没能打开，回到写作页面可以恢复它。',
+        "This work couldn't be opened. Go back to the writing page to restore it.",
+        'Не удалось открыть произведение. Вернитесь на страницу письма, чтобы восстановить его.',
+    );
+    if (cause) error.cause = cause;
+    return error;
 }
 
 async function readStoredChapters(key) {
-    return persistGet(key, { validateValue: validateChapterList });
+    try {
+        return await persistGet(key, { validateValue: validateChapterList });
+    } catch (error) {
+        throw workUnreadableError(error);
+    }
 }
 
 async function readChapters(workId, requireStored) {
@@ -84,7 +100,7 @@ export function openWorkChapters(workId, firstTitle, { migrateLegacy = false } =
 }
 
 function missingChapterRecord() {
-    return localizedError('找不到这部作品的章节记录。', 'No chapter record was found for this work.', 'Не найдена запись глав этого произведения.');
+    return workUnreadableError();
 }
 
 // 获取所有章节 (Async)
