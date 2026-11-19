@@ -15,7 +15,7 @@ import { isSyncableKey } from './sync-key-policy';
 import { localizedError } from './runtime-i18n';
 import { waitForLocalSaves } from './local-save-status';
 import { authorizedFetch, isCustomSignedIn, getCustomAuthContext, assertCustomAuthContext, isCustomAuthContextCurrent } from './custom-auth';
-import { fingerprint, parseKey, itemToKey, diffKeyToItems, matchPushResults, mergeItemsIntoLocal, latestItemsById, locallyChangedItemIds, splitPushBatches, utf8ByteLength } from './custom-sync-core';
+import { fingerprint, parseKey, itemToKey, diffKeyToItems, matchPushResults, mergeItemsIntoLocal, latestItemsById, locallyChangedItemIds, splitPushBatches, utf8ByteLength, isDamagedItemArray } from './custom-sync-core';
 
 // ==================== 配置 ====================
 
@@ -342,13 +342,14 @@ async function flushPendingSync(options, context) {
     let sawStale = false;
     let unconfirmed = false;
     const oversizedItems = [];
+    const damagedKeys = [];
 
     try {
         for (const key of keys) {
             if (!isSyncableKey(key)) continue;
             const editSeq = _editSeq.get(key) || 0; // 读取之后再有修改，就不能算推完
             const value = await readLocal(key, context);
-            const { items, nextItemState } = diffKeyToItems(
+            const { items, nextItemState, damagedLocalValue } = diffKeyToItems(
                 key, value, now, _state.keys[key] || {}, _state.pending[key] || {},
                 {
                     freshClientUpdatedAt: Object.hasOwn(restoredKeys, key)
@@ -356,6 +357,12 @@ async function flushPendingSync(options, context) {
                         : new Set(Object.keys(_state.stale?.[key] || {})),
                 },
             );
+            if (damagedLocalValue) {
+                // 不上传、不发删除；这个 key 留在待同步里，记录恢复后自然推上去。
+                damagedKeys.push(key);
+                recordSyncDiagnostic('sync.cloud.push-damaged-local', '本地记录已损坏，未上传，也未发送删除', { key }, 'error');
+                continue;
+            }
             if (items.length === 0) {
                 _state.keys[key] = nextItemState;
                 if ((_editSeq.get(key) || 0) === editSeq) delete _state.dirty[key];
@@ -438,6 +445,13 @@ async function flushPendingSync(options, context) {
         if (sawStale) { try { await pullCloudItems(context); } catch {} }
         assertOperation(context);
         if (oversizedItems.length > 0) throw oversizedItemsError(oversizedItems);
+        if (damagedKeys.length > 0) {
+            throw localizedError(
+                '有一部作品打不开，暂时没有上传它。打开这部作品就能看到恢复的办法。',
+                "One work can't be opened, so it wasn't uploaded. Open that work to see how to restore it.",
+                'Одно произведение не открывается, поэтому оно не загружено. Откройте его, чтобы восстановить.',
+            );
+        }
         if (unconfirmed) throw new Error('部分内容尚未同步，本地修改已保留，请稍后重试');
         notifyStatus({ syncing: false, pending: _pendingKeys.size, lastSync: Date.now() });
     } catch (err) {
@@ -501,6 +515,12 @@ async function pullCloudItems(context) {
             const meta = parseKey(key);
             if (!meta) continue;
             let localValue = await readLocal(key, context);
+            if (isDamagedItemArray(meta.kind, localValue)) {
+                // 本地记录已损坏：增量拉取只有部分条目，合并进去会变成残缺的列表，
+                // 接着还会把其余条目当成“本地删除”推出去。保持原样，等用户恢复。
+                recordSyncDiagnostic('sync.cloud.pull-damaged-local', '本地记录已损坏，跳过合并', { key, items: items.length }, 'error');
+                continue;
+            }
             const localChanges = meta.kind === 'works_index' ? new Set() : locallyChangedItemIds(localValue, _state.keys[key] || {});
             const applicable = [];
             for (const item of latestItemsById(items)) {
@@ -611,6 +631,61 @@ async function forcePullCloudItems(context) {
         if (operationIsCurrent(context)) notifyStatus({ syncing: false, error: err?.message || '从云端拉取失败' });
         throw err;
     }
+}
+
+// ==================== 只恢复一部作品 ====================
+
+// 只读取云端某一个 key 当前的完整内容，不改本地。云端没有时返回 null。
+// 不像“从云端同步”那样把整个账号都盖一遍：其他作品还没上传的修改不受影响。
+export function fetchKeyFromCloud(key) {
+    return serializeSync(context => fetchCloudKey(key, context));
+}
+
+async function fetchCloudKey(key, context) {
+    if (!isCustomSignedIn()) return null;
+    const meta = parseKey(key);
+    if (!meta) return null;
+    const items = [];
+    let since = 0;
+    let hasMore = true;
+    let pages = 0;
+    while (hasMore) {
+        if (++pages > 1000) throw new Error('云端分页过多，已停止读取');
+        const res = await authorizedFetch('/api/free/sync/pull', { method: 'GET', query: { since, limit: PULL_LIMIT }, authContext: context.auth, signal: context.signal });
+        assertOperation(context);
+        if (!res.ok) throw new Error(`从云端读取失败（HTTP ${res.status}）`);
+        const data = await res.json().catch(() => null);
+        assertOperation(context);
+        if (!data?.ok) throw new Error('从云端读取失败：服务器响应异常');
+        for (const it of (data.items || [])) {
+            if (itemToKey(it) === key) items.push(it);
+        }
+        const nextSince = data.nextSince ?? since;
+        hasMore = Boolean(data.hasMore);
+        if (hasMore && !(nextSince > since)) throw new Error('云端游标未推进，已停止读取');
+        since = nextSince;
+    }
+    if (items.length === 0) return null;
+    const { value } = mergeItemsIntoLocal(meta.kind, undefined, items, {});
+    return { key, value: value ?? null, items };
+}
+
+// 用读到的云端内容替换本地这一个 key，并让它的同步基线与云端一致，
+// 之后只上传真正的新修改。value 可以是调整过章节顺序的同一份内容。
+export function applyCloudKeySnapshot(snapshot, value = snapshot.value) {
+    return serializeSync(async context => {
+        assertOperation(context);
+        await writeLocal(snapshot.key, value, context);
+        _state.keys[snapshot.key] = {};
+        commitPulledState(snapshot.key, snapshot.items);
+        delete _state.pending[snapshot.key];
+        if (_state.stale) delete _state.stale[snapshot.key];
+        if (_state.dirty) delete _state.dirty[snapshot.key];
+        _pendingKeys.delete(snapshot.key);
+        clearRestoredKey(snapshot.key);
+        saveState();
+        return true;
+    });
 }
 
 // ==================== 清理 ====================

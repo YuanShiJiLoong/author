@@ -66,6 +66,12 @@ export function splitPushBatches(items, { maxItems, maxBytes }) {
 }
 
 // 存储键 → { kind, workId }
+// 章节 / 设定 / 记忆组的值必须是数组；“没有”（null/undefined）是合法的空。
+// 既不是数组也不是“没有”，说明本地记录已经损坏，同步层必须原样跳过。
+export function isDamagedItemArray(kind, value) {
+    return !!kind && kind !== 'works_index' && value != null && !Array.isArray(value);
+}
+
 export function parseKey(key) {
     if (key === 'author-works-index') return { kind: 'works_index', workId: '_index' };
     if (key.startsWith('author-chapters-')) return { kind: 'chapter', workId: key.slice(16) };
@@ -111,6 +117,12 @@ export function diffKeyToItems(key, value, now, prevItemState = {}, pendingItemS
         }
         next._index = { hash };
         return { items, nextItemState: next };
+    }
+
+    // 本地记录已损坏：不能当成空数组，否则每一条都会被当成“已删除”推给其他设备。
+    // 保留上次的同步状态，什么也不推，等记录被恢复后再照常比较。
+    if (isDamagedItemArray(kind, value)) {
+        return { items: [], nextItemState: { ...prev }, damagedLocalValue: true };
     }
 
     // 数组类：chapter / settings_node / memory_group
@@ -214,6 +226,9 @@ export function mergeItemsIntoLocal(kind, localValue, items, prevItemState = {})
         if (fingerprint(latest.value) === fingerprint(localValue)) return { changed: false, value: localValue };
         return { changed: true, value: latest.value };
     }
+
+    // 本地记录已损坏：增量拉取只带部分条目，合并进去会得到残缺的列表。保持原样。
+    if (isDamagedItemArray(kind, localValue)) return { changed: false, value: localValue, damagedLocalValue: true };
 
     // 数组类：按 id 合并，保留本地顺序，新增追加末尾
     const local = Array.isArray(localValue) ? localValue : [];

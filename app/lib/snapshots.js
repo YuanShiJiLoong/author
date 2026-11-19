@@ -247,9 +247,9 @@ export const CURRENT_UNREADABLE_CODE = 'SNAPSHOT_CURRENT_UNREADABLE';
 
 function currentUnreadableError(cause) {
     const error = new Error(text(
-        '当前作品有内容读不出来，恢复前无法备份这部分。',
-        'Part of the current work cannot be read, so it cannot be backed up before restoring.',
-        'Часть текущего произведения не читается, поэтому её нельзя сохранить перед восстановлением.',
+        '这部作品现在打不开，没法在恢复前先给它做备份。',
+        "This work can't be opened right now, so it can't be backed up first.",
+        'Это произведение сейчас не открывается, поэтому его нельзя сначала сохранить.',
     ));
     error.code = CURRENT_UNREADABLE_CODE;
     error.cause = cause;

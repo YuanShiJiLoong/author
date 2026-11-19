@@ -164,3 +164,18 @@ test('单条就放不进一个请求的条目单独隔离，不连累前后条�
     assert.equal(oversized[0].item, huge);
     assert.equal(oversized[0].bytes, bodyBytes([huge]));
 });
+
+for (const kind of ['chapter', 'settings_node', 'memory_group']) {
+    test(`${kind}: a damaged local value is never diffed into deletions or merged into a partial list`, () => {
+        const key = { chapter: 'author-chapters-w', settings_node: 'author-settings-nodes-w', memory_group: 'author-chapter-memory-groups-w' }[kind];
+        const prev = baseline([row('one', 'a'), row('two', 'b')]);
+        for (const damaged of [{ broken: true }, 'not json', 42, false]) {
+            const diff = diffKeyToItems(key, damaged, 'now', prev);
+            assert.deepEqual(diff, { items: [], nextItemState: prev, damagedLocalValue: true });
+            const merge = mergeItemsIntoLocal(kind, damaged, [remote(row('one', 'remote'), 5)], prev);
+            assert.deepEqual(merge, { changed: false, value: damaged, damagedLocalValue: true });
+        }
+        // 记录不存在（整部作品删掉）仍是合法的删除。
+        assert.deepEqual(diffKeyToItems(key, undefined, 'now', prev).items.map(item => [item.itemId, item.deleted]), [['one', true], ['two', true]]);
+    });
+}

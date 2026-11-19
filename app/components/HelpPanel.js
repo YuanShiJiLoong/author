@@ -328,6 +328,8 @@ AI 生成的非标准字段会自动出现在 **✨ AI 生成的额外字段** �
 ### 快照恢复
 时光机只恢复所选快照所属的作品，其他作品保持不变。恢复前会保留备份；如果恢复中断，可在历史版本中选择恢复前备份或原快照重试。较新的对话继续保留，有变化的旧对话会恢复为副本。
 
+作品打不开时，会直接显示恢复页面：程序会比较你的同步账号、WebDAV 和本机自动存档，把最新的版本放在最前面，点「恢复这个版本」就行，打不开的那份会另外留着。自动存档只在内容有变化时才保存，长时间开着不写，也不会把旧存档挤掉。
+
 ### 左侧导航栏按钮
 
 | 图标 | 功能 |
@@ -1011,6 +1013,8 @@ Editor content is **saved automatically**. Creative data is stored in browser In
 ### Snapshot Recovery
 Time Machine restores only the work that belongs to the selected snapshot. Other works stay unchanged, and a backup is kept before restoration. If restoration is interrupted, select the backup or original snapshot in revision history to recover or retry. Newer conversations are retained, and changed older conversations are restored as copies.
 
+If a work can't be opened, a recovery page appears instead. It compares your sync account, WebDAV, and this device's auto-saves, puts the newest version first, and restores it when you select **Restore this version**. The unreadable copy is kept aside. Auto-saves are only made when something has changed, so leaving the app open won't push older saves out.
+
 ### Left Navigation Buttons
 | Icon | Function |
 |------|----------|
@@ -1628,6 +1632,8 @@ Author использует prompt caching там, где провайдер п�
 
 ### Восстановление снимка
 Машина времени восстанавливает только произведение из выбранного снимка, не затрагивая другие произведения. Сначала создается резервная копия. Если восстановление прервано, выберите резервную копию или исходный снимок в истории версий, чтобы восстановить данные или повторить попытку. Более новые диалоги сохраняются, а измененные старые диалоги восстанавливаются как копии.
+
+Если произведение не открывается, появляется страница восстановления. Она сравнивает аккаунт синхронизации, WebDAV и автосохранения на этом устройстве, ставит самую новую версию первой и восстанавливает её по кнопке **Восстановить эту версию**. Нечитаемая копия сохраняется отдельно. Автосохранение создаётся только при изменениях, поэтому открытое без дела приложение не вытесняет старые сохранения.
 
 ### Импорт и экспорт
 Импорт поддерживает TXT, Markdown, EPUB, DOCX, DOC и PDF. При импорте в существующее произведение Author распознает номера глав, объединяет без конфликтов и показывает окно выбора при конфликтах.

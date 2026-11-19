@@ -610,3 +610,66 @@ test('切到后台（锁屏、切应用）立即推送，不等 5 分钟定时�
     assert.equal(pushRequests(f).length, 1);
     assert.ok(f.requests.at(-1).path.endsWith('/pull'));
 });
+
+test('本地章节记录损坏：不上传、不发删除，其余作品照常上传；恢复后正常推送', async t => {
+    const base = [chapter('c1', 'one'), chapter('c2', 'two')];
+    const OTHER = 'author-chapters-work-other';
+    const f = await fixture(t, { baseline: base, local: { broken: true } });
+    f.values.set(OTHER, [chapter('o1', 'other work')]);
+    f.sync.customEnqueue(KEY);
+    f.sync.customEnqueue(OTHER);
+    await assert.rejects(f.sync.flushSync({ throwOnError: true }), /打开这部作品/);
+    const sent = pushRequests(f).flatMap(request => request.options.body.items);
+    assert.equal(sent.some(item => item.deleted), false);
+    assert.deepEqual(sent.map(item => item.itemId), ['o1']);
+    assert.deepEqual(Object.keys(f.state().keys[KEY]).sort(), ['c1', 'c2']);
+    assert.equal(f.state().pending?.[KEY], undefined);
+    assert.deepEqual(f.values.get(KEY), { broken: true });
+    assert.ok(f.statuses.at(-1).pending > 0);
+
+    // 用户恢复后，只推真正的变化，不会把别的章节当删除。
+    f.values.set(KEY, [chapter('c1', 'one'), chapter('c2', 'restored two')]);
+    await f.sync.flushSync({ throwOnError: true });
+    const afterRestore = pushRequests(f).flatMap(request => request.options.body.items).filter(item => item.workId === 'work-test');
+    assert.deepEqual(afterRestore.map(item => [item.itemId, !!item.deleted]), [['c2', false]]);
+});
+
+test('本地章节记录损坏时拉取云端：不写残缺列表，也不把章节记成本地删除', async t => {
+    const base = [chapter('c1', 'one'), chapter('c2', 'two')];
+    const f = await fixture(t, { baseline: base, local: { broken: true } });
+    f.env.pull = async () => response({ ok: true, items: [cloudItem(chapter('c1', 'remote edit'), 2)], nextSince: 2 });
+    await f.sync.pullFromCloud();
+    assert.deepEqual(f.values.get(KEY), { broken: true });
+    assert.equal(f.state().pending?.[KEY], undefined);
+    assert.equal(f.backups().length, 0);
+});
+
+test('只恢复这一部作品：只读这部作品的云端内容，写回后同步基线对齐，不会再推旧内容', async t => {
+    const OTHER = 'author-chapters-work-other';
+    const f = await fixture(t, { baseline: [chapter('c1', 'old')], local: { broken: true } });
+    f.values.set(OTHER, [chapter('o1', 'unpushed edit on another work')]);
+    f.sync.customEnqueue(OTHER);
+    f.env.pull = async query => response(query.since === 0
+        ? { ok: true, items: [
+            cloudItem(chapter('c1', 'cloud c1'), 5),
+            cloudItem(chapter('c2', 'cloud c2'), 6),
+            { kind: 'chapter', workId: 'work-other', itemId: 'o1', value: chapter('o1', 'cloud o1'), serverSeq: 7 },
+        ], nextSince: 7, hasMore: false }
+        : { ok: true, items: [], nextSince: 7, hasMore: false });
+
+    const snapshot = await f.sync.fetchKeyFromCloud(KEY);
+    assert.deepEqual(snapshot.value.map(c => c.id), ['c1', 'c2']);
+    assert.deepEqual(f.values.get(KEY), { broken: true }); // 只读，不改本地
+
+    await f.sync.applyCloudKeySnapshot(snapshot, [...snapshot.value].reverse());
+    assert.deepEqual(f.values.get(KEY).map(c => c.id), ['c2', 'c1']);
+    assert.deepEqual(Object.keys(f.state().keys[KEY]).sort(), ['c1', 'c2']);
+    // 其他作品还没上传的修改不受影响。
+    assert.equal(f.values.get(OTHER)[0].content, 'unpushed edit on another work');
+
+    f.sync.customEnqueue(KEY);
+    await f.sync.flushSync({ throwOnError: true });
+    const sent = pushRequests(f).flatMap(request => request.options.body.items);
+    assert.equal(sent.some(item => item.workId === 'work-test'), false);
+    assert.deepEqual(sent.map(item => item.itemId), ['o1']);
+});

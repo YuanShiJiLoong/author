@@ -9,6 +9,7 @@ import { Menu, Sparkles, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 import Tooltip from './components/ui/Tooltip';
 import BeianNotice from './components/BeianNotice';
 import LocalSaveIndicator from './components/LocalSaveIndicator';
+import WorkRecoveryPanel from './components/WorkRecoveryPanel';
 import {
   openWorkChapters,
   getRememberedChapterId,
@@ -177,7 +178,6 @@ export default function Home() {
   const sessionSaveOperationRef = useRef(null);
   const [initialWorkId, setInitialWorkId] = useState(null);
   const [chapterLoad, setChapterLoad] = useState(null);
-  const [chapterReadAttempt, setChapterReadAttempt] = useState(0);
   const currentWorkId = getWorkScopedId(activeWorkId);
   const chaptersReady = chapterLoad?.workId === currentWorkId && !chapterLoad.failed;
   const chapterReadFailed = chapterLoad?.workId === currentWorkId && chapterLoad.failed;
@@ -409,7 +409,7 @@ export default function Home() {
       setChapterLoad({ workId: currentWorkId, failed: true });
     });
     return () => { cancelled = true; };
-  }, [currentWorkId, initialWorkId, chapterReadAttempt, setChapters, setActiveChapterId]);
+  }, [currentWorkId, initialWorkId, setChapters, setActiveChapterId]);
 
   // 全新打开时，第一章可能在欢迎窗口选语言之前就建好了，只能先叫“第一章”。
   // 语言选定后，如果它还没被改过名、也没写内容，就换成所选语言的默认名。
@@ -921,11 +921,7 @@ export default function Home() {
               fontSize: '16px',
             }}>
               {chapterReadFailed ? (
-                <div role="alert" style={{ textAlign: 'center', padding: 16 }}>
-                  <p>{t('page.chapterReadFailed')}</p>
-                  <button className="btn btn-ghost" onClick={() => setChapterReadAttempt(n => n + 1)}>{t('page.retryChapterRead')}</button>
-                  <button className="btn btn-ghost" onClick={() => setShowSnapshots(true)}>{t('snapshot.title')}</button>
-                </div>
+                <WorkRecoveryPanel workId={currentWorkId} />
               ) : chaptersReady ? t('page.noChapterHint') : null}
             </div>
           )}

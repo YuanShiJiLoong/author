@@ -217,3 +217,38 @@ test('同一服务器上的分享码照常能导入', async t => {
     const { page } = await openLanImport(t, () => Response.json({ type: 'author-sync-snapshot-v1', version: 1, entries: [] }));
     assert.equal(await page.sync.importLanShare('a1'.repeat(16)), 0);
 });
+
+test('损坏的章节记录既不推到 WebDAV，也不拿远端坏数据覆盖本机', async t => {
+    const first = await openPage(t);
+    first.values.set(CHAPTERS, { broken: true });
+    first.sync.portableSyncEnqueue(CHAPTERS, { broken: true });
+    assert.equal(first.pending(), null);
+
+    // 之前记着要推、重开时本地已经坏了：不推，记录留着，恢复后再推。
+    first.storage.set(PENDING_KEY, JSON.stringify({ [CHAPTERS]: { deleted: false } }));
+    const reopened = await openPage(t, { storage: first.storage, values: first.values });
+    assert.equal(await reopened.sync.resumePortableSync(), 0);
+    assert.equal(reopened.puts().length, 0);
+    assert.deepEqual(reopened.pending(), { [CHAPTERS]: { deleted: false } });
+
+    const good = [{ id: 'c1', content: 'good local' }];
+    reopened.values.set(CHAPTERS, good);
+    await reopened.sync.applySyncSnapshot({
+        type: 'author-sync-snapshot-v1', version: 1,
+        entries: [{ key: CHAPTERS, value: { broken: true } }, { key: 'author-chapters-other', value: [{ id: 'o1' }] }],
+    });
+    assert.deepEqual(reopened.values.get(CHAPTERS), good);
+    assert.deepEqual(reopened.values.get('author-chapters-other'), [{ id: 'o1' }]);
+});
+
+test('只读 WebDAV 上这一部作品的内容，不改本机', async t => {
+    const page = await openPage(t);
+    page.values.set(CHAPTERS, { broken: true });
+    page.env.respond = ({ action, path }) => action === 'get' && path.includes(encodeURIComponent(CHAPTERS))
+        ? Response.json({ ok: true, body: JSON.stringify({ key: CHAPTERS, value: [{ id: 'c1', content: 'remote' }], updatedAt: '2026-11-19T08:00:00.000Z' }) })
+        : Response.json({ ok: true, missing: true });
+    const remote = await page.sync.fetchKeyFromWebDav(CHAPTERS);
+    assert.deepEqual(remote, { value: [{ id: 'c1', content: 'remote' }], updatedAt: '2026-11-19T08:00:00.000Z' });
+    assert.deepEqual(page.values.get(CHAPTERS), { broken: true });
+    assert.equal(await page.sync.fetchKeyFromWebDav('author-chapters-none'), null);
+});

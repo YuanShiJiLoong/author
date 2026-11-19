@@ -1,1 +1,1 @@
-安卓端：修复切到设定卡顿，支持 DeepSeek 内置联网，全新首屏 | Android: smoother Lore tab, DeepSeek built-in web search, new welcome screen
+作品打不开时可以一键恢复，同步不再扩散损坏的数据 | One-click recovery when a work can't be opened; sync no longer spreads damaged data

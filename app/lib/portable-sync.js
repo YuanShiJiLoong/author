@@ -5,7 +5,12 @@ import { localizedError, tt } from './runtime-i18n';
 import { localizeApiError } from './api-error-i18n';
 import { apiPath } from './api-base';
 import { waitForLocalSaves } from './local-save-status';
-import { utf8ByteLength } from './custom-sync-core';
+import { utf8ByteLength, isDamagedItemArray, parseKey } from './custom-sync-core';
+
+// 章节 / 设定 / 记忆组的值已损坏时，既不推到 WebDAV，也不拿来覆盖本机。
+function isDamagedEntry(key, value) {
+    return isDamagedItemArray(parseKey(key)?.kind, value);
+}
 
 const SETTINGS_KEY = 'author-sync-settings';
 const SECRET_PREFIX = 'author-sync-secret-';
@@ -285,6 +290,10 @@ export async function resumePortableSync() {
         if (!_pendingWrites.has(key) && !_inFlightWrites.has(key)) {
             let value;
             try { value = await persistGet(key); } catch { continue; } // 读不到就留着记录，下次再试
+            if (isDamagedEntry(key, value)) {
+                recordSyncDiagnostic('sync.webdav.damaged-local', '本地记录已损坏，未推送到 WebDAV', { key }, 'error');
+                continue; // 同样留着记录，恢复后再推
+            }
             if (value !== undefined && value !== null) {
                 _pendingWrites.set(key, { value, timestamp: Date.now() });
                 resumed++;
@@ -312,6 +321,10 @@ export function portableSyncEnqueue(key, value, options = {}) {
 
     const settings = loadPortableSyncSettings();
     if (!settings.webdav.enabled) return;
+    if (!options.deleted && isDamagedEntry(key, value)) {
+        recordSyncDiagnostic('sync.webdav.damaged-local', '本地记录已损坏，未推送到 WebDAV', { key }, 'error');
+        return;
+    }
 
     _pendingWrites.set(key, {
         value: options.deleted ? DELETE_MARKER : value,
@@ -627,6 +640,10 @@ async function collectLocalEntries() {
 
     for (const key of keys) {
         const value = await persistGet(key);
+        if (isDamagedEntry(key, value)) {
+            recordSyncDiagnostic('sync.webdav.damaged-local', '本地记录已损坏，未推送到 WebDAV', { key }, 'error');
+            continue;
+        }
         if (value !== undefined && value !== null) {
             entries.push([key, { value, timestamp: now }]);
         }
@@ -666,6 +683,11 @@ async function applyRemoteEntries(entries) {
     try {
         for (const entry of entries) {
             if (!entry?.key || !isSyncableKey(entry.key)) continue;
+            if (!entry.deleted && isDamagedEntry(entry.key, entry.value)) {
+                // 远端这份已损坏：不能拿它盖掉本机可能完好的内容。
+                recordSyncDiagnostic('sync.webdav.damaged-remote', '远端记录已损坏，未覆盖本机', { key: entry.key }, 'error');
+                continue;
+            }
             if (entry.deleted) {
                 await persistDel(entry.key);
             } else {
@@ -704,6 +726,16 @@ async function applyRemoteEntries(entries) {
 // 返回 { count, manifestMissing, manifestInvalid, manifestKeys, skipped, basePath }。
 // 只返回条数不足以判断成败：清单缺失、清单里列了但远端文件读不到、条目被策略过滤，
 // 三种情况都会得到 count = 0，调用方必须能区分，否则"拉取成功 0 项"会被当成成功。
+// 只读取 WebDAV 上某一个 key 的内容，不改本地。未启用或没有这个 key 时返回 null。
+export async function fetchKeyFromWebDav(key) {
+    const settings = loadPortableSyncSettings();
+    if (!settings.webdav.enabled || !isSyncableKey(key)) return null;
+    const config = await getResolvedWebDavSettings(settings);
+    const payload = await webdavGetJson(keyPath(config.basePath, key), config);
+    if (!payload || !Object.prototype.hasOwnProperty.call(payload, 'value')) return null;
+    return { value: payload.value, updatedAt: payload.updatedAt || null };
+}
+
 export async function pullAllFromWebDav() {
     const settings = loadPortableSyncSettings();
     if (!settings.webdav.enabled) {
