@@ -54,6 +54,7 @@ const LOCAL_ONLY_PREFIXES = [
     'author-editor-position-',
     'author-generation-archive-',
     'author-inspirations-',
+    'author-quick-words-',
     'author-revision-history-',
     'author-timeline-events-',
     'author-tts-session-secret-',

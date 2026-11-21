@@ -28,10 +28,13 @@ import RemarkMark from './RemarkMark';
 import RemarkDialog from './RemarkDialog';
 import EditorBubbleMenu from './EditorBubbleMenu';
 import { createSlashExtension, SlashCommandMenu } from './SlashCommands';
+import { createQuickWordsExtension } from './QuickWordsExtension';
+import QuickWordsPanel, { QuickWordsMenu, useQuickWordList } from './QuickWords';
+import { isQuickWordsEnabled } from '../lib/quick-words-store';
 import { useEffect, useCallback, useRef, useState, useMemo, useId, forwardRef, useImperativeHandle } from 'react';
 import {
     ChevronUp, ChevronDown, Undo2, Redo2, Wand2, MessageSquareText, Flag, FileCog,
-    List, ListOrdered, ListChecks, Quote, Code2,
+    List, ListOrdered, ListChecks, Quote, Code2, Keyboard,
 } from 'lucide-react';
 import { ragRecommend } from '../lib/context-engine';
 import { getProjectSettings } from '../lib/settings';
@@ -307,6 +310,23 @@ const Editor = forwardRef(function Editor({ content, contentReceipt = null, chap
         setSlashRange(range);
     }), []);
 
+    // 快捷词：打出词的开头按 Tab 补全
+    const [quickWordMenu, setQuickWordMenu] = useState(null);
+    const [quickWordsPanelOpen, setQuickWordsPanelOpen] = useState(false);
+    const quickWordList = useQuickWordList(normalizedWorkId);
+    const quickWordsRef = useRef([]);
+    useEffect(() => {
+        quickWordsRef.current = quickWordList.words;
+    }, [quickWordList.words]);
+    const quickWordsController = useMemo(() => ({}), []);
+    const quickWordsExtension = useMemo(() => createQuickWordsExtension({
+        getWords: () => quickWordsRef.current,
+        isEnabled: isQuickWordsEnabled,
+        onChange: setQuickWordMenu,
+        controller: quickWordsController,
+    }), [quickWordsController]);
+    const openQuickWordsPanel = useCallback(() => setQuickWordsPanelOpen(true), []);
+
     const buildSavePayload = useCallback((targetEditor) => {
         if (!targetEditor) return null;
         const html = targetEditor.getHTML();
@@ -499,6 +519,7 @@ const Editor = forwardRef(function Editor({ content, contentReceipt = null, chap
             AiDiffDeleteMark,
             RemarkMark,
             slashExtension,
+            quickWordsExtension,
             SearchHighlightExtension,
             CursorAidExtension,
         ],
@@ -893,6 +914,7 @@ const Editor = forwardRef(function Editor({ content, contentReceipt = null, chap
                 onSplitChapter={handleSplitChapter}
                 onMergeNextChapter={handleMergeNextChapter}
                 onRemark={openRemarkDialog}
+                onOpenQuickWords={openQuickWordsPanel}
             />
             <div
                 ref={containerRef}
@@ -989,6 +1011,12 @@ const Editor = forwardRef(function Editor({ content, contentReceipt = null, chap
                                     onClose={() => setSlashRange(null)}
                                 />
                             )}
+                            <QuickWordsMenu
+                                editor={editor}
+                                menu={quickWordMenu}
+                                controller={quickWordsController}
+                                onManage={openQuickWordsPanel}
+                            />
                         </div>
                     </div>
                     <RemarkLayer editor={editor} workspaceRef={workspaceRef} contentRef={contentRef} />
@@ -999,6 +1027,15 @@ const Editor = forwardRef(function Editor({ content, contentReceipt = null, chap
             <StatusBar editor={editor} pageCount={pageCount} chapterId={chapterId} />
             {remarkDraft && (
                 <RemarkDialog draft={remarkDraft} onClose={closeRemarkDialog} onSave={saveRemark} />
+            )}
+            {quickWordsPanelOpen && (
+                <QuickWordsPanel
+                    workId={normalizedWorkId}
+                    onClose={() => {
+                        setQuickWordsPanelOpen(false);
+                        focusMountedEditor(editor);
+                    }}
+                />
             )}
         </>
     );
@@ -2347,7 +2384,7 @@ const FONT_FAMILIES = [
 const FONT_SIZES = [12, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32];
 
 // ==================== 工具栏 ====================
-function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = false, onToggleSpecialChapter, onSplitChapter, onMergeNextChapter, onRemark }) {
+function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = false, onToggleSpecialChapter, onSplitChapter, onMergeNextChapter, onRemark, onOpenQuickWords }) {
     const { t, text } = useI18n();
     const [showFontColor, setShowFontColor] = useState(false);
     const [showBgColor, setShowBgColor] = useState(false);
@@ -2755,6 +2792,22 @@ function EditorToolbar({ editor, margins, setMargins, chapterNumberingIgnored = 
                 }} title={text('插入公式 (也可直接输入 $公式$)', 'Insert formula (you can also type $formula$)', 'Вставить формулу (можно ввести $formula$)')}>∑</button>
                 <button className="toolbar-btn" onClick={() => editor.chain().focus().setHorizontalRule().run()} title={text('分割线', 'Horizontal rule', 'Горизонтальная линия')}>——</button>
             </div>
+
+            {onOpenQuickWords && (
+                <>
+                    <div className="toolbar-divider" />
+                    <div className="toolbar-group">
+                        <button
+                            className="toolbar-btn quick-words-toolbar-btn"
+                            onClick={onOpenQuickWords}
+                            title={text('快捷词：打出词的开头按 Tab 补全', 'Quick words: type the start of a word, press Tab to complete', 'Быстрые слова: начните слово и нажмите Tab')}
+                        >
+                            <Keyboard size={16} strokeWidth={2.2} />
+                            <span>{text('快捷词', 'Quick words', 'Быстрые слова')}</span>
+                        </button>
+                    </div>
+                </>
+            )}
         </div>
     );
 }
