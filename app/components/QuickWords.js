@@ -308,7 +308,7 @@ export default function QuickWordsPanel({ workId, onClose }) {
                         <h2 id="quick-words-title">{text('快捷词', 'Quick words', 'Быстрые слова')}</h2>
                         <p className="quick-words-intro">
                             {text(
-                                '写正文时打出词的开头，比如"林"，下面会冒出"林动"，按 Tab 填入，连按 Tab 换下一个。',
+                                '写正文时打出词的开头，比如"沈"，下面会冒出"沈砚"，按 Tab 填入，连按 Tab 换下一个。',
                                 'While writing, type the start of a word and a suggestion pops up. Press Tab to insert it, press Tab again for the next one.',
                                 'Начните печатать слово — появится подсказка. Tab вставит её, повторный Tab — следующую.',
                             )}

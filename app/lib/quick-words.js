@@ -54,7 +54,7 @@ export function normalizeQuickWordStore(value) {
     return { words, hidden };
 }
 
-// 条目名里常见"林动（动哥）""萧炎/炎帝"这种写法，拆开后每个都能单独补全
+// 条目名里常见"沈砚（阿砚）""陆知微/知微"这种写法，拆开后每个都能单独补全
 function splitSettingsName(name) {
     const raw = String(name || '');
     const parts = [];
@@ -198,7 +198,7 @@ export function buildQuickWordExtractionPrompts({ settingsText = '', outlineText
             '你是小说作者的写作助手。任务：从作者提供的设定、大纲和正文里，找出写正文时会反复手打的专有词，做成输入补全词库。',
             '要找的：人物名字和常用称呼（外号、尊称、简称）、地名、门派/势力/组织、功法/技能/招式、法宝/物品、种族/职业、境界/等级、专有术语、反复出现的固定说法。',
             '不要：普通常用词（如"突然""师父""宗门"这类谁都会用的词）、整句话、单个字、超过 12 个字的词、材料里没出现过的东西。',
-            '只输出一个 JSON 字符串数组，例如 ["林动","青阳镇","大荒囚天指"]，不要任何解释。最多 200 个，常用的排前面。',
+            '只输出一个 JSON 字符串数组，例如 ["沈砚","青石镇","破玄一气指"]，不要任何解释。最多 200 个，常用的排前面。',
         ].join('\n');
         const sections = [];
         if (settingsText) sections.push(`【设定】\n${settingsText}`);

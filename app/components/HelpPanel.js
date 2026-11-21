@@ -285,6 +285,14 @@ AI 生成的非标准字段会自动出现在 **✨ AI 生成的额外字段** �
 ### 备注 / 批注
 选中文字后点击工具栏或气泡菜单里的 **备注** 按钮，即可给一句话添加纸页侧注。备注不会混入正文；导出时可以选择正文版或批注版，其中 DOCX 批注版会生成 Word / WPS 可识别的原生批注。
 
+### 快捷词
+写正文时打出词的开头，比如人名的第一个字，光标下方会弹出候选：
+- 按 **Tab** 填入，紧接着再按 **Tab** 换成下一个，按 **Esc** 收起
+- 设定集里人物、地点、物品等条目的名字会自动出现在候选里
+- 点工具栏右侧的 **快捷词** 按钮，可以自己加词、删词，或者关掉提示
+- 点 **从书稿里找词**，AI 会读设定集、大纲和最近几章，挑出常打的词，确认后再加入
+- 快捷词只保存在这台设备上，不会同步
+
 ### 文字朗读与专注辅助
 - 编辑器底部状态栏的 **朗读** 按钮会优先朗读选中文字，否则朗读当前章节；可暂停、继续、停止，并切换音色和语速。
 - 朗读设置支持系统语音，也可在弹出的音源设置中配置兼容的云端 TTS 服务；失败时可打开并复制详细诊断信息。
@@ -970,6 +978,14 @@ Undo the latest operation, or restore an undone operation.
 ### Remarks / Comments
 Select text and click **Remark** in the toolbar or bubble menu to add a page-side note. Remarks do not mix into the body text. During export, choose body-only or annotated output. DOCX annotated export creates native Word / WPS comments.
 
+### Quick Words
+While writing, type the start of a word, such as the first letters of a name, and suggestions pop up under the cursor:
+- Press **Tab** to insert, press **Tab** again right away to switch to the next one, press **Esc** to close
+- Names of characters, places, items and other entries in your settings appear automatically
+- Click **Quick words** on the right of the toolbar to add or remove words, or turn suggestions off
+- Click **Find words in your manuscript** and AI reads your settings, outline and recent chapters, then picks words you type often; they are added after you confirm
+- Quick words are saved on this device only and are not synced
+
 ### Text to Speech and Focus Aids
 - The **Read** control in the editor status bar reads the selection first, or the current chapter when nothing is selected. It supports pause, resume, stop, voice selection, and playback speed.
 - Use a system voice or configure a compatible cloud TTS service from the voice popover. When playback fails, open and copy the detailed diagnostics.
@@ -1611,6 +1627,14 @@ Author использует prompt caching там, где провайдер п�
 
 ### Комментарии
 Комментарии не смешиваются с основным текстом. При экспорте можно выбрать body-only или annotated; DOCX annotated создает нативные комментарии Word/WPS.
+
+### Быстрые слова
+Начните печатать слово, например первые буквы имени, и под курсором появятся подсказки:
+- **Tab** вставляет подсказку, повторный **Tab** сразу меняет её на следующую, **Esc** закрывает
+- Имена персонажей, мест, предметов и других записей из настроек подсказываются автоматически
+- Кнопка **Быстрые слова** справа на панели инструментов позволяет добавлять и удалять слова или отключить подсказки
+- **Найти слова в рукописи**: ИИ прочитает настройки, план и последние главы и выберет частые слова; они добавятся после вашего подтверждения
+- Быстрые слова хранятся только на этом устройстве и не синхронизируются
 
 ### Озвучивание и фокус
 - Кнопка **Читать** в строке состояния сначала озвучивает выделенный текст, а если выделения нет — текущую главу. Доступны пауза, продолжение, остановка, выбор голоса и скорости.

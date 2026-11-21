@@ -145,6 +145,7 @@ I'm not a professional writer. I've only written a few web novels, which I think
 - Customizable fonts, font size, line height, and colors
 - **Text to speech on desktop and Android** — read the selection or current chapter with pause, resume, voice, and speed controls
 - **Current paragraph highlight** — optional focus tint plus a retained caret when the editor loses focus
+- **Quick words** — type the start of a word and press Tab to complete it; names from your settings are included automatically, and AI can pick more from your manuscript
 - Real-time word / character / paragraph count
 
 ### 🤖 AI Writing Assistant
@@ -157,6 +158,7 @@ I'm not a professional writer. I've only written a few web novels, which I think
 - **Global AI Memory (Context Engine)** — AI automatically reads your character profiles, worldbuilding, and previous chapters to maintain story consistency
 - **Choose AI references by volume** — select whole volumes or individual chapters; clearing all references stays saved
 - **Optional strikethrough exclusion** — off by default; AI can skip struck-through text while preserving the original manuscript and formatting
+- **API format switch** — Alibaba Cloud Bailian and MiniMax support both OpenAI and Anthropic API formats
 
 ### 📚 Worldbuilding Manager
 - **Tree-structured** management for characters, locations, items, outlines, and writing rules
